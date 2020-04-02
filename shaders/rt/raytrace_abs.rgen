@@ -1,0 +1,38 @@
+#version 460
+#extension GL_NV_ray_tracing : require
+
+layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 1, set = 0, rgba32f) uniform image2D image;    // TODO: Remove
+layout(binding = 2, set = 0) uniform cameraProperties {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} camera;
+layout(binding = 5, set = 0) readonly buffer haltonPoints {
+    vec2 points[];
+};
+layout(binding = 6, set = 0) uniform viewCellProperties {
+    vec3 pos;
+    vec2 size;
+    vec3 normal;
+} viewCell;
+layout(binding = 7, set = 0) readonly buffer foundTrianglesBuffer {
+    uint foundTriangles[];
+};
+
+layout(binding = 0, set = 1) writeonly buffer absOutputBuffer {
+    uint absOutput[];
+};
+
+layout(location = 0) rayPayloadNV uvec3 hitValue;
+
+void main() {
+    // Calculate 1D launch index
+    uint launchIndex = gl_LaunchIDNV.x;
+
+    absOutput[3 * launchIndex + 0] = foundTriangles[3 * launchIndex + 0];
+    absOutput[3 * launchIndex + 1] = 2;
+    absOutput[3 * launchIndex + 2] = 3;
+
+    //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(1.0));  // TODO: This is unused
+}
