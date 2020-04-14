@@ -1,3 +1,5 @@
 models
 *.user*
 .vs
+screenshot.png
+*.spv

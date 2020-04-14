@@ -4,6 +4,7 @@
 #include <QVulkanWindow>
 #include <unordered_map>
 #include <set>
+#include <queue>
 #include "Vertex.h"
 #include "visibilitymanager.h"
 #include "pvs.h"
@@ -22,6 +23,14 @@ struct GeometryInstance {
     uint32_t instanceOffset : 24;
     uint32_t flags : 8;
     uint64_t accelerationStructureHandle;
+};
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+
+    bool isComplete() {
+        return graphicsFamily.has_value();
+    }
 };
 
 class VulkanRenderer : public QVulkanWindowRenderer {
@@ -117,7 +126,10 @@ private:
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
     const uint32_t RT_SHADER_INDEX_RAYGEN_ABS = 3;
+    VkCommandPool rtCommandPool;
     VkCommandBuffer rtCommandBuffer;
+    VkCommandBuffer rtABSCommandBuffer;
+    VkFence rtCommandBufferFence;
     VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
     VkPipeline rtPipeline;
     VkPipelineLayout rtPipelineLayout;
@@ -155,16 +167,25 @@ private:
     bool visualizePVS = false;
 
     // Visibility
-    std::unordered_set<glm::uvec3> pvs;
-    const int RAYS_PER_ITERATION_SQRT = 500;
+    //std::unordered_set<glm::uvec3> pvs;
+    std::unordered_set<unsigned int> pvs;
+
+    const int RAYS_PER_ITERATION_SQRT = 40;
+    const size_t MAX_ABS_RAYS = RAYS_PER_ITERATION_SQRT * RAYS_PER_ITERATION_SQRT;
+    //const size_t MIN_ABS_RAYS = size_t(floor(MAX_ABS_RAYS * 0.2));
+    const size_t MIN_ABS_RAYS = 1;
     VkBuffer haltonPointsBuffer;
     VkDeviceMemory haltonPointsBufferMemory;
     VkBuffer viewCellBuffer;
     VkDeviceMemory viewCellBufferMemory;
     VkBuffer intersectedTrianglesBuffer;
     VkDeviceMemory intersectedTrianglesBufferMemory;
+    VkBuffer rayOriginBuffer;
+    VkDeviceMemory rayOriginBufferMemory;
     VkBuffer absOutputBuffer;
     VkDeviceMemory absOutputBufferMemory;
+    VkBuffer absWorkingBuffer;
+    VkDeviceMemory absWorkingBufferMemory;
     VkBuffer pvsVisualizationBuffer;
     VkDeviceMemory pvsVisualizationBufferMemory;
     VisibilityManager visibilityManager;
@@ -179,6 +200,8 @@ private:
     void createABSRtDescriptorSetLayout();
     void createABSRtDescriptorSets();
     void createABSRtPipeline();
+
+    QueueFamilyIndices findQueueFamilies();
 };
 
 #endif // RENDERER_H

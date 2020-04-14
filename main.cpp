@@ -7,16 +7,17 @@
 #include "Window.h"
 #include "Renderer.h"
 
-int main(int argc, char *argv[])
-{    
+int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
 
     QVulkanInstance vulkanInstance;
 
-    if (qEnvironmentVariableIntValue("QT_VK_DEBUG")) {
-        QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
-        vulkanInstance.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
-    }
+    // Linux
+    //if (qEnvironmentVariableIntValue("QT_VK_DEBUG")) {
+        //QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
+        //vulkanInstance.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation"");
+    //}
+    vulkanInstance.setLayers(QByteArrayList() << "VK_LAYER_KHRONOS_validation");    // TODO: Remove for release build
 
     if (!vulkanInstance.create()) {
         qWarning("failed to create Vulkan instance");
@@ -30,8 +31,11 @@ int main(int argc, char *argv[])
         << VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
     );
     window.setVulkanInstance(&vulkanInstance);
-    window.resize(800, 600);
+    window.resize(600, 450);
     window.show();
+
+    //VkPhysicalDeviceFeatures f = {};
+    //f.samplerAnisotropy = VK_TRUE;
 
     return app.exec();
 }
