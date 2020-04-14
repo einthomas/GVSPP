@@ -1,5 +1,4 @@
 #version 460
-#extension GL_EXT_debug_printf : require
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
@@ -19,6 +18,4 @@ void main() {
     gl_Position = ubo.projection * ubo.view * ubo.model * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
-
-    //debugPrintfEXT("test");
 }

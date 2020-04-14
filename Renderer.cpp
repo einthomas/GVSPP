@@ -1741,7 +1741,7 @@ void VulkanRenderer::rayTrace() {
     vkFreeMemory(window->device(), hostBufferMemory, nullptr);
 
     // Insert the newly found triangles into the PVS
-    std::vector<Sample> newSamples;  // TODO: Doesn't have to be a set
+    std::vector<Sample> newSamples;
     for (auto sample : intersectedTriangles) {
         auto result = pvs.insert(sample.triangleID);
         if (result.second) {
