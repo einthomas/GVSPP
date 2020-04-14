@@ -32,7 +32,7 @@ layout(location = 0) rayPayloadNV uint hitPrimitiveID;
 
 void main() {
     // Calculate 1D launch index
-    uint launchIndex = gl_LaunchIDNV.x;// + gl_LaunchSizeNV.x * gl_LaunchIDNV.y;
+    uint launchIndex = gl_LaunchIDNV.x;
 
     // Construct view cell coordinate system
     vec3 up = vec3(0.0, 1.0, 0.0);
@@ -44,7 +44,8 @@ void main() {
     vec2 offset = (haltonPoint - vec2(0.5)) * viewCell.size;
     vec3 rayOrigin = viewCell.pos + offset.x * viewCellRight + offset.y * viewCellUp;
 
-    haltonPoint = points[gl_LaunchSizeNV.x - launchIndex - 1];     // Use a different Halton point to calculate the ray direction
+    // Use a different Halton point to calculate the ray direction
+    haltonPoint = points[gl_LaunchSizeNV.x - launchIndex - 1];
 
     // Map Halton point to point on hemisphere
     float phi = 2.0 * 3.1415926 * haltonPoint.y;
@@ -59,15 +60,6 @@ void main() {
     uint cullMask = 0xff;
     float tmin = 0.001;
     float tmax = 100000.0;
-
-    ////////
-    //rayOrigin = vec3(0.0, 0.5, -10.0);
-    //rayDir = normalize(vec3(0.0) - rayOrigin);// vec3(0.0, 0.0, 1.0);
-
-    //rayOrigin = vec3(0.0, 2.0, 30.0);
-    //rayDir = vec3(0.0, 0.0, -1.0);
-    ////////
-
     traceNV(
         topLevelAS,     // acceleration structure
         rayFlags,       // rayFlags
@@ -81,17 +73,6 @@ void main() {
         tmax,           // ray max range
         0               // payload (location = 0)
     );
-
-    // Return the three vertices of the intersected triangle
-    /*
-    trianglesOutput[3 * launchIndex + 0] = hitValue.x;
-    trianglesOutput[3 * launchIndex + 1] = hitValue.y;
-    trianglesOutput[3 * launchIndex + 2] = hitValue.z;
-    */
     
     rayOriginOutput[launchIndex] = Sample(hitPrimitiveID, rayOrigin);
-
-    //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(1.0));  // TODO: This is unused
-
-    
 }
