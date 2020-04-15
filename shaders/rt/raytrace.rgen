@@ -2,7 +2,6 @@
 #extension GL_NV_ray_tracing : require
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
-layout(binding = 1, set = 0, rgba32f) uniform image2D image;    // TODO: Remove
 layout(binding = 2, set = 0) uniform cameraProperties {
     mat4 model;
     mat4 view;
