@@ -7,10 +7,11 @@
 
 class Sample {
 public:
-    unsigned int triangleID;
-    alignas(16) glm::vec3 hitInfo;  // x == triangle ID, yzw == ray origin
+    int triangleID;
+    alignas(16) glm::vec3 rayOrigin;        // Origin of the ray that hit the triangle
+    alignas(16) glm::vec3 hitPos;       // Position where the triangle was hit
     Sample();
-    Sample(unsigned int triangleID, glm::vec3 hitInfo);
+    Sample(int triangleID, glm::vec3 rayOrigin, glm::vec3 hitPos);
 
     bool operator==(const Sample &other) const;
 };
@@ -20,7 +21,8 @@ namespace std {
     template<>
     struct hash<Sample> {
         size_t operator()(Sample const &sample) const {
-            return (hash<unsigned int>()(sample.triangleID) << 1);
+            // Uniqueness is determined only by the triangle ID
+            return (hash<int>()(sample.triangleID) << 1);
         }
     };
 }

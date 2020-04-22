@@ -287,7 +287,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/city/city.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/quad/quad.obj")) {
         qWarning("%s", (warn + err).c_str());
     }
 
@@ -718,14 +718,20 @@ void VulkanRenderer::createUniformBuffers() {
 
 void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     UniformBufferObject ubo = {};
+    /*
     ubo.model = glm::rotate(
         glm::mat4(1.0f),
         glm::radians(0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
     );
+    */
+    ubo.model = glm::translate(
+        glm::mat4(1.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
+    );
 
     ubo.view = glm::lookAt(
-        glm::vec3(16.0f, 4.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 4.0f),
         glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
         /*
@@ -739,7 +745,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
         glm::radians(45.0f),
         window->swapChainImageSize().width() / (float) window->swapChainImageSize().height(),
         0.1f,
-        10000.0f
+        100000.0f
     );
     ubo.projection[1][1] *= -1; // Flip y axis
 
@@ -830,10 +836,15 @@ void VulkanRenderer::saveWindowContentToImage() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
+    glm::vec3 pos = glm::vec3(0.0f, 0.0f, 4.0f);
     visibilityManager.addViewCell(
-        glm::vec3(16.0f, 4.0f, 0.0f),
+        pos,
         glm::vec2(1.0f, 1.0f),
-        glm::normalize(glm::vec3(0.0) - glm::vec3(16.0f, 4.0f, 0.0f))
+        //glm::vec3(0.0f, 0.0f, -1.0f)
+        -glm::normalize(pos)
+        //glm::vec3(16.0f, 4.0f, 0.0f),
+        //glm::vec2(1.0f, 1.0f),
+        //glm::normalize(glm::vec3(0.0) - glm::vec3(16.0f, 4.0f, 0.0f))
         //glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))
     );
     visibilityManager.init(

@@ -8,6 +8,26 @@
 #include "Renderer.h"
 
 int main(int argc, char *argv[]) {
+    int x[20];
+    x[0] = 0;
+    x[1] = 1;
+    x[2] = 1;
+    int end = 3;
+    int numInserted = 1;
+    int newNumInserted = 0;
+    int i = 0;
+    for (int j = 0; j < 3; j++) {
+        for (int k = 0; k < 2; k++) {
+            for (i = 0; i < numInserted; i++) {
+                x[end + i] = x[k] + x[end - numInserted + i];
+            }
+            newNumInserted += i;
+            end += i;
+        }
+        numInserted = newNumInserted;
+        newNumInserted = 0;
+    }
+
     QGuiApplication app(argc, argv);
 
     QVulkanInstance vulkanInstance;
@@ -31,7 +51,7 @@ int main(int argc, char *argv[]) {
         << VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
     );
     window.setVulkanInstance(&vulkanInstance);
-    window.resize(600, 450);
+    window.resize(800, 600);
     window.show();
 
     //VkPhysicalDeviceFeatures f = {};

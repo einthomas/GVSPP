@@ -15,13 +15,14 @@ layout(binding = 6, set = 0) uniform viewCellProperties {
     vec2 size;
     vec3 normal;
 } viewCell;
-layout(binding = 7, set = 0) writeonly buffer trianglesOutputBuffer {
+layout(binding = 7, set = 0) writeonly buffer trianglesOutputBuffer {       // TODO: Remove, unused
     uint trianglesOutput[];
 };
 
 struct Sample {
     uint triangleID;
     vec3 rayOrigin;
+    vec3 rayHitPos;
 };
 layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
     Sample rayOriginOutput[];
@@ -54,6 +55,8 @@ void main() {
     // Transform hemisphere point to view cell coordinate system
     rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
 
+    //rayDir = -viewCell.normal;      // TODO: REMOVE THIS. THIS IS ONLY FOR DEBUGGING PURPOSES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
     uint cullMask = 0xff;
@@ -73,5 +76,5 @@ void main() {
         0               // payload (location = 0)
     );
     
-    rayOriginOutput[launchIndex] = Sample(hitPrimitiveID, rayOrigin);
+    rayOriginOutput[launchIndex] = Sample(hitPrimitiveID, rayOrigin, vec3(0.0));    //Sample(hitPrimitiveID, rayOrigin);
 }

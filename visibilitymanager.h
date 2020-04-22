@@ -54,17 +54,18 @@ public:
 
 private:
     int raysPerIteration;
-    const size_t MAX_ABS_RAYS;
+    const size_t MAX_ABS_TRIANGLES_PER_ITERATION;
+    const size_t MAX_EDGE_SUBDIV_RAYS;
+    const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     //const size_t MIN_ABS_RAYS = size_t(floor(MAX_ABS_RAYS * 0.2));
-    const size_t MIN_ABS_RAYS = 1;
+    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
-    const uint32_t RT_SHADER_INDEX_RAYGEN_ABS = 3;
 
     std::vector<glm::vec2> haltonPoints;
     std::vector<ViewCell> viewCells;
-    std::unordered_set<unsigned int> pvs;
+    std::unordered_set<int> pvs;
 
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
@@ -73,25 +74,32 @@ private:
 
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
-    VkCommandBuffer CommandBufferABS;
+    VkCommandBuffer commandBufferABS;
+    VkCommandBuffer commandBufferEdgeSubdiv;
     VkFence commandBufferFence;
     VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     VkPipeline pipelineABS;
     VkPipelineLayout pipelineABSLayout;
+    VkPipeline pipelineEdgeSubdiv;
+    VkPipelineLayout pipelineEdgeSubdivLayout;
 
     VkDescriptorPool descriptorPool;
-    VkDescriptorSet descriptorSets;
+    VkDescriptorSet descriptorSet;
     VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorSet descriptorSetsABS;
+    VkDescriptorSet descriptorSetABS;
     VkDescriptorSetLayout descriptorSetLayoutABS;
+    VkDescriptorSet descriptorSetEdgeSubdiv;
+    VkDescriptorSetLayout descriptorSetLayoutEdgeSubdiv;
 
     VkImageView storageImageView;
     VkBuffer shaderBindingTable;
     VkDeviceMemory shaderBindingTableMemory;
     VkBuffer shaderBindingTableABS;
     VkDeviceMemory shaderBindingTableMemoryABS;
+    VkBuffer shaderBindingTableEdgeSubdiv;
+    VkDeviceMemory shaderBindingTableMemoryEdgeSubdiv;
     VkBuffer haltonPointsBuffer;
     VkDeviceMemory haltonPointsBufferMemory;
     VkBuffer viewCellBuffer;
@@ -105,6 +113,8 @@ private:
     VkBuffer absWorkingBuffer;
     VkDeviceMemory absWorkingBufferMemory;
     VkDeviceMemory pvsVisualizationBufferMemory;
+    VkBuffer edgeSubdivWorkingBuffer;
+    VkDeviceMemory edgeSubdivWorkingBufferMemory;
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;
@@ -154,9 +164,13 @@ private:
     void createABSDescriptorSetLayout();
     void createABSDescriptorSets(VkBuffer vertexBuffer);
     void createABSPipeline();
+    void createEdgeSubdivPipeline();
+    void createEdgeSubdivDescriptorSetLayout();
+    void createEdgeSubdivDescriptorSets();
 
     std::vector<Sample> randomSample(int numRays);
     std::vector<Sample> adaptiveBorderSample(const std::vector<Sample> &absWorkingVector);
+    std::vector<Sample> edgeSubdivide(const std::vector<Sample> &intersectedTriangles);
 };
 
 #endif // VISIBILITYMANAGER_H

@@ -50,6 +50,10 @@ layout(binding = 2, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
 };
 
+layout(binding = 0, set = 2) readonly buffer edgeSubdivWorkingBuffer {
+    Sample edgeSubdivWorking[];
+};
+
 layout(location = 0) rayPayloadNV vec4 hitInfo; //uint hitPrimitiveID;
 
 Vertex unpackVertexData(uint index) {
@@ -67,10 +71,77 @@ Vertex unpackVertexData(uint index) {
     return vertex;
 }
 
+const float THRESHOLD = 0.01;
+const int MAX_SUBDIVISION_STEPS = 3;
+
 void main() {
-    // Calculate 1D launch index
     uint launchIndex = gl_LaunchIDNV.x;
 
+    Sample s0 = edgeSubdivWorking[launchIndex];
+    Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0))];
+    const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS + 1) + 1);
+    Sample samples[numSamples];
+    for (int i = 0; i < numSamples; i++) {
+        //samples[i] = Sample(-1, vec3(-2.0), vec3(-2.0));
+    }
+    if (s0.triangleID != s1.triangleID) {
+        samples[0] = s0;
+        samples[1] = s1;
+
+        vec3 rayOrigin = s0.rayOrigin;
+        vec3 rayDir = (s0.rayHitPos + s1.rayHitPos) * 0.5 - rayOrigin;
+        traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+
+        int triangleID = int(hitInfo.w);
+        if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
+            samples[2] = Sample(triangleID, rayOrigin, hitInfo.xyz);
+        }
+        
+        int end = 3;
+        int numInserted = 1;
+        int newNumInserted = 0;
+        int i = 0;
+        for (int j = 0; j < MAX_SUBDIVISION_STEPS; j++) {
+            for (int k = 0; k < 2; k++) {
+                for (i = 0; i < numInserted; i++) {
+                    s0 = samples[k];
+                    s1 = samples[end - numInserted + i];
+
+                    if (s0.triangleID == s1.triangleID) {
+                        samples[end + i] = s1;
+                    } else {
+                        // TODO: Check sample distance for threshold
+
+                        rayOrigin = s0.rayOrigin;
+                        rayDir = (s0.rayHitPos + s1.rayHitPos) * 0.5 - rayOrigin;
+                        traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+
+                        triangleID = int(hitInfo.w);
+                        if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
+                            samples[end + i] = Sample(triangleID, rayOrigin, hitInfo.xyz);
+                        } else {
+                            // Case where the new sample is on the same triangle as s0 and as s1
+                            samples[end + i] = s1;
+                        }
+                    }
+                }
+                newNumInserted += i;
+                end += i;
+            }
+            numInserted = newNumInserted;
+            newNumInserted = 0;
+        }
+
+        for (int i = 0; i < numSamples; i++) {
+            absOutput[launchIndex * numSamples + i] = samples[i];
+        }
+    } else {
+        for (int i = 0; i < numSamples; i++) {
+            absOutput[launchIndex * numSamples + i] = Sample(-1, vec3(0.0), vec3(0.0));
+        }
+    }
+
+    /*
     uint i0Index = uint(floor(launchIndex / 9.0));   // for each triangle 9 rays are shot i.e. for each triangle the shader is invoked 9 times
     uint currentVertexIndex = uint(mod(floor(launchIndex / 3.0), 3.0));
 
@@ -80,11 +151,11 @@ void main() {
     Vertex v2 = unpackVertexData(indices.i[3 * s.triangleID + int(mod(currentVertexIndex + 2, 3))]);
 
     vec3 rayOrigin = s.rayOrigin;
-    vec3 vec = v0.worldPos - rayOrigin;
+    vec3 vec = v0.pos - rayOrigin;
 
     vec3 directions[3];
-    directions[0] = normalize(cross(vec, v2.worldPos - v0.worldPos));
-    directions[1] = normalize(cross(vec, v0.worldPos - v1.worldPos));
+    directions[0] = normalize(cross(vec, v2.pos - v0.pos));
+    directions[1] = normalize(cross(vec, v0.pos - v1.pos));
     if (dot(directions[0], directions[1]) > 0.0) {
         directions[2] = normalize(directions[0] + directions[1]);
     } else {
@@ -93,7 +164,7 @@ void main() {
 
     float epsilon = 5e-5;
     uint outerVertexIndex = uint(mod(launchIndex, 3.0));
-    vec3 p = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
+    vec3 p = v0.pos + epsilon * length(vec) * directions[outerVertexIndex];
 
     vec3 rayDir = normalize(p - rayOrigin);
 
@@ -116,5 +187,6 @@ void main() {
         0               // payload (location = 0)
     );
 
-    absOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);
+    absOutput[launchIndex] = Sample(uint(hitInfo.w), rayOrigin, hitInfo.xyz);
+    */
 }
