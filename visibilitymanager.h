@@ -143,7 +143,9 @@ private:
     void createTopLevelAS(uint32_t deviceLocalMemoryIndex);
     void buildAS(const VkBuffer instanceBuffer, const VkGeometryNV *geometry);
     void createDescriptorSetLayout();
-    void createDescriptorSets(VkBuffer indexBuffer, const std::vector<VkBuffer> &uniformBuffers);
+    void createDescriptorSets(
+        VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<VkBuffer> &uniformBuffers
+    );
     void createDescriptorPool();
     void createPipeline(
         std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages,
@@ -162,7 +164,7 @@ private:
     void createDescriptorSets();
     void createRandomSamplingPipeline();
     void createABSDescriptorSetLayout();
-    void createABSDescriptorSets(VkBuffer vertexBuffer);
+    void createABSDescriptorSets();
     void createABSPipeline();
     void createEdgeSubdivPipeline();
     void createEdgeSubdivDescriptorSetLayout();

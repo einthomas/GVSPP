@@ -287,7 +287,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/quad/quad.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/city/city.obj")) {
         qWarning("%s", (warn + err).c_str());
     }
 
@@ -731,7 +731,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     );
 
     ubo.view = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 4.0f),
+        glm::vec3(0.0f, 4.0f, 22.0f),
         glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
         /*
@@ -836,7 +836,7 @@ void VulkanRenderer::saveWindowContentToImage() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(0.0f, 0.0f, 4.0f);
+    glm::vec3 pos = glm::vec3(0.0f, 4.0f, 22.0f);
     visibilityManager.addViewCell(
         pos,
         glm::vec2(1.0f, 1.0f),

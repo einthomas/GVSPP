@@ -16,20 +16,18 @@ layout(binding = 2, set = 0) uniform cameraProperties {
     mat4 view;
     mat4 projection;
 } camera;
-/*
 layout(binding = 3, set = 0) buffer Vertices {
     vec4 v[];
 } vertices;
-*/
-
 layout(binding = 4, set = 0) buffer Indices {
     uint i[];
 } indices;
 
+/*
 layout(binding = 1, set = 1) buffer Vertices {
     vec4 v[];
 } vertices;
-
+*/
 
 hitAttributeNV vec3 attribs;
 
@@ -87,12 +85,9 @@ void main() {
 	Vertex v2 = unpackVertexData(index.z);
 
     vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-    vec3 pos = normalize(
-        v0.pos * barycentricCoords.x +
-        + v1.pos * barycentricCoords.y
-        + v2.pos * barycentricCoords.z
-    );
+    vec3 pos = v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z;
     vec3 worldPos = vec3(camera.model * vec4(pos, 1.0));
+    //worldPos = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 
     hitInfo = vec4(worldPos, gl_PrimitiveID);
 }
