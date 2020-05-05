@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
         << VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
     );
     window.setVulkanInstance(&vulkanInstance);
-    window.resize(600, 480);
+    window.resize(800, 600);
     window.show();
 
     //VkPhysicalDeviceFeatures f = {};

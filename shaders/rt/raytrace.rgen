@@ -56,8 +56,7 @@ void main() {
     // Transform hemisphere point to view cell coordinate system
     rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
 
-    //rayOrigin = vec3(0.0, 0.0, 16.0);   // TODO: REMOVE THIS. THIS IS ONLY FOR DEBUGGING PURPOSES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    //rayDir = viewCell.normal;      // TODO: REMOVE THIS. THIS IS ONLY FOR DEBUGGING PURPOSES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    //rayDir = -viewCell.normal;      // TODO: REMOVE THIS. THIS IS ONLY FOR DEBUGGING PURPOSES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
@@ -77,14 +76,7 @@ void main() {
         tmax,           // ray max range
         0               // payload (location = 0)
     );
-
-    /*
-    if (int(hitInfo.w) == 2147483647) {
-    rayOriginOutput[launchIndex] = Sample(-2, rayOrigin, hitInfo.xyz);    //Sample(hitPrimitiveID, rayOrigin);
-    }else{
-        rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);    //Sample(hitPrimitiveID, rayOrigin);
-    }
-    */
-
-    rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);    //Sample(hitPrimitiveID, rayOrigin);
+    
+    //rayOriginOutput[launchIndex] = Sample(hitPrimitiveID, rayOrigin, vec3(0.0));    //Sample(hitPrimitiveID, rayOrigin);
+    rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);
 }

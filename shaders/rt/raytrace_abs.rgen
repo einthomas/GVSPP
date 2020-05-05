@@ -212,11 +212,5 @@ void main() {
     }
     */
     
-    absOutput[launchIndex * 2 + 1] = Sample(-1, rayOrigin, hitPoint);
+    absOutput[launchIndex * 2 + 1] = Sample(reverseSamplingTriangleID, rayOrigin, hitPoint);
 }
-
-// x TODO: Return both, the triangleID of the closer triangle and the triangleID of the triangle further away (second traceNV),
-// currently only one of them is returned
-// x TODO: Handle triangleID == -1
-// TODO: Test with city.obj
-// TODO: Currently there is a break (ABS loop)

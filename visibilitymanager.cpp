@@ -226,71 +226,71 @@ void VisibilityManager::createDescriptorSets(
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pBufferInfo = &uniformBufferInfo;
 
+    VkDescriptorBufferInfo vertexBufferInfo = {};
+    vertexBufferInfo.buffer = vertexBuffer;
+    vertexBufferInfo.offset = 0;
+    vertexBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[2].dstSet = descriptorSet;
+    descriptorWrites[2].dstBinding = 3;
+    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[2].descriptorCount = 1;
+    descriptorWrites[2].pBufferInfo = &vertexBufferInfo;
+
     VkDescriptorBufferInfo indexBufferInfo = {};
     indexBufferInfo.buffer = indexBuffer;
     indexBufferInfo.offset = 0;
     indexBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[2].dstSet = descriptorSet;
-    descriptorWrites[2].dstBinding = 4;
-    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[2].descriptorCount = 1;
-    descriptorWrites[2].pBufferInfo = &indexBufferInfo;
+    descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[3].dstSet = descriptorSet;
+    descriptorWrites[3].dstBinding = 4;
+    descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[3].descriptorCount = 1;
+    descriptorWrites[3].pBufferInfo = &indexBufferInfo;
 
     VkDescriptorBufferInfo haltonPointsBufferInfo = {};
     haltonPointsBufferInfo.buffer = haltonPointsBuffer;
     haltonPointsBufferInfo.offset = 0;
     haltonPointsBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[3].dstSet = descriptorSet;
-    descriptorWrites[3].dstBinding = 5;
-    descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[3].descriptorCount = 1;
-    descriptorWrites[3].pBufferInfo = &haltonPointsBufferInfo;
+    descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[4].dstSet = descriptorSet;
+    descriptorWrites[4].dstBinding = 5;
+    descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[4].descriptorCount = 1;
+    descriptorWrites[4].pBufferInfo = &haltonPointsBufferInfo;
 
     VkDescriptorBufferInfo viewCellBufferInfo = {};
     viewCellBufferInfo.buffer = viewCellBuffer;
     viewCellBufferInfo.offset = 0;
     viewCellBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[4].dstSet = descriptorSet;
-    descriptorWrites[4].dstBinding = 6;
-    descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[4].descriptorCount = 1;
-    descriptorWrites[4].pBufferInfo = &viewCellBufferInfo;
+    descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[5].dstSet = descriptorSet;
+    descriptorWrites[5].dstBinding = 6;
+    descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[5].descriptorCount = 1;
+    descriptorWrites[5].pBufferInfo = &viewCellBufferInfo;
 
     VkDescriptorBufferInfo pvsBufferInfo = {};
     pvsBufferInfo.buffer = intersectedTrianglesBuffer;
     pvsBufferInfo.offset = 0;
     pvsBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[5].dstSet = descriptorSet;
-    descriptorWrites[5].dstBinding = 7;
-    descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[5].descriptorCount = 1;
-    descriptorWrites[5].pBufferInfo = &pvsBufferInfo;
+    descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[6].dstSet = descriptorSet;
+    descriptorWrites[6].dstBinding = 7;
+    descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[6].descriptorCount = 1;
+    descriptorWrites[6].pBufferInfo = &pvsBufferInfo;
 
     VkDescriptorBufferInfo rayOriginBufferInfo = {};
     rayOriginBufferInfo.buffer = rayOriginBuffer;
     rayOriginBufferInfo.offset = 0;
     rayOriginBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[6].dstSet = descriptorSet;
-    descriptorWrites[6].dstBinding = 8;
-    descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[6].descriptorCount = 1;
-    descriptorWrites[6].pBufferInfo = &rayOriginBufferInfo;
-
-    VkDescriptorBufferInfo vertexBufferInfo = {};
-    vertexBufferInfo.buffer = vertexBuffer;
-    vertexBufferInfo.offset = 0;
-    vertexBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[7].dstSet = descriptorSet;
-    descriptorWrites[7].dstBinding = 3;
+    descriptorWrites[7].dstBinding = 8;
     descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[7].descriptorCount = 1;
-    descriptorWrites[7].pBufferInfo = &vertexBufferInfo;
+    descriptorWrites[7].pBufferInfo = &rayOriginBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -437,7 +437,7 @@ void VisibilityManager::initRayTracing(
     createRandomSamplingPipeline();
     createShaderBindingTable(shaderBindingTable, shaderBindingTableMemory, pipeline);
 
-    createABSDescriptorSets();
+    createABSDescriptorSets(vertexBuffer);
     createABSPipeline();
     createShaderBindingTable(shaderBindingTableABS, shaderBindingTableMemoryABS, pipelineABS);
 
@@ -796,7 +796,7 @@ void VisibilityManager::createRandomSamplingPipeline() {
     VkPipelineShaderStageCreateInfo rayClosestHitShaderStageInfo = {};
     rayClosestHitShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     rayClosestHitShaderStageInfo.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
-    rayClosestHitShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_abs.rchit.spv");
+    rayClosestHitShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace.rchit.spv");
     rayClosestHitShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo rayMissShaderStageInfo = {};
@@ -973,7 +973,7 @@ void VisibilityManager::createEdgeSubdivDescriptorSets() {
     );
 }
 
-void VisibilityManager::createABSDescriptorSets() {
+void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer) {
     /*
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1352,9 +1352,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
         // Execute ABS
         std::vector<Sample> intersectedTriangles = adaptiveBorderSample(absWorkingVector);
-        //for (auto sample : intersectedTriangles) {
-            //qDebug() << sample.triangleID << " " << glm::to_string(sample.rayOrigin).c_str() << " " << glm::to_string(sample.hitPos).c_str();
-        //}
 
         // Insert the newly found triangles into the PVS
         for (auto sample : intersectedTriangles) {
@@ -1386,8 +1383,22 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         }
     }
 
+    // Collect the vertex indices of the triangles in the PVS
+    std::vector<glm::uvec3> pvsIndices(pvs.size() * 3);
+    int i = 0;
+    for (auto triangleID : pvs) {
+        if (triangleID != -1) {
+            pvsIndices[i] = {
+                indices[3 * triangleID],
+                indices[3 * triangleID + 1],
+                indices[3 * triangleID + 2]
+            };
+            i++;
+        }
+    }
+
     // Copy PVS data to GPU accessible pvs visualization buffer (has the same size as the index vector)
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+    VkDeviceSize bufferSize = sizeof(pvsIndices[0]) * pvsIndices.size();
 
     // Create staging buffer using host-visible memory
     VkBuffer stagingBuffer;
@@ -1397,20 +1408,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
-
-    // Collect the vertex indices of the triangles in the PVS
-    std::vector<glm::uvec3> pvsIndices(indices.size());
-    int i = 0;
-    for (auto triangleID : pvs) {
-        if (triangleID != -1 && triangleID != 2147483647 && triangleID != -2147483648) {
-            pvsIndices[i] = {
-                indices[3 * triangleID],
-                indices[3 * triangleID + 1],
-                indices[3 * triangleID + 2]
-            };
-            i++;
-        }
-    }
 
     // Copy PVS data to the staging buffer
     void *data;
