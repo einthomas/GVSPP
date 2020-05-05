@@ -23,7 +23,6 @@ layout(binding = 4, set = 0) buffer Indices {
     uint i[];
 } indices;
 
-
 hitAttributeNV vec3 attribs;
 
 Vertex unpackVertexData(int index) {
@@ -41,39 +40,6 @@ Vertex unpackVertexData(int index) {
 }
 
 void main() {
-    /*
-    vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-
-    ivec3 index = ivec3(
-        indices.i[3 * gl_PrimitiveID + 0],
-        indices.i[3 * gl_PrimitiveID + 1],
-        indices.i[3 * gl_PrimitiveID + 2]
-    );
-	Vertex v0 = unpackVertexData(index.x);
-	Vertex v1 = unpackVertexData(index.y);
-	Vertex v2 = unpackVertexData(index.z);
-
-    vec3 normal = normalize(
-        v0.normal * barycentricCoords.x +
-        + v1.normal * barycentricCoords.y
-        + v2.normal * barycentricCoords.z
-    );
-
-    vec3 pos = normalize(
-        v0.pos * barycentricCoords.x +
-        + v1.pos * barycentricCoords.y
-        + v2.pos * barycentricCoords.z
-    );
-    */
-
-    // Diffuse shading
-    //vec3 lightPos = vec3(30.0, 30.0, -30.0);
-    //hitValue = max(0.0, dot(normalize(pos - lightPos), normal)) * vec3(1.0) + vec3(0.15);
-
-    //hitInfo = vec4(vec3(0.0), gl_PrimitiveID);
-
-
-    
     ivec3 index = ivec3(
         indices.i[3 * gl_PrimitiveID + 0],
         indices.i[3 * gl_PrimitiveID + 1],
@@ -86,7 +52,6 @@ void main() {
     vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
     vec3 pos = v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z;
     vec3 worldPos = vec3(camera.model * vec4(pos, 1.0));
-    //worldPos = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 
     hitInfo = vec4(worldPos, gl_PrimitiveID);
 }

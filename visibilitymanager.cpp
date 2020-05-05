@@ -917,15 +917,6 @@ void VisibilityManager::createABSDescriptorSetLayout() {
     triangleOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triangleOutputBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    /*
-    // Vertex array binding
-    VkDescriptorSetLayoutBinding vertexLayoutBinding = {};
-    vertexLayoutBinding.binding = 1;
-    vertexLayoutBinding.descriptorCount = 1;
-    vertexLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    vertexLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
-    */
-
     VkDescriptorSetLayoutBinding absWorkingBufferBinding = {};
     absWorkingBufferBinding.binding = 2;
     absWorkingBufferBinding.descriptorCount = 1;
@@ -1002,19 +993,6 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer) {
     descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pBufferInfo = &absOutputBufferInfo;
-
-    /*
-    VkDescriptorBufferInfo vertexBufferInfo = {};
-    vertexBufferInfo.buffer = vertexBuffer;
-    vertexBufferInfo.offset = 0;
-    vertexBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = descriptorSetABS;
-    descriptorWrites[1].dstBinding = 1;
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].pBufferInfo = &vertexBufferInfo;
-    */
 
     VkDescriptorBufferInfo absWorkingBufferInfo = {};
     absWorkingBufferInfo.buffer = absWorkingBuffer;
@@ -1355,7 +1333,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
         // Insert the newly found triangles into the PVS
         for (auto sample : intersectedTriangles) {
-            //qDebug() << sample.triangleID << glm::to_string(sample.rayOrigin).c_str() << glm::to_string(sample.hitPos).c_str();
             if (sample.triangleID != -1) {
                 auto result = pvs.insert(sample.triangleID);
                 if (result.second) {
@@ -1367,7 +1344,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         while (intersectedTriangles.size() > 0) {
             std::vector<Sample> a;
             for (int i = 0; i < 9; i++) {
-                //qDebug() << glm::to_string(intersectedTriangles[i].hitPos).c_str();
                 a.push_back(intersectedTriangles[i]);
                 intersectedTriangles.erase(intersectedTriangles.begin() + i);
             }

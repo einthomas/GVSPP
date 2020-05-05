@@ -28,7 +28,6 @@ layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
     Sample rayOriginOutput[];
 };
 
-//layout(location = 0) rayPayloadNV uint hitPrimitiveID;
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 void main() {
@@ -56,8 +55,6 @@ void main() {
     // Transform hemisphere point to view cell coordinate system
     rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
 
-    //rayDir = -viewCell.normal;      // TODO: REMOVE THIS. THIS IS ONLY FOR DEBUGGING PURPOSES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
     uint cullMask = 0xff;
@@ -77,6 +74,5 @@ void main() {
         0               // payload (location = 0)
     );
     
-    //rayOriginOutput[launchIndex] = Sample(hitPrimitiveID, rayOrigin, vec3(0.0));    //Sample(hitPrimitiveID, rayOrigin);
     rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);
 }

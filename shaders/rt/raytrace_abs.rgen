@@ -8,6 +8,11 @@ struct Vertex {
     vec3 color;
     vec2 uv;
 };
+struct Sample {
+    int triangleID;
+    vec3 rayOrigin;
+    vec3 rayHitPos;
+};
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
 layout(binding = 1, set = 0, rgba32f) uniform image2D image;    // TODO: Remove
@@ -32,12 +37,6 @@ layout(binding = 6, set = 0) uniform viewCellProperties {
 } viewCell;
 layout(binding = 7, set = 0) writeonly buffer foundTrianglesBuffer {       // TODO: Remove, unused
     uint foundTriangles[];
-};
-
-struct Sample {
-    int triangleID;
-    vec3 rayOrigin;
-    vec3 rayHitPos;
 };
 layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
     Sample rayOriginOutput[];
@@ -205,12 +204,6 @@ void main() {
             }
         }
     }
-/*
-    if (reverseSamplingTriangleID == -1) {
-        rayOrigin = vec3(0.0);
-        hitPoint = vec3(0.0);
-    }
-    */
     
     absOutput[launchIndex * 2 + 1] = Sample(reverseSamplingTriangleID, rayOrigin, hitPoint);
 }

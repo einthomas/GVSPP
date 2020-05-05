@@ -8,6 +8,11 @@ struct Vertex {
     vec3 color;
     vec2 uv;
 };
+struct Sample {
+    int triangleID;
+    vec3 rayOrigin;
+    vec3 rayHitPos;
+};
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
 layout(binding = 1, set = 0, rgba32f) uniform image2D image;    // TODO: Remove
@@ -30,12 +35,6 @@ layout(binding = 6, set = 0) uniform viewCellProperties {
 layout(binding = 7, set = 0) writeonly buffer foundTrianglesBuffer {       // TODO: Remove, unused
     uint foundTriangles[];
 };
-
-struct Sample {
-    int triangleID;
-    vec3 rayOrigin;
-    vec3 rayHitPos;
-};
 layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
     Sample rayOriginOutput[];
 };
@@ -43,9 +42,6 @@ layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
 layout(binding = 0, set = 1) writeonly buffer absOutputBuffer {
     Sample absOutput[];
 };
-layout(binding = 3, set = 0) buffer Vertices {
-    vec4 v[];
-} vertices;
 layout(binding = 2, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
 };
@@ -54,22 +50,7 @@ layout(binding = 0, set = 2) readonly buffer edgeSubdivWorkingBuffer {
     Sample edgeSubdivWorking[];
 };
 
-layout(location = 0) rayPayloadNV vec4 hitInfo; //uint hitPrimitiveID;
-
-Vertex unpackVertexData(uint index) {
-    vec4 d0 = vertices.v[3 * index + 0];
-    vec4 d1 = vertices.v[3 * index + 1];
-    vec4 d2 = vertices.v[3 * index + 2];
-
-    Vertex vertex;
-    vertex.pos = d0.xyz;
-    vertex.worldPos = vec3(camera.model * vec4(vertex.pos, 1.0));
-    vertex.normal = vec3(d0.w, d1.xy);
-    vertex.color = vec3(d1.zw, d2.x);
-    vertex.uv = d2.yz;
-
-    return vertex;
-}
+layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 const float THRESHOLD = 0.01;
 const int MAX_SUBDIVISION_STEPS = 3;
@@ -81,9 +62,6 @@ void main() {
     Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0))];
     const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS + 1) + 1);
     Sample samples[numSamples];
-    for (int i = 0; i < numSamples; i++) {
-        //samples[i] = Sample(-1, vec3(-2.0), vec3(-2.0));
-    }
     if (s0.triangleID != s1.triangleID) {
         samples[0] = s0;
         samples[1] = s1;
