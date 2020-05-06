@@ -10,8 +10,9 @@ public:
     int triangleID;
     alignas(16) glm::vec3 rayOrigin;        // Origin of the ray that hit the triangle
     alignas(16) glm::vec3 hitPos;       // Position where the triangle was hit
+    alignas(16) glm::vec3 pos;       // Position of the sample itself
     Sample();
-    Sample(int triangleID, glm::vec3 rayOrigin, glm::vec3 hitPos);
+    Sample(int triangleID, glm::vec3 rayOrigin, glm::vec3 hitPos, glm::vec3 pos);
 
     bool operator==(const Sample &other) const;
 };

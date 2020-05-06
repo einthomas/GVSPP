@@ -360,7 +360,7 @@ void VisibilityManager::initRayTracing(
 
     glm::mat4x4 model = glm::translate(
         glm::mat4(1.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
+        glm::vec3(0.0f, -1.0f, 0.0f) * 0.5f
     );
     model = glm::transpose(model);
 
@@ -1334,6 +1334,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         // Insert the newly found triangles into the PVS and into the newSamples set for which
         // ABS is going to be executed again
         for (auto sample : intersectedTriangles) {
+            //qDebug() << glm::to_string(sample.pos).c_str();
             if (sample.triangleID != -1) {
                 auto result = pvs.insert(sample.triangleID);
                 if (result.second) {
@@ -1344,13 +1345,15 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
         // Place new samples along the edge between each two adjacent ABS samples by repeated
         // subdivision
-        /*
         int k = 0;
-        while (k < intersectedTriangles.size() - 9) {
-        //while (intersectedTriangles.size() > 0) {
-            std::vector<Sample> samples(9);
+        while (k < intersectedTriangles.size()) {
+            std::vector<Sample> samples(std::min(900, int((intersectedTriangles.size() - k) * 0.5)));   // TODO: Don't hardcode "900"
             for (int i = 0; i < samples.size(); i++) {
+                // Check if ray through the k+1-th hit a triangle
                 if (intersectedTriangles[k + 1].triangleID != -1) {
+                    // In this case, the k-th sample corresponds to the triangle in front of the
+                    // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
+                    // actual ABS sample
                     samples[i] = intersectedTriangles[k + 1];
                 } else {
                     samples[i] = intersectedTriangles[k];
@@ -1358,14 +1361,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
                 k += 2;
             }
 
-
-            //for (int i = 0; i < 9; i++) {
-            //    samples[i] = intersectedTriangles[i];
-            //    intersectedTriangles.erase(intersectedTriangles.begin() + i);   // BLÖDSINN
-            //}
-
-            std::vector<Sample> n = edgeSubdivide(samples);
-            for (auto sample : n) {
+            for (auto sample : edgeSubdivide(samples)) {
                 if (sample.triangleID != -1) {
                     auto result = pvs.insert(sample.triangleID);
                     if (result.second) {
@@ -1374,7 +1370,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
                 }
             }
         }
-        */
     }
 
     // Collect the vertex indices of the triangles in the PVS

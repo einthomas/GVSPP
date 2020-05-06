@@ -727,7 +727,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     */
     ubo.model = glm::translate(
         glm::mat4(1.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
+        glm::vec3(0.0f, -1.0f, 0.0f) * 0.5f
     );
 
     ubo.view = glm::lookAt(

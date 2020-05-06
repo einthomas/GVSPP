@@ -12,6 +12,7 @@ struct Sample {
     int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
+    vec3 pos;
 };
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
@@ -62,62 +63,65 @@ void main() {
     Sample s0 = edgeSubdivWorking[launchIndex];
     Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0) + 9 * currentTriangleIndex)];
     //Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0))];
-    const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS + 1) + 1);
-    Sample samples[numSamples];
+    const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
     if (s0.triangleID != s1.triangleID) {
+        Sample samples[numSamples];
         samples[0] = s0;
         samples[1] = s1;
 
         vec3 rayOrigin = s0.rayOrigin;
-        vec3 rayDir = (s0.rayHitPos + s1.rayHitPos) * 0.5 - rayOrigin;
+        vec3 samplePos = (s0.pos + s1.pos) * 0.5;
+        vec3 rayDir = normalize(samplePos - rayOrigin);
         traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
 
         int triangleID = int(hitInfo.w);
         if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
-            samples[2] = Sample(triangleID, rayOrigin, hitInfo.xyz);
+            samples[2] = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
         }
         
         int end = 3;
         int numInserted = 1;
-        int newNumInserted = 0;
-        int i = 0;
-        for (int j = 0; j < MAX_SUBDIVISION_STEPS; j++) {
-            for (int k = 0; k < 2; k++) {
-                for (i = 0; i < numInserted; i++) {
+        for (int j = 0; j < MAX_SUBDIVISION_STEPS - 1; j++) {
+            for (int i = 0; i < numInserted; i++) {
+                for (int k = 0; k < 2; k++) {
                     s0 = samples[k];
-                    s1 = samples[end - numInserted + i];
+                    s1 = samples[1 + numInserted + i];
 
                     if (s0.triangleID == s1.triangleID) {
-                        samples[end + i] = s1;
+                        // Both samples are on the same triangle, no new sample has to be generated
+                        samples[end] = s1;
                     } else {
                         // TODO: Check sample distance for threshold
 
                         rayOrigin = s0.rayOrigin;
-                        rayDir = (s0.rayHitPos + s1.rayHitPos) * 0.5 - rayOrigin;
+                        samplePos = (s0.pos + s1.pos) * 0.5;
+                        rayDir = normalize(samplePos - rayOrigin);
                         traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
 
                         triangleID = int(hitInfo.w);
                         if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
-                            samples[end + i] = Sample(triangleID, rayOrigin, hitInfo.xyz);
+                            // The new sample is on a new triangle than at least one of its adjacent samples
+                            samples[end] = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
                         } else {
-                            // Case where the new sample is on the same triangle as s0 and as s1
-                            samples[end + i] = s1;
+                            // The new sample is on the same triangle as s0 and as s1, no new sample has
+                            // to be generated
+                            samples[end] = s1;
                         }
                     }
+                    end++;
                 }
-                newNumInserted += i;
-                end += i;
             }
-            numInserted = newNumInserted;
-            newNumInserted = 0;
+            numInserted *= 2;
         }
 
         for (int i = 0; i < numSamples; i++) {
             absOutput[launchIndex * numSamples + i] = samples[i];
         }
     } else {
+        // Both samples correspond to the same triangle, therefore there can't be another triangle
+        // between these two samples
         for (int i = 0; i < numSamples; i++) {
-            absOutput[launchIndex * numSamples + i] = Sample(-1, vec3(0.0), vec3(0.0));
+            absOutput[launchIndex * numSamples + i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
         }
     }
 }

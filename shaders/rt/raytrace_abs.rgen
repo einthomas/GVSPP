@@ -12,6 +12,7 @@ struct Sample {
     int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
+    vec3 pos;
 };
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
@@ -95,9 +96,8 @@ void main() {
 
     float epsilon = 5e-5;
     uint outerVertexIndex = uint(mod(launchIndex, 3.0));
-    vec3 p = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
-
-    vec3 rayDir = normalize(p - rayOrigin);
+    vec3 outerTrianglePoint = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
+    vec3 rayDir = normalize(outerTrianglePoint - rayOrigin);
 
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
@@ -120,9 +120,10 @@ void main() {
 
     vec3 hitPoint = hitInfo.xyz;
     int triangleID = int(hitInfo.w);
-    absOutput[launchIndex * 2] = Sample(triangleID, rayOrigin, hitPoint);
+    absOutput[launchIndex * 2] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
 
     // // Check for discontinuity
+    Sample reverseSamplingSample = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
     int reverseSamplingTriangleID = -1;
     if (triangleID != -1) {
         // Intersect ray with the plane of the original triangle
@@ -179,29 +180,34 @@ void main() {
             vec3 pointOutsideTriangle[2];
             pointOutsideTriangle[0] = p0 + normalize(p0 - p1) * 0.01;
             pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
-            vec3 rayPlaneHitPoint;
+            vec3 rayViewCellHitPoint;
             for (int i = 0; i < 2; i++) {
                 // Check if the ray through the point right outside of the triangle and the predicted hit point
                 // intersects the view cell
                 vec3 rayDir = normalize(pointOutsideTriangle[i] - predictedHitPoint);
-                rayPlaneHitPoint = intersectRayPlane(viewCell.pos, viewCell.normal, pointOutsideTriangle[i], rayDir);
+                rayViewCellHitPoint = intersectRayPlane(viewCell.pos, viewCell.normal, pointOutsideTriangle[i], rayDir);
 
                 // Check if the ray-plane hit point lies within the bounds of the view cell
                 // Project ray-plane hit point on local basis of the view cell
-                float u = dot(rayPlaneHitPoint - s0, s1 - s0);
-                float v = dot(rayPlaneHitPoint - s0, s2 - s0);
+                float u = dot(rayViewCellHitPoint - s0, s1 - s0);
+                float v = dot(rayViewCellHitPoint - s0, s2 - s0);
 
                 // Check if the u & v coordinates are within the view cell
                 if (u >= 0.0 && v >= 0.0 && u <= dot(s1 - s0, s1 - s0) && v <= dot(s2 - s0, s2 - s0)) {
                     rayDir = -rayDir;
-                    rayOrigin = rayPlaneHitPoint;
+                    rayOrigin = rayViewCellHitPoint;
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-                    hitPoint = hitInfo.xyz;
-                    reverseSamplingTriangleID = int(hitInfo.w);
+
+                    reverseSamplingSample.triangleID = int(hitInfo.w);
+                    reverseSamplingSample.rayOrigin = rayOrigin;
+                    reverseSamplingSample.rayHitPos = hitInfo.xyz;
+                    reverseSamplingSample.pos = pointOutsideTriangle[i];
+                    
+                    break;
                 }
             }
         }
     }
     
-    absOutput[launchIndex * 2 + 1] = Sample(reverseSamplingTriangleID, rayOrigin, hitPoint);
+    absOutput[launchIndex * 2 + 1] = reverseSamplingSample;
 }

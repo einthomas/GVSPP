@@ -23,6 +23,7 @@ struct Sample {
     int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
+    vec3 pos;
 };
 layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
     Sample rayOriginOutput[];
@@ -54,7 +55,7 @@ void main() {
 
     // Transform hemisphere point to view cell coordinate system
     rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
-
+    
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
     uint cullMask = 0xff;
@@ -74,5 +75,5 @@ void main() {
         0               // payload (location = 0)
     );
     
-    rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz);
+    rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
 }
