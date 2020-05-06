@@ -57,9 +57,11 @@ const int MAX_SUBDIVISION_STEPS = 3;
 
 void main() {
     uint launchIndex = gl_LaunchIDNV.x;
+    uint currentTriangleIndex = uint(floor(launchIndex / 9.0));
 
     Sample s0 = edgeSubdivWorking[launchIndex];
-    Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0))];
+    Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0) + 9 * currentTriangleIndex)];
+    //Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0))];
     const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS + 1) + 1);
     Sample samples[numSamples];
     if (s0.triangleID != s1.triangleID) {

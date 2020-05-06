@@ -72,13 +72,11 @@ vec3 intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir) {
 }
 
 void main() {
-    // Calculate 1D launch index
     uint launchIndex = gl_LaunchIDNV.x;
-
-    uint i0Index = uint(floor(launchIndex / 9.0));   // for each triangle 9 rays are shot i.e. for each triangle the shader is invoked 9 times
+    uint currentTriangleIndex = uint(floor(launchIndex / 9.0));   // for each triangle 9 rays are shot i.e. for each triangle the shader is invoked 9 times
     uint currentVertexIndex = uint(mod(floor(launchIndex / 3.0), 3.0));
 
-    Sample s = absWorking[i0Index];
+    Sample s = absWorking[currentTriangleIndex];
     Vertex v0 = unpackVertexData(indices.i[3 * s.triangleID + currentVertexIndex]);
     Vertex v1 = unpackVertexData(indices.i[3 * s.triangleID + int(mod(currentVertexIndex + 1, 3))]);
     Vertex v2 = unpackVertexData(indices.i[3 * s.triangleID + int(mod(currentVertexIndex + 2, 3))]);
