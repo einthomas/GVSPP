@@ -1331,7 +1331,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         // Execute ABS
         std::vector<Sample> intersectedTriangles = adaptiveBorderSample(absWorkingVector);
 
-        // Insert the newly found triangles into the PVS
+        // Insert the newly found triangles into the PVS and into the newSamples set for which
+        // ABS is going to be executed again
         for (auto sample : intersectedTriangles) {
             if (sample.triangleID != -1) {
                 auto result = pvs.insert(sample.triangleID);
@@ -1341,13 +1342,29 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
             }
         }
 
-        while (intersectedTriangles.size() > 0) {
-            std::vector<Sample> a;
-            for (int i = 0; i < 9; i++) {
-                a.push_back(intersectedTriangles[i]);
-                intersectedTriangles.erase(intersectedTriangles.begin() + i);
+        // Place new samples along the edge between each two adjacent ABS samples by repeated
+        // subdivision
+        /*
+        int k = 0;
+        while (k < intersectedTriangles.size() - 9) {
+        //while (intersectedTriangles.size() > 0) {
+            std::vector<Sample> samples(9);
+            for (int i = 0; i < samples.size(); i++) {
+                if (intersectedTriangles[k + 1].triangleID != -1) {
+                    samples[i] = intersectedTriangles[k + 1];
+                } else {
+                    samples[i] = intersectedTriangles[k];
+                }
+                k += 2;
             }
-            std::vector<Sample> n = edgeSubdivide(a);
+
+
+            //for (int i = 0; i < 9; i++) {
+            //    samples[i] = intersectedTriangles[i];
+            //    intersectedTriangles.erase(intersectedTriangles.begin() + i);   // BLÖDSINN
+            //}
+
+            std::vector<Sample> n = edgeSubdivide(samples);
             for (auto sample : n) {
                 if (sample.triangleID != -1) {
                     auto result = pvs.insert(sample.triangleID);
@@ -1357,19 +1374,17 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
                 }
             }
         }
+        */
     }
 
     // Collect the vertex indices of the triangles in the PVS
-    std::vector<glm::uvec3> pvsIndices(pvs.size() * 3);
-    int i = 0;
+    std::vector<uint32_t> pvsIndices;
+    pvsIndices.reserve(pvs.size() * 3);
     for (auto triangleID : pvs) {
         if (triangleID != -1) {
-            pvsIndices[i] = {
-                indices[3 * triangleID],
-                indices[3 * triangleID + 1],
-                indices[3 * triangleID + 2]
-            };
-            i++;
+            pvsIndices.push_back(indices[3 * triangleID]);
+            pvsIndices.push_back(indices[3 * triangleID + 1]);
+            pvsIndices.push_back(indices[3 * triangleID + 2]);
         }
     }
 
@@ -1393,8 +1408,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
     // Copy PVS data from the staging buffer to the GPU-visible PVS visualization buffer (used as an index buffer when drawing)
     VulkanUtil::copyBuffer(
-        logicalDevice, graphicsCommandPool, graphicsQueue,stagingBuffer, pvsVisualizationBuffer,
-         bufferSize
+        logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer, pvsVisualizationBuffer,
+        bufferSize
     );
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
