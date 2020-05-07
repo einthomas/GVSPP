@@ -104,10 +104,8 @@ private:
     VkDeviceMemory haltonPointsBufferMemory;
     VkBuffer viewCellBuffer;
     VkDeviceMemory viewCellBufferMemory;
-    VkBuffer intersectedTrianglesBuffer;
-    VkDeviceMemory intersectedTrianglesBufferMemory;
-    VkBuffer rayOriginBuffer;
-    VkDeviceMemory rayOriginBufferMemory;
+    VkBuffer randomSamplingOutputBuffer;
+    VkDeviceMemory randomSamplingOutputBufferMemory;
     VkBuffer absOutputBuffer;
     VkDeviceMemory absOutputBufferMemory;
     VkBuffer absWorkingBuffer;

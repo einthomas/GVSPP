@@ -11,15 +11,15 @@ struct Vertex {
 
 layout(location = 0) rayPayloadInNV vec4 hitInfo;
 
-layout(binding = 2, set = 0) uniform cameraProperties {
+layout(binding = 1, set = 0) uniform cameraProperties {
     mat4 model;     // TODO: This is called camera properties, however this model matrix doesn't have anything to do with the camera, this is model specific. Instead, use a buffer of model matrices and access the buffer via gl_InstanceID (in case there are different models/instances) (see nvidia Vulkan tutorial)
     mat4 view;
     mat4 projection;
 } camera;
-layout(binding = 3, set = 0) buffer Vertices {
+layout(binding = 2, set = 0) buffer Vertices {
     vec4 v[];
 } vertices;
-layout(binding = 4, set = 0) buffer Indices {
+layout(binding = 3, set = 0) buffer Indices {
     uint i[];
 } indices;
 

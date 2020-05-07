@@ -141,16 +141,9 @@ void VisibilityManager::createViewCellBuffer() {
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VulkanUtil::createBuffer(
         physicalDevice,
-        logicalDevice, sizeof(unsigned int) * RAYS_PER_ITERATION * 3,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        intersectedTrianglesBuffer, intersectedTrianglesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-
-    VulkanUtil::createBuffer(
-        physicalDevice,
         logicalDevice, sizeof(Sample) * RAYS_PER_ITERATION,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        rayOriginBuffer, rayOriginBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        randomSamplingOutputBuffer, randomSamplingOutputBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     VulkanUtil::createBuffer(
@@ -201,7 +194,7 @@ void VisibilityManager::createDescriptorSets(
     }
     */
 
-    std::array<VkWriteDescriptorSet, 8> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 7> descriptorWrites = {};
 
     VkWriteDescriptorSetAccelerationStructureNV asWriteInfo = {};
     asWriteInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
@@ -220,7 +213,7 @@ void VisibilityManager::createDescriptorSets(
     uniformBufferInfo.range = sizeof(UniformBufferObject);
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet = descriptorSet;
-    descriptorWrites[1].dstBinding = 2;
+    descriptorWrites[1].dstBinding = 1;
     descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pBufferInfo = &uniformBufferInfo;
@@ -231,7 +224,7 @@ void VisibilityManager::createDescriptorSets(
     vertexBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[2].dstSet = descriptorSet;
-    descriptorWrites[2].dstBinding = 3;
+    descriptorWrites[2].dstBinding = 2;
     descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[2].descriptorCount = 1;
     descriptorWrites[2].pBufferInfo = &vertexBufferInfo;
@@ -242,7 +235,7 @@ void VisibilityManager::createDescriptorSets(
     indexBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[3].dstSet = descriptorSet;
-    descriptorWrites[3].dstBinding = 4;
+    descriptorWrites[3].dstBinding = 3;
     descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[3].descriptorCount = 1;
     descriptorWrites[3].pBufferInfo = &indexBufferInfo;
@@ -253,7 +246,7 @@ void VisibilityManager::createDescriptorSets(
     haltonPointsBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[4].dstSet = descriptorSet;
-    descriptorWrites[4].dstBinding = 5;
+    descriptorWrites[4].dstBinding = 4;
     descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[4].descriptorCount = 1;
     descriptorWrites[4].pBufferInfo = &haltonPointsBufferInfo;
@@ -264,32 +257,21 @@ void VisibilityManager::createDescriptorSets(
     viewCellBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[5].dstSet = descriptorSet;
-    descriptorWrites[5].dstBinding = 6;
+    descriptorWrites[5].dstBinding = 5;
     descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descriptorWrites[5].descriptorCount = 1;
     descriptorWrites[5].pBufferInfo = &viewCellBufferInfo;
 
-    VkDescriptorBufferInfo pvsBufferInfo = {};
-    pvsBufferInfo.buffer = intersectedTrianglesBuffer;
-    pvsBufferInfo.offset = 0;
-    pvsBufferInfo.range = VK_WHOLE_SIZE;
+    VkDescriptorBufferInfo randomSamplingBufferInfo = {};
+    randomSamplingBufferInfo.buffer = randomSamplingOutputBuffer;
+    randomSamplingBufferInfo.offset = 0;
+    randomSamplingBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[6].dstSet = descriptorSet;
-    descriptorWrites[6].dstBinding = 7;
+    descriptorWrites[6].dstBinding = 6;
     descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[6].descriptorCount = 1;
-    descriptorWrites[6].pBufferInfo = &pvsBufferInfo;
-
-    VkDescriptorBufferInfo rayOriginBufferInfo = {};
-    rayOriginBufferInfo.buffer = rayOriginBuffer;
-    rayOriginBufferInfo.offset = 0;
-    rayOriginBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[7].dstSet = descriptorSet;
-    descriptorWrites[7].dstBinding = 8;
-    descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[7].descriptorCount = 1;
-    descriptorWrites[7].pBufferInfo = &rayOriginBufferInfo;
+    descriptorWrites[6].pBufferInfo = &randomSamplingBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -640,62 +622,54 @@ void VisibilityManager::createDescriptorSetLayout() {
 
     // Uniform binding
     VkDescriptorSetLayoutBinding uniformLayoutBinding = {};
-    uniformLayoutBinding.binding = 2;
+    uniformLayoutBinding.binding = 1;
     uniformLayoutBinding.descriptorCount = 1;
     uniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniformLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
     // Vertex array binding
     VkDescriptorSetLayoutBinding vertexLayoutBinding = {};
-    vertexLayoutBinding.binding = 3;
+    vertexLayoutBinding.binding = 2;
     vertexLayoutBinding.descriptorCount = 1;
     vertexLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertexLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
     // Index array binding
     VkDescriptorSetLayoutBinding indexLayoutBinding = {};
-    indexLayoutBinding.binding = 4;
+    indexLayoutBinding.binding = 3;
     indexLayoutBinding.descriptorCount = 1;
     indexLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     indexLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
     // Halton points binding
     VkDescriptorSetLayoutBinding haltonPointsBinding = {};
-    haltonPointsBinding.binding = 5;
+    haltonPointsBinding.binding = 4;
     haltonPointsBinding.descriptorCount = 1;
     haltonPointsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     haltonPointsBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
     // View cell uniform binding
     VkDescriptorSetLayoutBinding viewCellBinding = {};
-    viewCellBinding.binding = 6;
+    viewCellBinding.binding = 5;
     viewCellBinding.descriptorCount = 1;
     viewCellBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     viewCellBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    // Triangle output buffer binding
-    VkDescriptorSetLayoutBinding pvsBinding = {};
-    pvsBinding.binding = 7;
-    pvsBinding.descriptorCount = 1;
-    pvsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pvsBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
+    // Random sampling sample output buffer binding
+    VkDescriptorSetLayoutBinding randomSamplingOutputBinding = {};
+    randomSamplingOutputBinding.binding = 6;
+    randomSamplingOutputBinding.descriptorCount = 1;
+    randomSamplingOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    randomSamplingOutputBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    // Ray origin output buffer binding
-    VkDescriptorSetLayoutBinding rayOriginBinding = {};
-    rayOriginBinding.binding = 8;
-    rayOriginBinding.descriptorCount = 1;
-    rayOriginBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    rayOriginBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-
-    std::array<VkDescriptorSetLayoutBinding, 8> bindings = {
+    std::array<VkDescriptorSetLayoutBinding, 7> bindings = {
         aslayoutBinding,
         uniformLayoutBinding,
         vertexLayoutBinding,
         indexLayoutBinding,
         haltonPointsBinding,
         viewCellBinding,
-        pvsBinding,
-        rayOriginBinding
+        randomSamplingOutputBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -917,14 +891,13 @@ void VisibilityManager::createABSDescriptorSetLayout() {
     triangleOutputBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
     VkDescriptorSetLayoutBinding absWorkingBufferBinding = {};
-    absWorkingBufferBinding.binding = 2;
+    absWorkingBufferBinding.binding = 1;
     absWorkingBufferBinding.descriptorCount = 1;
     absWorkingBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     absWorkingBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
     std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
         triangleOutputBinding,
-        //vertexLayoutBinding,
         absWorkingBufferBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -999,7 +972,7 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer) {
     absWorkingBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet = descriptorSetABS;
-    descriptorWrites[1].dstBinding = 2;
+    descriptorWrites[1].dstBinding = 1;
     descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pBufferInfo = &absWorkingBufferInfo;
@@ -1055,7 +1028,7 @@ std::vector<Sample> VisibilityManager::randomSample(int numRays) {
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, rayOriginBuffer, hostBuffer,
+            logicalDevice, graphicsCommandPool, graphicsQueue, randomSamplingOutputBuffer, hostBuffer,
             bufferSize
         );
 
@@ -1347,7 +1320,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
         size_t k = 0;
         while (k < samples.size()) {
             std::vector<Sample> edgeSubdivQueue;
-            int numSamples = std::min(16, int((samples.size() - k) * 0.5));       // TODO: Don't hardcode "900"
+            int numSamples = std::min(900, int((samples.size() - k) * 0.5));       // TODO: Don't hardcode "900"
             edgeSubdivQueue.reserve(numSamples);
             for (int i = 0; i < numSamples; i++) {
                 // Check if ray through the k+1-th hit a triangle
@@ -1420,10 +1393,8 @@ void VisibilityManager::releaseResources() {
     vkFreeMemory(logicalDevice, haltonPointsBufferMemory, nullptr);
     vkDestroyBuffer(logicalDevice, viewCellBuffer, nullptr);
     vkFreeMemory(logicalDevice, viewCellBufferMemory, nullptr);
-    vkDestroyBuffer(logicalDevice, intersectedTrianglesBuffer, nullptr);
-    vkFreeMemory(logicalDevice, intersectedTrianglesBufferMemory, nullptr);
-    vkDestroyBuffer(logicalDevice, rayOriginBuffer, nullptr);
-    vkFreeMemory(logicalDevice, rayOriginBufferMemory, nullptr);
+    vkDestroyBuffer(logicalDevice, randomSamplingOutputBuffer, nullptr);
+    vkFreeMemory(logicalDevice, randomSamplingOutputBufferMemory, nullptr);
     vkDestroyBuffer(logicalDevice, absOutputBuffer, nullptr);
     vkFreeMemory(logicalDevice, absOutputBufferMemory, nullptr);
     vkDestroyBuffer(logicalDevice, absWorkingBuffer, nullptr);

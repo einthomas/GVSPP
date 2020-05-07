@@ -1,7 +1,7 @@
 #version 460
 
 layout(binding = 1) uniform sampler2D tex;
-layout(binding = 7, set = 0) readonly buffer pvsBuffer {
+layout(binding = 6, set = 0) readonly buffer pvsBuffer {
     int pvs[];
 };
 

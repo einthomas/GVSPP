@@ -16,41 +16,34 @@ struct Sample {
 };
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
-layout(binding = 1, set = 0, rgba32f) uniform image2D image;    // TODO: Remove
-layout(binding = 2, set = 0) uniform cameraProperties {
+layout(binding = 1, set = 0) uniform cameraProperties {
     mat4 model;
     mat4 view;
     mat4 projection;
 } camera;
-layout(binding = 3, set = 0) buffer Vertices {
+layout(binding = 2, set = 0) buffer Vertices {
     vec4 v[];
 } vertices;
-layout(binding = 4, set = 0) buffer Indices {
+layout(binding = 3, set = 0) buffer Indices {
     uint i[];
 } indices;
-layout(binding = 5, set = 0) readonly buffer haltonPoints {
+layout(binding = 4, set = 0) readonly buffer haltonPoints {
     vec2 points[];
 };
-layout(binding = 6, set = 0) uniform viewCellProperties {
+layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
     vec2 size;
     vec3 normal;
 } viewCell;
-layout(binding = 7, set = 0) writeonly buffer foundTrianglesBuffer {       // TODO: Remove, unused
-    uint foundTriangles[];
-};
-layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
-    Sample rayOriginOutput[];
-};
 
 layout(binding = 0, set = 1) writeonly buffer absOutputBuffer {
     Sample absOutput[];
 };
-layout(binding = 2, set = 1) readonly buffer absWorkingBuffer {
+layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
 };
 
-layout(location = 0) rayPayloadNV vec4 hitInfo; //uint hitPrimitiveID;
+layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 Vertex unpackVertexData(uint index) {
     vec4 d0 = vertices.v[3 * index + 0];

@@ -1,32 +1,24 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
-layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
-layout(binding = 2, set = 0) uniform cameraProperties {
-    mat4 model;
-    mat4 view;
-    mat4 projection;
-} camera;
-layout(binding = 5, set = 0) readonly buffer haltonPoints {
-    vec2 points[];
-};
-layout(binding = 6, set = 0) uniform viewCellProperties {
-    vec3 pos;
-    vec2 size;
-    vec3 normal;
-} viewCell;
-layout(binding = 7, set = 0) writeonly buffer trianglesOutputBuffer {       // TODO: Remove, unused
-    uint trianglesOutput[];
-};
-
 struct Sample {
     int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
     vec3 pos;
 };
-layout(binding = 8, set = 0) writeonly buffer rayOriginOutputBuffer {
-    Sample rayOriginOutput[];
+
+layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 4, set = 0) readonly buffer haltonPoints {
+    vec2 points[];
+};
+layout(binding = 5, set = 0) uniform viewCellProperties {
+    vec3 pos;
+    vec2 size;
+    vec3 normal;
+} viewCell;
+layout(binding = 6, set = 0) writeonly buffer randomSamplingOutputBuffer {
+    Sample randomSamplingOutput[];
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
@@ -75,5 +67,5 @@ void main() {
         0               // payload (location = 0)
     );
     
-    rayOriginOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+    randomSamplingOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
 }
