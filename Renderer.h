@@ -49,9 +49,6 @@ private:
     VkImageView textureImageView;
     VkSampler textureSampler;
 
-
-
-    //VkShaderModule createShader(const QString &name);
     void createGraphicsPipeline();
     void createVertexBuffer();
     void createIndexBuffer();
@@ -78,30 +75,14 @@ private:
     void createUniformBuffers();
     void updateUniformBuffer(uint32_t swapChainImageIndex);
 
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
-    // RT
-
-
-    bool visualizePVS = false;
-
     // Visibility
-    //std::unordered_set<glm::uvec3> pvs;
-
-
-    const int RAYS_PER_ITERATION_SQRT = 40;
-    //const size_t MAX_ABS_RAYS = RAYS_PER_ITERATION_SQRT * RAYS_PER_ITERATION_SQRT;
-    //const size_t MIN_ABS_RAYS = size_t(floor(MAX_ABS_RAYS * 0.2));
-    //const size_t MIN_ABS_RAYS = 1;
+    const int RAYS_PER_ITERATION = 1600;
+    bool visualizePVS = false;
 
     VisibilityManager visibilityManager;
     VkDescriptorSet rtDescriptorSetsABS;
     VkDescriptorSetLayout rtDescriptorSetLayoutABS;
     void initVisibilityManager();
-    void executeCommandBuffer(VkCommandBuffer commandBuffer);
-
-
-    QueueFamilyIndices findQueueFamilies();
 };
 
 #endif // RENDERER_H

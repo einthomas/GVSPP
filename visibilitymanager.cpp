@@ -14,12 +14,13 @@ struct UniformBufferObject {
 };
 
 VisibilityManager::VisibilityManager(int raysPerIteration)
-    : MAX_ABS_TRIANGLES_PER_ITERATION(raysPerIteration), MAX_EDGE_SUBDIV_RAYS(raysPerIteration)
+    : RAYS_PER_ITERATION(raysPerIteration), MAX_ABS_TRIANGLES_PER_ITERATION(raysPerIteration),
+    MAX_EDGE_SUBDIV_RAYS(raysPerIteration)
 {
 }
 
 void VisibilityManager::init(
-    int raysPerIteration, VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
+    VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
     VkCommandPool graphicsCommandPool, VkQueue graphicsQueue, VkBuffer indexBuffer,
     const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
     const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
@@ -30,9 +31,7 @@ void VisibilityManager::init(
     this->graphicsQueue = graphicsQueue;
     this->physicalDevice = physicalDevice;
 
-    this->raysPerIteration = raysPerIteration;
-
-    generateHaltonPoints(raysPerIteration);
+    generateHaltonPoints(RAYS_PER_ITERATION);
     createHaltonPointsBuffer();
     createViewCellBuffer();
     createBuffers(indices);
@@ -142,14 +141,14 @@ void VisibilityManager::createViewCellBuffer() {
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VulkanUtil::createBuffer(
         physicalDevice,
-        logicalDevice, sizeof(unsigned int) * raysPerIteration * 3,
+        logicalDevice, sizeof(unsigned int) * RAYS_PER_ITERATION * 3,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         intersectedTrianglesBuffer, intersectedTrianglesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     VulkanUtil::createBuffer(
         physicalDevice,
-        logicalDevice, sizeof(Sample) * raysPerIteration,
+        logicalDevice, sizeof(Sample) * RAYS_PER_ITERATION,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         rayOriginBuffer, rayOriginBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
@@ -360,7 +359,7 @@ void VisibilityManager::initRayTracing(
 
     glm::mat4x4 model = glm::translate(
         glm::mat4(1.0f),
-        glm::vec3(0.0f, -1.0f, 0.0f) * 0.5f
+        glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
     );
     model = glm::transpose(model);
 
@@ -1300,76 +1299,81 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
 
 void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
     // Execute random sampling
-    std::vector<Sample> intersectedTriangles = randomSample(raysPerIteration);
+    std::vector<Sample> samples(randomSample(RAYS_PER_ITERATION));
 
     // Insert the newly found triangles into the PVS
-    std::vector<Sample> newSamples;
-    for (auto sample : intersectedTriangles) {
+    std::vector<Sample> absSampleQueue;
+    for (auto sample : samples) {
         auto result = pvs.insert(sample.triangleID);
         if (result.second) {
             // If the current triangle ID was inserted into the PVS, insert it into the new samples
             // vector as well
-            newSamples.push_back(sample);
+            absSampleQueue.push_back(sample);
         }
     }
 
     // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_RAYS rays at a time as
     // long as there are a number of MIN_ABS_RAYS unprocessed triangles left
-    while (newSamples.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
+    while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
         qDebug() << pvs.size();
 
         // Get a maximum of MAX_ABS_RAYS triangles for which ABS will be run at a time
-        int numbAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, newSamples.size());
-        std::vector<Sample> absWorkingVector(numbAbsRays);
+        int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
+        std::vector<Sample> absWorkingVector(numAbsRays);
         int num = 0;
-        for (auto it = newSamples.begin(); num < numbAbsRays;) {   // TODO: Replace for loop?
+        for (auto it = absSampleQueue.begin(); num < numAbsRays;) {   // TODO: Replace for loop?
             absWorkingVector[num] = *it;
-            it = newSamples.erase(it);
+            it = absSampleQueue.erase(it);
             num++;
         }
 
         // Execute ABS
-        std::vector<Sample> intersectedTriangles = adaptiveBorderSample(absWorkingVector);
+        std::vector<Sample> samples(adaptiveBorderSample(absWorkingVector));
 
         // Insert the newly found triangles into the PVS and into the newSamples set for which
         // ABS is going to be executed again
-        for (auto sample : intersectedTriangles) {
-            //qDebug() << glm::to_string(sample.pos).c_str();
+        for (auto sample : samples) {
             if (sample.triangleID != -1) {
                 auto result = pvs.insert(sample.triangleID);
                 if (result.second) {
-                    newSamples.push_back(sample);
+                    absSampleQueue.push_back(sample);
                 }
             }
         }
 
         // Place new samples along the edge between each two adjacent ABS samples by repeated
         // subdivision
-        int k = 0;
-        while (k < intersectedTriangles.size()) {
-            std::vector<Sample> samples(std::min(900, int((intersectedTriangles.size() - k) * 0.5)));   // TODO: Don't hardcode "900"
-            for (int i = 0; i < samples.size(); i++) {
+        /*
+        size_t k = 0;
+        while (k < samples.size()) {
+            std::vector<Sample> edgeSubdivQueue;
+            int numSamples = std::min(16, int((samples.size() - k) * 0.5));       // TODO: Don't hardcode "900"
+            edgeSubdivQueue.reserve(numSamples);
+            for (int i = 0; i < numSamples; i++) {
                 // Check if ray through the k+1-th hit a triangle
-                if (intersectedTriangles[k + 1].triangleID != -1) {
+                if (samples[k + 1].triangleID != -1) {
                     // In this case, the k-th sample corresponds to the triangle in front of the
                     // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
                     // actual ABS sample
-                    samples[i] = intersectedTriangles[k + 1];
+                    edgeSubdivQueue.emplace_back(samples[k + 1]);
                 } else {
-                    samples[i] = intersectedTriangles[k];
+                    edgeSubdivQueue.emplace_back(samples[k]);
                 }
                 k += 2;
             }
 
-            for (auto sample : edgeSubdivide(samples)) {
+            // Insert the newly found triangles into the PVS and into the newSamples set for which
+            // ABS is going to be executed again
+            for (auto sample : edgeSubdivide(edgeSubdivQueue)) {
                 if (sample.triangleID != -1) {
                     auto result = pvs.insert(sample.triangleID);
                     if (result.second) {
-                        newSamples.push_back(sample);
+                        absSampleQueue.push_back(sample);
                     }
                 }
             }
         }
+        */
     }
 
     // Collect the vertex indices of the triangles in the PVS
@@ -1377,9 +1381,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
     pvsIndices.reserve(pvs.size() * 3);
     for (auto triangleID : pvs) {
         if (triangleID != -1) {
-            pvsIndices.push_back(indices[3 * triangleID]);
-            pvsIndices.push_back(indices[3 * triangleID + 1]);
-            pvsIndices.push_back(indices[3 * triangleID + 2]);
+            pvsIndices.emplace_back(indices[3 * triangleID]);
+            pvsIndices.emplace_back(indices[3 * triangleID + 1]);
+            pvsIndices.emplace_back(indices[3 * triangleID + 2]);
         }
     }
 
