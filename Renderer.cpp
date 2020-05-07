@@ -287,7 +287,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/citybig/city.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
         qWarning("%s", (warn + err).c_str());
     }
 
@@ -297,9 +297,9 @@ void VulkanRenderer::loadModel() {
             Vertex vertex = {};
 
             vertex.pos = {
-                attrib.vertices[3 * index.vertex_index + 0] * 0.001,
-                attrib.vertices[3 * index.vertex_index + 1] * 0.001,
-                attrib.vertices[3 * index.vertex_index + 2] * 0.001
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
             };
 
             vertex.normal = {
@@ -731,8 +731,8 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     );
 
     ubo.view = glm::lookAt(
-        glm::vec3(0.0f, 10.0f, 10.0f),
-        glm::vec3(0.0f, 6.0f, 0.0f),
+        glm::vec3(10.5f,6.3f,-5.2f),
+        glm::vec3(7.0f,6.0f,-2.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
         /*
         glm::vec3(0.0f, 0.0f, -10.0f),
@@ -836,8 +836,8 @@ void VulkanRenderer::saveWindowContentToImage() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(0.0f, 10.0f, 10.0f);
-    glm::vec3 center = glm::vec3(0.0f, 6.0f, 0.0f);
+    glm::vec3 pos = glm::vec3(10.5f,6.3f,-5.2f);
+    glm::vec3 center = glm::vec3(7.0f,6.0f,-2.0f);
     visibilityManager.addViewCell(
         pos,
         glm::vec2(0.2f, 0.2f),

@@ -56,7 +56,7 @@ private:
     const size_t RAYS_PER_ITERATION;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION;
-    const size_t MAX_EDGE_SUBDIV_RAYS;
+    const size_t MAX_EDGE_SUBDIV_RAYS = 900;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     //const size_t MIN_ABS_RAYS = size_t(floor(MAX_ABS_RAYS * 0.2));
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
@@ -111,6 +111,8 @@ private:
     VkBuffer absWorkingBuffer;
     VkDeviceMemory absWorkingBufferMemory;
     VkDeviceMemory pvsVisualizationBufferMemory;
+    VkBuffer edgeSubdivOutputBuffer;
+    VkDeviceMemory edgeSubdivOutputBufferMemory;
     VkBuffer edgeSubdivWorkingBuffer;
     VkDeviceMemory edgeSubdivWorkingBufferMemory;
 

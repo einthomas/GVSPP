@@ -14,8 +14,7 @@ struct UniformBufferObject {
 };
 
 VisibilityManager::VisibilityManager(int raysPerIteration)
-    : RAYS_PER_ITERATION(raysPerIteration), MAX_ABS_TRIANGLES_PER_ITERATION(raysPerIteration),
-    MAX_EDGE_SUBDIV_RAYS(raysPerIteration)
+    : RAYS_PER_ITERATION(raysPerIteration), MAX_ABS_TRIANGLES_PER_ITERATION(raysPerIteration)
 {
 }
 
@@ -139,6 +138,7 @@ void VisibilityManager::createViewCellBuffer() {
 }
 
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
+    // Random sampling buffers
     VulkanUtil::createBuffer(
         physicalDevice,
         logicalDevice, sizeof(Sample) * RAYS_PER_ITERATION,
@@ -146,20 +146,13 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         randomSamplingOutputBuffer, randomSamplingOutputBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
+    // ABS buffers
     VulkanUtil::createBuffer(
         physicalDevice,
         logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * 9 * 2,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         absOutputBuffer, absOutputBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
-
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice, sizeof(indices[0]) * indices.size(),
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        pvsVisualizationBuffer, pvsVisualizationBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-
     VulkanUtil::createBuffer(
         physicalDevice,
         logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION,
@@ -167,11 +160,26 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         absWorkingBuffer, absWorkingBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
+    // Edge subdivision buffers
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
+        //logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * 9 * 2,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        edgeSubdivOutputBuffer, edgeSubdivOutputBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
     VulkanUtil::createBuffer(
         physicalDevice,
         logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         edgeSubdivWorkingBuffer, edgeSubdivWorkingBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice, sizeof(indices[0]) * indices.size(),
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        pvsVisualizationBuffer, pvsVisualizationBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 }
 
@@ -693,7 +701,7 @@ void VisibilityManager::createDescriptorPool() {
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[2].descriptorCount = 2;
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[3].descriptorCount = 8;
+    poolSizes[3].descriptorCount = 9;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -861,13 +869,20 @@ void VisibilityManager::createEdgeSubdivPipeline() {
 }
 
 void VisibilityManager::createEdgeSubdivDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding edgeSubdivOutputBinding = {};
+    edgeSubdivOutputBinding.binding = 0;
+    edgeSubdivOutputBinding.descriptorCount = 1;
+    edgeSubdivOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    edgeSubdivOutputBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
+
     VkDescriptorSetLayoutBinding edgeSubdivWorkingBufferBinding = {};
-    edgeSubdivWorkingBufferBinding.binding = 0;
+    edgeSubdivWorkingBufferBinding.binding = 1;
     edgeSubdivWorkingBufferBinding.descriptorCount = 1;
     edgeSubdivWorkingBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     edgeSubdivWorkingBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    std::array<VkDescriptorSetLayoutBinding, 1> bindings = {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
+        edgeSubdivOutputBinding,
         edgeSubdivWorkingBufferBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -914,18 +929,29 @@ void VisibilityManager::createABSDescriptorSetLayout() {
 }
 
 void VisibilityManager::createEdgeSubdivDescriptorSets() {
-    std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 
-    VkDescriptorBufferInfo edgeSubdivWorkingBufferInfo = {};
-    edgeSubdivWorkingBufferInfo.buffer = edgeSubdivWorkingBuffer;
-    edgeSubdivWorkingBufferInfo.offset = 0;
-    edgeSubdivWorkingBufferInfo.range = VK_WHOLE_SIZE;
+    VkDescriptorBufferInfo edgeSubdivOutputBufferInfo = {};        // TODO: Move descriptor set creation to method
+    edgeSubdivOutputBufferInfo.buffer = edgeSubdivOutputBuffer;
+    edgeSubdivOutputBufferInfo.offset = 0;
+    edgeSubdivOutputBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet = descriptorSetEdgeSubdiv;
     descriptorWrites[0].dstBinding = 0;
     descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[0].descriptorCount = 1;
-    descriptorWrites[0].pBufferInfo = &edgeSubdivWorkingBufferInfo;
+    descriptorWrites[0].pBufferInfo = &edgeSubdivOutputBufferInfo;
+
+    VkDescriptorBufferInfo edgeSubdivWorkingBufferInfo = {};
+    edgeSubdivWorkingBufferInfo.buffer = edgeSubdivWorkingBuffer;
+    edgeSubdivWorkingBufferInfo.offset = 0;
+    edgeSubdivWorkingBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[1].dstSet = descriptorSetEdgeSubdiv;
+    descriptorWrites[1].dstBinding = 1;
+    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[1].descriptorCount = 1;
+    descriptorWrites[1].pBufferInfo = &edgeSubdivWorkingBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -955,7 +981,7 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer) {
 
     std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 
-    VkDescriptorBufferInfo absOutputBufferInfo = {};        // TODO: Move descriptor set creation to method
+    VkDescriptorBufferInfo absOutputBufferInfo = {};
     absOutputBufferInfo.buffer = absOutputBuffer;
     absOutputBufferInfo.offset = 0;
     absOutputBufferInfo.range = VK_WHOLE_SIZE;
@@ -1197,7 +1223,7 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
     );
 
     // Copy intersected triangles from VRAM to CPU accessible memory
-    int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS + 1) + 1);
+    int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
     std::vector<Sample> intersectedTriangles(samples.size() * numSamples);
     {
         VkDeviceSize bufferSize = sizeof(Sample) * intersectedTriangles.size();
@@ -1213,7 +1239,7 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, absOutputBuffer, hostBuffer,
+            logicalDevice, graphicsCommandPool, graphicsQueue, edgeSubdivOutputBuffer, hostBuffer,
             bufferSize
         );
 
@@ -1316,11 +1342,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
         // Place new samples along the edge between each two adjacent ABS samples by repeated
         // subdivision
-        /*
         size_t k = 0;
         while (k < samples.size()) {
             std::vector<Sample> edgeSubdivQueue;
-            int numSamples = std::min(900, int((samples.size() - k) * 0.5));       // TODO: Don't hardcode "900"
+            int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>(((samples.size() - k) * 0.5)));
             edgeSubdivQueue.reserve(numSamples);
             for (int i = 0; i < numSamples; i++) {
                 // Check if ray through the k+1-th hit a triangle
@@ -1328,7 +1353,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
                     // In this case, the k-th sample corresponds to the triangle in front of the
                     // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
                     // actual ABS sample
-                    edgeSubdivQueue.emplace_back(samples[k + 1]);
+                    edgeSubdivQueue.emplace_back(samples[k]);
                 } else {
                     edgeSubdivQueue.emplace_back(samples[k]);
                 }
@@ -1338,6 +1363,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
             // Insert the newly found triangles into the PVS and into the newSamples set for which
             // ABS is going to be executed again
             for (auto sample : edgeSubdivide(edgeSubdivQueue)) {
+                //qDebug() << sample.triangleID << glm::to_string(sample.rayOrigin).c_str();
                 if (sample.triangleID != -1) {
                     auto result = pvs.insert(sample.triangleID);
                     if (result.second) {
@@ -1346,7 +1372,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
                 }
             }
         }
-        */
     }
 
     // Collect the vertex indices of the triangles in the PVS
