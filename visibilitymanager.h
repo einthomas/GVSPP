@@ -6,6 +6,7 @@
 #include <vector>
 #include <array>
 #include <unordered_set>
+#include <thread>
 
 #include "viewcell.h"
 #include "Vertex.h"
@@ -27,30 +28,21 @@ struct GeometryInstance {
     uint64_t accelerationStructureHandle;
 };
 
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-
-    bool isComplete() {
-        return graphicsFamily.has_value();
-    }
-};
-
 class VisibilityManager {
 public:
     VisibilityManager(int RAYS_PER_ITERATION);
     void init(
         VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
-        VkCommandPool graphicsCommandPool, VkQueue graphicsQueue, VkBuffer indexBuffer,
-        const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
-        const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-        uint32_t deviceLocalMemoryIndex
+        VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
+        const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers
     );
     void addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal);
     void generateHaltonPoints(int n, int p2 = 7);
     void rayTrace(const std::vector<uint32_t> &indices);
     void releaseResources();
-
-    VkBuffer pvsVisualizationBuffer;
+    VkBuffer getPVSIndexBuffer(
+        const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue
+    );
 
 private:
     const size_t RAYS_PER_ITERATION;
@@ -69,8 +61,9 @@ private:
 
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
-    VkCommandPool graphicsCommandPool;
-    VkQueue graphicsQueue;
+    //VkCommandPool graphicsCommandPool;
+    //VkCommandPool commandPool;
+    VkQueue computeQueue;
 
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
@@ -115,6 +108,7 @@ private:
     VkDeviceMemory edgeSubdivOutputBufferMemory;
     VkBuffer edgeSubdivWorkingBuffer;
     VkDeviceMemory edgeSubdivWorkingBufferMemory;
+    VkBuffer pvsVisualizationBuffer;
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;
@@ -136,11 +130,10 @@ private:
 
     void initRayTracing(
         VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<uint32_t> &indices,
-        const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-        uint32_t deviceLocalMemoryIndex
+        const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers
     );
-    void createBottomLevelAS(const VkGeometryNV *geometry, uint32_t deviceLocalMemoryIndex);
-    void createTopLevelAS(uint32_t deviceLocalMemoryIndex);
+    void createBottomLevelAS(const VkGeometryNV *geometry);
+    void createTopLevelAS();
     void buildAS(const VkBuffer instanceBuffer, const VkGeometryNV *geometry);
     void createDescriptorSetLayout();
     void createDescriptorSets(VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<VkBuffer> &uniformBuffers);
@@ -155,7 +148,6 @@ private:
     );
     VkDeviceSize copyShaderIdentifier(uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex);
     void createCommandBuffers();
-    QueueFamilyIndices findQueueFamilies();
     void createHaltonPointsBuffer();
     void createViewCellBuffer();
     void createBuffers(const std::vector<uint32_t> &indices);

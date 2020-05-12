@@ -1,4 +1,7 @@
 #include "vulkanutil.h"
+#include <optional>
+#include <cstring>
+#include <fstream>
 
 void VulkanUtil::createBuffer(
     VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize size,
@@ -115,11 +118,52 @@ uint32_t VulkanUtil::findMemoryType(
             return i;
         }
     }
-
-    //throw std::runtime_error("failed to find suitable memory type!");
 }
 
-VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const QString &name) {
+uint32_t VulkanUtil::findQueueFamilies(VkPhysicalDevice device, VkQueueFlags queueFlags, int k) {
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+    std::optional<uint32_t> family;
+    int i = 0;
+    for (const auto& queueFamily : queueFamilies) {
+        if (queueFamily.queueFlags & queueFlags) {
+            family = i;
+        }
+
+        if (family.has_value() && int(family.value()) > k) {
+            break;
+        }
+
+        i++;
+    }
+
+    return family.value();
+}
+
+std::vector<char> VulkanUtil::readBinaryFile(const std::string &filename) {
+    // Open a binary file with the read position at the end
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to open file " + filename);
+    }
+
+    // Get the file size from the current read position
+    size_t fileSize = (size_t) file.tellg();
+
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+
+    file.close();
+    return buffer;
+}
+
+VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const std::string &filename) {
+    /*
     QFile file(name);
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning("Failed to read shader %s", qPrintable(name));
@@ -127,15 +171,19 @@ VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const QString &n
     }
     QByteArray blob = file.readAll();
     file.close();
+    */
+
+    auto shaderCode = readBinaryFile(filename);
 
     VkShaderModuleCreateInfo shaderInfo = {};
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderInfo.codeSize = blob.size();
-    shaderInfo.pCode = reinterpret_cast<const uint32_t *>(blob.constData());
+    shaderInfo.codeSize = shaderCode.size();
+    shaderInfo.pCode = reinterpret_cast<const uint32_t *>(shaderCode.data());
+
     VkShaderModule shaderModule;
     VkResult err = vkCreateShaderModule(logicalDevice, &shaderInfo, nullptr, &shaderModule);
     if (err != VK_SUCCESS) {
-        qWarning("Failed to create shader module: %d", err);
+        //qWarning("Failed to create shader module: %d", err);
         return VK_NULL_HANDLE;
     }
 

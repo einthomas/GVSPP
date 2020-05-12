@@ -1,5 +1,6 @@
 #include <cstring>
 #include <glm/gtx/string_cast.hpp>
+#include <iostream>
 
 #include "vulkanutil.h"
 #include "visibilitymanager.h"
@@ -20,23 +21,31 @@ VisibilityManager::VisibilityManager(int raysPerIteration)
 
 void VisibilityManager::init(
     VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
-    VkCommandPool graphicsCommandPool, VkQueue graphicsQueue, VkBuffer indexBuffer,
-    const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
-    const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-    uint32_t deviceLocalMemoryIndex
+    VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
+    const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers
 ) {
     this->logicalDevice = logicalDevice;
-    this->graphicsCommandPool = graphicsCommandPool;
-    this->graphicsQueue = graphicsQueue;
     this->physicalDevice = physicalDevice;
+
+    uint32_t computeQueueFamilyIndex = VulkanUtil::findQueueFamilies(
+        physicalDevice, VK_QUEUE_COMPUTE_BIT, 0
+    );
+    std::cout << "computequeue" << computeQueueFamilyIndex << std::endl;
+    vkGetDeviceQueue(logicalDevice, computeQueueFamilyIndex, 0, &computeQueue);
+
+    VkCommandPoolCreateInfo cmdPoolInfo = {};
+    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmdPoolInfo.queueFamilyIndex = computeQueueFamilyIndex;
+    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;    // Has to be set otherwise the command buffers can't be re-recorded
+    if (vkCreateCommandPool(logicalDevice, &cmdPoolInfo, nullptr, &commandPool)) {
+        throw std::runtime_error("failed to create visibility manager command pool!");
+    }
 
     generateHaltonPoints(RAYS_PER_ITERATION);
     createHaltonPointsBuffer();
     createViewCellBuffer();
     createBuffers(indices);
-    initRayTracing(
-        indexBuffer, vertexBuffer, indices, vertices, uniformBuffers, deviceLocalMemoryIndex
-    );
+    initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
 }
 
 void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal) {
@@ -97,7 +106,7 @@ void VisibilityManager::createHaltonPointsBuffer() {
     );
 
     // Copy halton points from the staging buffer to the halton points buffer
-    VulkanUtil::copyBuffer(logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer, haltonPointsBuffer, bufferSize);
+    VulkanUtil::copyBuffer(logicalDevice, commandPool, computeQueue, stagingBuffer, haltonPointsBuffer, bufferSize);
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
     vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
@@ -130,7 +139,7 @@ void VisibilityManager::createViewCellBuffer() {
 
     // Copy halton points from the staging buffer to the halton points buffer
     VulkanUtil::copyBuffer(
-        logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer, viewCellBuffer, bufferSize
+        logicalDevice, commandPool, computeQueue, stagingBuffer, viewCellBuffer, bufferSize
     );
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
@@ -292,8 +301,7 @@ void VisibilityManager::createDescriptorSets(
 
 void VisibilityManager::initRayTracing(
     VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<uint32_t> &indices,
-    const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-    uint32_t deviceLocalMemoryIndex
+    const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers
 ) {
     rayTracingProperties = {};
     rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
@@ -334,7 +342,7 @@ void VisibilityManager::initRayTracing(
     geometry.geometry.aabbs.sType = { VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV };
     geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
 
-    createBottomLevelAS(&geometry, deviceLocalMemoryIndex);
+    createBottomLevelAS(&geometry);
 
     VkBuffer instanceBuffer;
     VkDeviceMemory instanceBufferMemory;
@@ -383,7 +391,7 @@ void VisibilityManager::initRayTracing(
     memcpy(data, &geometryInstance, instanceBufferSize);
     vkUnmapMemory(logicalDevice, instanceBufferMemory);
 
-    createTopLevelAS(deviceLocalMemoryIndex);
+    createTopLevelAS();
 
     // Build acceleration structures
     buildAS(instanceBuffer, &geometry);
@@ -441,9 +449,7 @@ void VisibilityManager::initRayTracing(
     bindingStride = rayTracingProperties.shaderGroupHandleSize;
 }
 
-void VisibilityManager::createBottomLevelAS(
-    const VkGeometryNV *geometry, uint32_t deviceLocalMemoryIndex
-) {
+void VisibilityManager::createBottomLevelAS(const VkGeometryNV *geometry) {
     // The bottom level acceleration structure contains the scene's geometry
 
     VkAccelerationStructureInfoNV accelerationStructureInfo = {};
@@ -470,7 +476,7 @@ void VisibilityManager::createBottomLevelAS(
     VkMemoryAllocateInfo memoryAllocateInfo = {};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements2.memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = deviceLocalMemoryIndex;
+    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(physicalDevice, memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); //deviceLocalMemoryIndex;
     vkAllocateMemory(logicalDevice, &memoryAllocateInfo, nullptr, &bottomLevelAS.deviceMemory);
 
     VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo = {};
@@ -482,7 +488,7 @@ void VisibilityManager::createBottomLevelAS(
     vkGetAccelerationStructureHandleNV(logicalDevice, bottomLevelAS.as, sizeof(uint64_t), &bottomLevelAS.handle);
 }
 
-void VisibilityManager::createTopLevelAS(uint32_t deviceLocalMemoryIndex) {
+void VisibilityManager::createTopLevelAS() {
     VkAccelerationStructureInfoNV accelerationStructureInfo = {};
     accelerationStructureInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
     accelerationStructureInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
@@ -506,7 +512,7 @@ void VisibilityManager::createTopLevelAS(uint32_t deviceLocalMemoryIndex) {
     VkMemoryAllocateInfo memoryAllocateInfo = {};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements2.memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = deviceLocalMemoryIndex;
+    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(physicalDevice, memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); //deviceLocalMemoryIndex;
     vkAllocateMemory(logicalDevice, &memoryAllocateInfo, nullptr, &topLevelAS.deviceMemory);
 
     VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo = {};
@@ -547,7 +553,7 @@ void VisibilityManager::buildAS(const VkBuffer instanceBuffer, const VkGeometryN
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(logicalDevice, graphicsCommandPool);
+    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(logicalDevice, commandPool);
 
     // Build bottom level acceleration structure
     VkAccelerationStructureInfoNV buildInfo = {};
@@ -613,7 +619,7 @@ void VisibilityManager::buildAS(const VkBuffer instanceBuffer, const VkGeometryN
     );
 
     VulkanUtil::endSingleTimeCommands(
-        logicalDevice, commandBuffer, graphicsCommandPool, graphicsQueue
+        logicalDevice, commandBuffer, commandPool, computeQueue
     );
 
     vkDestroyBuffer(logicalDevice, tempBuffer, nullptr);
@@ -1035,7 +1041,7 @@ std::vector<Sample> VisibilityManager::randomSample(int numRays) {
     );
     vkEndCommandBuffer(commandBuffer);
     VulkanUtil::executeCommandBuffer(
-        logicalDevice, graphicsQueue, commandBuffer, commandBufferFence
+        logicalDevice, computeQueue, commandBuffer, commandBufferFence
     );
 
     // Copy intersected triangles from VRAM to CPU accessible memory
@@ -1054,7 +1060,7 @@ std::vector<Sample> VisibilityManager::randomSample(int numRays) {
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, randomSamplingOutputBuffer, hostBuffer,
+            logicalDevice, commandPool, computeQueue, randomSamplingOutputBuffer, hostBuffer,
             bufferSize
         );
 
@@ -1092,7 +1098,7 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer, absWorkingBuffer,
+            logicalDevice, commandPool, computeQueue, stagingBuffer, absWorkingBuffer,
             bufferSize
         );
 
@@ -1124,7 +1130,7 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     );
     vkEndCommandBuffer(commandBufferABS);
     VulkanUtil::executeCommandBuffer(
-        logicalDevice, graphicsQueue, commandBufferABS, commandBufferFence
+        logicalDevice, computeQueue, commandBufferABS, commandBufferFence
     );
 
     // Copy intersected triangles from VRAM to CPU accessible memory
@@ -1143,7 +1149,7 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, absOutputBuffer, hostBuffer,
+            logicalDevice, commandPool, computeQueue, absOutputBuffer, hostBuffer,
             bufferSize
         );
 
@@ -1183,7 +1189,7 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer,
+            logicalDevice, commandPool, computeQueue, stagingBuffer,
             edgeSubdivWorkingBuffer, bufferSize
         );
 
@@ -1219,7 +1225,7 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
     );
     vkEndCommandBuffer(commandBufferEdgeSubdiv);
     VulkanUtil::executeCommandBuffer(
-        logicalDevice, graphicsQueue, commandBufferEdgeSubdiv, commandBufferFence
+        logicalDevice, computeQueue, commandBufferEdgeSubdiv, commandBufferFence
     );
 
     // Copy intersected triangles from VRAM to CPU accessible memory
@@ -1239,7 +1245,7 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, edgeSubdivOutputBuffer, hostBuffer,
+            logicalDevice, commandPool, computeQueue, edgeSubdivOutputBuffer, hostBuffer,
             bufferSize
         );
 
@@ -1314,17 +1320,16 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
     // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_RAYS rays at a time as
     // long as there are a number of MIN_ABS_RAYS unprocessed triangles left
     while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
-        qDebug() << pvs.size();
+        //qDebug() << pvs.size();
 
         // Get a maximum of MAX_ABS_RAYS triangles for which ABS will be run at a time
         int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
-        std::vector<Sample> absWorkingVector(numAbsRays);
-        int num = 0;
-        for (auto it = absSampleQueue.begin(); num < numAbsRays;) {   // TODO: Replace for loop?
-            absWorkingVector[num] = *it;
-            it = absSampleQueue.erase(it);
-            num++;
+        std::vector<Sample> absWorkingVector;
+        absWorkingVector.reserve(numAbsRays);
+        for (int i = absSampleQueue.size() - numAbsRays; i < absSampleQueue.size(); i++) {
+            absWorkingVector.emplace_back(absSampleQueue[i]);
         }
+        absSampleQueue.erase(absSampleQueue.end() - numAbsRays, absSampleQueue.end());
 
         // Execute ABS
         std::vector<Sample> samples(adaptiveBorderSample(absWorkingVector));
@@ -1373,44 +1378,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
             }
         }
     }
-
-    // Collect the vertex indices of the triangles in the PVS
-    std::vector<uint32_t> pvsIndices;
-    pvsIndices.reserve(pvs.size() * 3);
-    for (auto triangleID : pvs) {
-        if (triangleID != -1) {
-            pvsIndices.emplace_back(indices[3 * triangleID]);
-            pvsIndices.emplace_back(indices[3 * triangleID + 1]);
-            pvsIndices.emplace_back(indices[3 * triangleID + 2]);
-        }
-    }
-
-    // Copy PVS data to GPU accessible pvs visualization buffer (has the same size as the index vector)
-    VkDeviceSize bufferSize = sizeof(pvsIndices[0]) * pvsIndices.size();
-
-    // Create staging buffer using host-visible memory
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    // Copy PVS data to the staging buffer
-    void *data;
-    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-    memcpy(data, pvsIndices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-    vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-    // Copy PVS data from the staging buffer to the GPU-visible PVS visualization buffer (used as an index buffer when drawing)
-    VulkanUtil::copyBuffer(
-        logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer, pvsVisualizationBuffer,
-        bufferSize
-    );
-
-    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
 }
 
 void VisibilityManager::releaseResources() {
@@ -1455,40 +1422,51 @@ void VisibilityManager::releaseResources() {
     vkFreeMemory(logicalDevice, bottomLevelAS.deviceMemory, nullptr);
 }
 
-QueueFamilyIndices VisibilityManager::findQueueFamilies() {
-    QueueFamilyIndices indices;
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
-
-    int i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
+VkBuffer VisibilityManager::getPVSIndexBuffer(
+    const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue
+) {
+    // Collect the vertex indices of the triangles in the PVS
+    std::vector<uint32_t> pvsIndices;
+    pvsIndices.reserve(pvs.size() * 3);
+    for (auto triangleID : pvs) {
+        if (triangleID != -1) {
+            pvsIndices.emplace_back(indices[3 * triangleID]);
+            pvsIndices.emplace_back(indices[3 * triangleID + 1]);
+            pvsIndices.emplace_back(indices[3 * triangleID + 2]);
         }
-
-        if (indices.isComplete()) {
-            break;
-        }
-
-        i++;
     }
 
-    return indices;
+    // Copy PVS data to GPU accessible pvs visualization buffer (has the same size as the index vector)
+    VkDeviceSize bufferSize = sizeof(pvsIndices[0]) * pvsIndices.size();
+
+    // Create staging buffer using host-visible memory
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    // Copy PVS data to the staging buffer
+    void *data;
+    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    memcpy(data, pvsIndices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+    vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    // Copy PVS data from the staging buffer to the GPU-visible PVS visualization buffer (used as an index buffer when drawing)
+    VulkanUtil::copyBuffer(
+        logicalDevice, commandPool, queue, stagingBuffer, pvsVisualizationBuffer,
+        bufferSize
+    );
+
+    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+
+    return pvsVisualizationBuffer;
 }
 
 void VisibilityManager::createCommandBuffers() {
-    VkCommandPoolCreateInfo cmdPoolInfo = {};
-    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cmdPoolInfo.queueFamilyIndex = findQueueFamilies().graphicsFamily.value();
-    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;    // Has to be set otherwise the command buffers can't be re-recorded
-    if (vkCreateCommandPool(logicalDevice, &cmdPoolInfo, nullptr, &commandPool)) {
-        throw std::runtime_error("failed to create rt command pool!");
-    }
-
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = commandPool;

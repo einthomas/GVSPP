@@ -14,13 +14,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(GLSLC_PATH E:/VulkanSDK/1.2.135.0/Bin/glslc)
 set(SHADERS_PATH C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/)
 
-find_package(Qt5Core REQUIRED)
-find_package(Qt5Gui REQUIRED)
+#find_package(Qt5Core REQUIRED)
+#find_package(Qt5Gui REQUIRED)
 
 include_directories(E:/VulkanSDK/1.2.135.0/Include)
 include_directories(C:/Users/thoma/Documents/dev/cpplib/glm)
 include_directories(C:/Users/thoma/Documents/dev/cpplib/stb)
 include_directories(C:/Users/thoma/Documents/dev/cpplib/tinyobjloader)
+include_directories(C:/Users/thoma/Documents/dev/cpplib/glfw-3.3.2.bin.WIN64/include)
+include_directories(C:/VulkanSDK/1.2.131.2/Include)
 
 file(GLOB SRC_FILES
     "*.h"
@@ -29,8 +31,9 @@ file(GLOB SRC_FILES
 )
 add_executable(Vulkan_RTX_Master_Qt_CMake ${SRC_FILES})
 
-target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Core)
-target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Gui)
+#target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Core)
+#target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Gui)
+target_link_libraries(Vulkan_RTX_Master_Qt_CMake C:/Users/thoma/Documents/dev/cpplib/glfw-3.3.2.bin.WIN64/lib-mingw-w64/libglfw3.a)
 target_link_libraries(Vulkan_RTX_Master_Qt_CMake E:/VulkanSDK/1.2.135.0/Lib/vulkan-1.lib)
 
 if (UNIX)

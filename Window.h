@@ -1,6 +1,8 @@
+/*
 #ifndef WINDOW_H
 #define WINDOW_H
 
+//#include "qvulkanwindow.h"
 #include <QVulkanWindow>
 
 class VulkanRenderer;
@@ -18,3 +20,4 @@ private:
 };
 
 #endif // WINDOW_H
+*/

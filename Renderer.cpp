@@ -4,8 +4,8 @@
 #define GLM_FORCE_RADIANS
 #define STB_IMAGE_IMPLEMENTATION
 
-#include <QFile>
-#include <QKeyEvent>
+//#include <QFile>
+//#include <QKeyEvent>
 #include <chrono>
 
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -27,6 +27,7 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 projection;
 };
 
+/*
 VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
     : window(w), visibilityManager(RAYS_PER_ITERATION)
 {
@@ -40,15 +41,22 @@ VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
         }
     }
 }
+*/
+
+VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
+    : window(w), visibilityManager(RAYS_PER_ITERATION)
+{
+    initResources();
+}
 
 void VulkanRenderer::initResources() {
     loadModel();
 
     createDescriptorSetLayout();
     createGraphicsPipeline();
-    createTextureImage();
-    createTextureImageView();
-    createTextureSampler();
+    //createTextureImage();
+    //createTextureImageView();
+    //createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -56,6 +64,9 @@ void VulkanRenderer::initResources() {
     createDescriptorSets();
 
     initVisibilityManager();
+
+    // Start visibility ray tracing
+    //visibilityThread = std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices);
 }
 
 void VulkanRenderer::initSwapChainResources() {
@@ -65,7 +76,7 @@ void VulkanRenderer::releaseSwapChainResources() {
 }
 
 void VulkanRenderer::releaseResources() {
-    VkDevice device = window->device();
+    VkDevice device = window->device;
 
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
@@ -81,19 +92,21 @@ void VulkanRenderer::releaseResources() {
     vkDestroyImage(device, textureImage, nullptr);
     vkFreeMemory(device, textureImageMemory, nullptr);
 
-    for (int i = 0; i < window->swapChainImageCount(); i++) {
+    for (int i = 0; i < window->imageCount; i++) {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
         vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
+    visibilityThread.join();
+
     visibilityManager.releaseResources();
 }
 
 void VulkanRenderer::createGraphicsPipeline() {
-    vertShaderModule = VulkanUtil::createShader(window->device(), "shaders/shader.vert.spv");
-    fragShaderModule = VulkanUtil::createShader(window->device(), "shaders/shader.frag.spv");
+    vertShaderModule = VulkanUtil::createShader(window->device, "shaders/shader.vert.spv");
+    fragShaderModule = VulkanUtil::createShader(window->device, "shaders/shader.frag.spv");
 
     // Assign vertex shader module to the vertex shader stage
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
@@ -153,7 +166,8 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Enable multisampling
     VkPipelineMultisampleStateCreateInfo multisamplingInfo = {};
     multisamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisamplingInfo.rasterizationSamples = window->sampleCountFlagBits();
+    //multisamplingInfo.rasterizationSamples = window->sampleCountFlagBits();
+    multisamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     // Describe color blending
     VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};
@@ -169,8 +183,8 @@ void VulkanRenderer::createGraphicsPipeline() {
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-    if (vkCreatePipelineLayout(window->device(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        qWarning("failed to create pipeline layout");
+    if (vkCreatePipelineLayout(window->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create pipeline layout");
     }
 
     VkDynamicState dynEnable[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -203,17 +217,17 @@ void VulkanRenderer::createGraphicsPipeline() {
     graphicsPipelineInfo.pDynamicState = &dyndynamicStateInfo;
     graphicsPipelineInfo.pDepthStencilState = &depthStencilStateInfo;
     graphicsPipelineInfo.layout = pipelineLayout;
-    graphicsPipelineInfo.renderPass = window->defaultRenderPass();
+    graphicsPipelineInfo.renderPass = window->renderPass;
 
     if (vkCreateGraphicsPipelines(
-            window->device(), VK_NULL_HANDLE, 1, &graphicsPipelineInfo, nullptr, &pipeline
+            window->device, VK_NULL_HANDLE, 1, &graphicsPipelineInfo, nullptr, &pipeline
         ) != VK_SUCCESS
     ) {
-        qWarning("failed to create graphics pipeline");
+        throw std::runtime_error("failed to create graphics pipeline");
     }
 
-    vkDestroyShaderModule(window->device(), vertShaderModule, nullptr);
-    vkDestroyShaderModule(window->device(), fragShaderModule, nullptr);
+    vkDestroyShaderModule(window->device, vertShaderModule, nullptr);
+    vkDestroyShaderModule(window->device, fragShaderModule, nullptr);
 }
 
 void VulkanRenderer::createVertexBuffer() {
@@ -223,29 +237,29 @@ void VulkanRenderer::createVertexBuffer() {
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     VulkanUtil::createBuffer(
-        window->physicalDevice(),
-        window->device(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+        window->physicalDevice,
+        window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
     // Copy vertex data to the staging buffer
     void *data;
-    vkMapMemory(window->device(), stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    vkMapMemory(window->device, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
     memcpy(data, vertices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-    vkUnmapMemory(window->device(), stagingBufferMemory);
+    vkUnmapMemory(window->device, stagingBufferMemory);
 
     // Create vertex buffer using GPU memory
     VulkanUtil::createBuffer(
-        window->physicalDevice(),
-        window->device(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        window->physicalDevice,
+        window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     // Copy vertex data from the staging buffer to the vertex buffer
-    VulkanUtil::copyBuffer(window->device(), window->graphicsCommandPool(), window->graphicsQueue(),stagingBuffer, vertexBuffer, bufferSize);
+    VulkanUtil::copyBuffer(window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer, vertexBuffer, bufferSize);
 
-    vkDestroyBuffer(window->device(), stagingBuffer, nullptr);
-    vkFreeMemory(window->device(), stagingBufferMemory, nullptr);
+    vkDestroyBuffer(window->device, stagingBuffer, nullptr);
+    vkFreeMemory(window->device, stagingBufferMemory, nullptr);
 }
 
 void VulkanRenderer::createIndexBuffer() {
@@ -255,30 +269,30 @@ void VulkanRenderer::createIndexBuffer() {
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     VulkanUtil::createBuffer(
-        window->physicalDevice(),
-        window->device(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+        window->physicalDevice,
+        window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
     // Copy index data to the staging buffer
     void *data;
-    vkMapMemory(window->device(), stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    vkMapMemory(window->device, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
     memcpy(data, indices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-    vkUnmapMemory(window->device(), stagingBufferMemory);
+    vkUnmapMemory(window->device, stagingBufferMemory);
 
     // Create index buffer using GPU memory
     VulkanUtil::createBuffer(
-        window->physicalDevice(),
-        window->device(), bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        window->physicalDevice,
+        window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         indexBuffer, indexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     // Copy index data from the staging buffer to the index buffer
     VulkanUtil::copyBuffer(
-        window->device(), window->graphicsCommandPool(), window->graphicsQueue(),stagingBuffer, indexBuffer, bufferSize);
+        window->device, window->graphicsCommandPool, window->graphicsQueue,stagingBuffer, indexBuffer, bufferSize);
 
-    vkDestroyBuffer(window->device(), stagingBuffer, nullptr);
-    vkFreeMemory(window->device(), stagingBufferMemory, nullptr);
+    vkDestroyBuffer(window->device, stagingBuffer, nullptr);
+    vkFreeMemory(window->device, stagingBufferMemory, nullptr);
 }
 
 void VulkanRenderer::loadModel() {
@@ -288,7 +302,7 @@ void VulkanRenderer::loadModel() {
     std::string warn, err;
 
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
-        qWarning("%s", (warn + err).c_str());
+        throw std::runtime_error((warn + err).c_str());
     }
 
     uint32_t i = 0;
@@ -336,42 +350,44 @@ void VulkanRenderer::createTextureImage() {
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
-        qWarning("failed to load texture image");
+        throw std::runtime_error("failed to load texture image");
     }
 
     // Create staging buffer using host-visible memory
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     VulkanUtil::createBuffer(
-        window->physicalDevice(),
-        window->device(), imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+        window->physicalDevice,
+        window->device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
     // Copy image data to the staging buffer
     void *data;
-    vkMapMemory(window->device(), stagingBufferMemory, 0, imageSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    vkMapMemory(window->device, stagingBufferMemory, 0, imageSize, 0, &data);    // Map buffer memory into CPU accessible memory
     memcpy(data, pixels, static_cast<size_t>(imageSize));   // Copy vertex data to mapped memory
-    vkUnmapMemory(window->device(), stagingBufferMemory);
+    vkUnmapMemory(window->device, stagingBufferMemory);
 
     stbi_image_free(pixels);
 
     // Create image object
+    /*      // TODO
     createImage(
         static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), VK_FORMAT_R8G8B8A8_SRGB,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         window->deviceLocalMemoryIndex(), textureImage, textureImageMemory
     );
+    */
 
     // Change image layout to a layout optimal as destination in a transfer operation
-    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device(), window->graphicsCommandPool());
+    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
     transitionImageLayout(
         commandBuffer, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT
     );
     VulkanUtil::endSingleTimeCommands(
-        window->device(), commandBuffer, window->graphicsCommandPool(), window->graphicsQueue()
+        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
     );
 
     // Copy the staging buffer to the texture image
@@ -381,14 +397,14 @@ void VulkanRenderer::createTextureImage() {
     );
 
     // Change image layout to a layout optimal for sampling from a shader
-    commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device(), window->graphicsCommandPool());
+    commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
     transitionImageLayout(
         commandBuffer, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
     );
     VulkanUtil::endSingleTimeCommands(
-        window->device(), commandBuffer, window->graphicsCommandPool(), window->graphicsQueue()
+        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
     );
 }
 
@@ -410,24 +426,24 @@ void VulkanRenderer::createImage(
     imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    if (vkCreateImage(window->device(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
-        qWarning("failed to create image!");
+    if (vkCreateImage(window->device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create image!");
     }
 
     // Allocate memory
     VkMemoryRequirements memoryReq;
-    vkGetImageMemoryRequirements(window->device(), image, &memoryReq);
+    vkGetImageMemoryRequirements(window->device, image, &memoryReq);
 
     VkMemoryAllocateInfo memoryAllocInfo = {};
     memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocInfo.allocationSize = memoryReq.size;
     memoryAllocInfo.memoryTypeIndex = memoryTypeIndex;
-    if (vkAllocateMemory(window->device(), &memoryAllocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        qWarning("failed to allocate image memory");
+    if (vkAllocateMemory(window->device, &memoryAllocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory");
     }
 
     // Assign memory
-    vkBindImageMemory(window->device(), image, imageMemory, 0);
+    vkBindImageMemory(window->device, image, imageMemory, 0);
 }
 
 void VulkanRenderer::createTextureImageView() {
@@ -441,8 +457,8 @@ void VulkanRenderer::createTextureImageView() {
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(window->device(), &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
-        qWarning("failed to create texture image view");
+    if (vkCreateImageView(window->device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view");
     }
 }
 
@@ -472,8 +488,8 @@ void VulkanRenderer::createTextureSampler() {
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
 
-    if (vkCreateSampler(window->device(), &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-        qWarning("failed to create texture sampler");
+    if (vkCreateSampler(window->device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture sampler");
     }
 }
 
@@ -540,7 +556,7 @@ void VulkanRenderer::transitionImageLayout(
 void VulkanRenderer::copyBufferToImage(
     VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
 ) {
-    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device(), window->graphicsCommandPool());
+    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
 
     // Specify which part of the buffer is going to be copied to which part of the image
     VkBufferImageCopy region = {};
@@ -564,7 +580,7 @@ void VulkanRenderer::copyBufferToImage(
     );
 
     VulkanUtil::endSingleTimeCommands(
-        window->device(), commandBuffer, window->graphicsCommandPool(), window->graphicsQueue()
+        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
     );
 }
 
@@ -607,31 +623,31 @@ void VulkanRenderer::createDescriptorSetLayout() {
     layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(
-            window->device(), &layoutInfo, nullptr, &descriptorSetLayout
+            window->device, &layoutInfo, nullptr, &descriptorSetLayout
         ) != VK_SUCCESS
     ) {
-        qWarning("failed to create descriptor set layout");
+        throw std::runtime_error("failed to create descriptor set layout");
     }
 }
 
 void VulkanRenderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 2> poolSizes = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(window->swapChainImageCount());
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(window->imageCount);
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(window->swapChainImageCount());
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(window->imageCount);
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(window->swapChainImageCount());
+    poolInfo.maxSets = static_cast<uint32_t>(window->imageCount);
 
     if (vkCreateDescriptorPool(
-            window->device(), &poolInfo, nullptr, &descriptorPool
+            window->device, &poolInfo, nullptr, &descriptorPool
         ) != VK_SUCCESS
     ) {
-        qWarning("failed to create descriptor pool");
+        throw std::runtime_error("failed to create descriptor pool");
     }
 }
 
@@ -639,36 +655,38 @@ void VulkanRenderer::createDescriptorSets() {
     // A descriptor set specifies the actual buffer or image resource (just like a framebuffer
     // specifies the actual image view). Descriptor sets are allocated from a descriptor pool
 
-    std::vector<VkDescriptorSetLayout> layouts(window->swapChainImageCount(), descriptorSetLayout);
+    std::vector<VkDescriptorSetLayout> layouts(window->imageCount, descriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(window->swapChainImageCount());
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(window->imageCount);
     allocInfo.pSetLayouts = layouts.data();
 
     // Allocate descriptor sets (one descriptor set for each swap chain image)
-    descriptorSets.resize(window->swapChainImageCount());
+    descriptorSets.resize(window->imageCount);
     if (vkAllocateDescriptorSets(
-            window->device(), &allocInfo, descriptorSets.data()
+            window->device, &allocInfo, descriptorSets.data()
         ) != VK_SUCCESS
     ) {
-        qWarning("failed to allocate descriptor sets");
+        throw std::runtime_error("failed to allocate descriptor sets");
     }
 
     // Populate every descriptor
-    for (int i = 0; i < window->swapChainImageCount(); i++) {
+    for (int i = 0; i < window->imageCount; i++) {
         VkDescriptorBufferInfo bufferInfo = {};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
+        /*
         VkDescriptorImageInfo imageInfo = {};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = textureImageView;
         imageInfo.sampler = textureSampler;
+        */
 
         // Define write descriptor sets to copy data to the descriptors (i.e. the device memory)
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+        std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
@@ -678,6 +696,7 @@ void VulkanRenderer::createDescriptorSets() {
         descriptorWrites[0].descriptorCount = 1;
         descriptorWrites[0].pBufferInfo = &bufferInfo;
 
+        /*
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets[i];
         descriptorWrites[1].dstBinding = 1;     // layout location in the shader
@@ -685,9 +704,10 @@ void VulkanRenderer::createDescriptorSets() {
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pImageInfo = &imageInfo;
+        */
 
         vkUpdateDescriptorSets(
-            window->device(),
+            window->device,
             static_cast<uint32_t>(descriptorWrites.size()),
             descriptorWrites.data(),
             0,
@@ -699,14 +719,14 @@ void VulkanRenderer::createDescriptorSets() {
 void VulkanRenderer::createUniformBuffers() {
     // Create one uniform buffer per swap chain image because multiple images might be rendered in
     // parallel
-    uniformBuffers.resize(window->swapChainImageCount());
-    uniformBuffersMemory.resize(window->swapChainImageCount());
+    uniformBuffers.resize(window->imageCount);
+    uniformBuffersMemory.resize(window->imageCount);
 
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-    for (int i = 0; i < window->swapChainImageCount(); i++) {
+    for (int i = 0; i < window->imageCount; i++) {
         VulkanUtil::createBuffer(
-        window->physicalDevice(),
-            window->device(),
+        window->physicalDevice,
+            window->device,
             bufferSize,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             uniformBuffers[i],
@@ -743,7 +763,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 
     ubo.projection = glm::perspective(
         glm::radians(45.0f),
-        window->swapChainImageSize().width() / (float) window->swapChainImageSize().height(),
+        window->swapChainImageSize.width / (float) window->swapChainImageSize.height,
         0.1f,
         100000.0f
     );
@@ -752,34 +772,33 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     // Copy data in the uniform buffer object to the uniform buffer
     void *data;
     vkMapMemory(
-        window->device(), uniformBuffersMemory[swapChainImageIndex], 0, sizeof(ubo), 0, &data
+        window->device, uniformBuffersMemory[swapChainImageIndex], 0, sizeof(ubo), 0, &data
     );
     memcpy(data, &ubo, sizeof(ubo));
-    vkUnmapMemory(window->device(), uniformBuffersMemory[swapChainImageIndex]);
+    vkUnmapMemory(window->device, uniformBuffersMemory[swapChainImageIndex]);
 }
 
-void VulkanRenderer::startNextFrame() {
-    // Ray tracing
+void VulkanRenderer::startNextFrame(
+    uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
+) {
     updateUniformBuffer(0);
-    visibilityManager.rayTrace(indices);
 
     // Rasterization
     VkRenderPassBeginInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = window->defaultRenderPass();
-    renderPassInfo.framebuffer = window->currentFramebuffer();
-    renderPassInfo.renderArea.extent.width = window->swapChainImageSize().width();
-    renderPassInfo.renderArea.extent.height = window->swapChainImageSize().height();
+    renderPassInfo.renderPass = window->renderPass;
+    renderPassInfo.framebuffer = framebuffer;
+    renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
+    renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
     VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
     VkClearDepthStencilValue clearDS = { 1, 0 };
     VkClearValue clearValues[3] = {};
     clearValues[0].color = clearValues[2].color = clearColor;
     clearValues[1].depthStencil = clearDS;
-    renderPassInfo.clearValueCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+    renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
     renderPassInfo.pClearValues = clearValues;
 
-    VkCommandBuffer commandBuffer = window->currentCommandBuffer();
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
@@ -787,8 +806,8 @@ void VulkanRenderer::startNextFrame() {
     VkViewport viewport = {};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float) window->swapChainImageSize().width();
-    viewport.height = (float) window->swapChainImageSize().height();
+    viewport.width = (float) window->swapChainImageSize.width;
+    viewport.height = (float) window->swapChainImageSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -805,34 +824,35 @@ void VulkanRenderer::startNextFrame() {
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
     if (visualizePVS) {
-        vkCmdBindIndexBuffer(commandBuffer, visibilityManager.pvsVisualizationBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, visibilityManager.getPVSIndexBuffer(indices, window->graphicsCommandPool, window->graphicsQueue), 0, VK_INDEX_TYPE_UINT32);
     } else {
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
     vkCmdBindDescriptorSets(
         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-        &descriptorSets[window->currentSwapChainImageIndex()], 0, nullptr
+        &descriptorSets[swapChainImageIndex], 0, nullptr
     );
 
-    updateUniformBuffer(window->currentSwapChainImageIndex());
+    updateUniformBuffer(swapChainImageIndex);
 
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
-    window->frameReady();
-    window->requestUpdate(); // render continuously, throttled by the presentation rate
+    //window->frameReady();
+    //window->requestUpdate(); // render continuously, throttled by the presentation rate
 }
 
-void VulkanRenderer::togglePVSVisualzation() {
+void VulkanRenderer::togglePVSVisualization() {
     visualizePVS = !visualizePVS;
-    qDebug() << "Visualize PVS: " << visualizePVS;
+    std::cout << "Visualize PVS: " << visualizePVS << std::endl;
 }
 
 void VulkanRenderer::saveWindowContentToImage() {
-    window->grab().save("screenshot.png");
-    qDebug() << "Window content saved to screenshot.png";
+    std::cout << "TODO" << std::endl;
+    //window->grab().save("screenshot.png");
+    //qDebug() << "Window content saved to screenshot.png";
 }
 
 void VulkanRenderer::initVisibilityManager() {
@@ -850,8 +870,11 @@ void VulkanRenderer::initVisibilityManager() {
         //glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))
     );
     visibilityManager.init(
-        window->physicalDevice(),
-        window->device(), window->graphicsCommandPool(), window->graphicsQueue(), indexBuffer,
-        indices, vertexBuffer, vertices, uniformBuffers, window->deviceLocalMemoryIndex()
+        window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
+        uniformBuffers
     );
+}
+
+void VulkanRenderer::startVisibilityThread() {
+    visibilityThread = std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices);
 }

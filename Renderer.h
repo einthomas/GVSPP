@@ -1,29 +1,35 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include <QVulkanWindow>
+//#include "qvulkanwindow.h"
+//#include <QVulkanWindow>
 #include <unordered_map>
 #include <set>
 #include <queue>
+#include "GLFWVulkanWindow.h"
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "visibilitymanager.h"
 #include "pvs.h"
 
-class VulkanRenderer : public QVulkanWindowRenderer {
+class VulkanRenderer { // : public QVulkanWindowRenderer {
 public:
-    VulkanRenderer(QVulkanWindow *w);
+    VulkanRenderer(GLFWVulkanWindow *w);
 
-    void initResources() override;
-    void initSwapChainResources() override;
-    void releaseSwapChainResources() override;
-    void releaseResources() override;
-    void startNextFrame() override;
-    void togglePVSVisualzation();
+    void initResources();
+    void initSwapChainResources();
+    void releaseSwapChainResources();
+    void releaseResources();
+    void startNextFrame(
+        uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
+    );
+    void togglePVSVisualization();
     void saveWindowContentToImage();
+    void startVisibilityThread();
 
 private:
-    QVulkanWindow *window;
+    //QVulkanWindow *window;
+    GLFWVulkanWindow *window;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -78,6 +84,7 @@ private:
     // Visibility
     const int RAYS_PER_ITERATION = 1600;
     bool visualizePVS = false;
+    std::thread visibilityThread;
 
     VisibilityManager visibilityManager;
     VkDescriptorSet rtDescriptorSetsABS;

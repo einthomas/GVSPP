@@ -6,7 +6,7 @@ layout(binding = 6, set = 0) readonly buffer pvsBuffer {
 };
 
 layout(location = 0) in vec3 fragColor;
-layout(location = 1) in vec2 fragTexCoord;
+//layout(location = 1) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 color;
 

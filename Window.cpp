@@ -1,3 +1,4 @@
+/*
 #include <QKeyEvent>
 
 #include "Window.h"
@@ -21,3 +22,4 @@ void Window::keyReleaseEvent(QKeyEvent *event) {
             break;
     }
 }
+*/

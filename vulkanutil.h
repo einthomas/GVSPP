@@ -4,8 +4,10 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <QString>
-#include <QFile>
+#include <string>
+#include <vector>
+//#include <QString>
+//#include <QFile>
 
 class VulkanUtil {
 public:
@@ -28,10 +30,12 @@ public:
     static uint32_t findMemoryType(
         VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties
     );
-    static VkShaderModule createShader(VkDevice logicalDevice, const QString &name);
+    static uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags queueFlags, int k = -1);
+    static VkShaderModule createShader(VkDevice logicalDevice, const std::string &filename);
     static void executeCommandBuffer(
         VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence
     );
+    static std::vector<char> readBinaryFile(const std::string &filename);
 };
 
 #endif // VULKANUTIL_H

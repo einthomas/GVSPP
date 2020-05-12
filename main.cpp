@@ -1,37 +1,15 @@
-#include <QGuiApplication>
-#include <QtGlobal>
-#include <QVulkanInstance>
+//#include <QGuiApplication>
+//#include <QtGlobal>
+//#include <QVulkanInstance>
 #include <iostream>
-#include <QLoggingCategory>
+//#include <QLoggingCategory>
 
-#include "Window.h"
+//#include "Window.h"
+#include "GLFWVulkanWindow.h"
 #include "Renderer.h"
 
 int main(int argc, char *argv[]) {
-    int numSubdiv = 3;
-
-    float x[int(std::pow(2, numSubdiv) + 1)];
-    x[0] = -1.0;
-    x[1] = -2.0;
-    x[2] = (x[0] + x[1]) * 0.5;
-    int end = 3;
-    int numInserted = 1;
-    int newNumInserted = 0;
-    int i = 0;
-
-
-    for (int j = 0; j < numSubdiv - 1; j++) {
-        for (int i = 0; i < numInserted; i++) {
-            for (int k = 0; k < 2; k++) {
-                x[end] = (x[k] + x[1 + numInserted + i]) * 0.5;
-                qDebug() << x[end];
-                end++;
-            }
-        }
-        numInserted *= 2;
-    }
-
-
+    /*
     QGuiApplication app(argc, argv);
 
     QVulkanInstance vulkanInstance;
@@ -62,4 +40,19 @@ int main(int argc, char *argv[]) {
     //f.samplerAnisotropy = VK_TRUE;
 
     return app.exec();
+    */
+
+    GLFWVulkanWindow app;
+
+    try {
+        app.initWindow();
+        app.initVulkan();
+        app.initRenderer();
+        app.mainLoop();
+    } catch (const std::exception & e) {
+        std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
