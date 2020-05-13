@@ -77,6 +77,12 @@ private:
     void createCommandPool();
     void createSyncObjects();
     void createCommandBuffers();
+    void createDepthResources();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat findDepthFormat();
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
 
 
     GLFWwindow* window;

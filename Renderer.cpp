@@ -199,9 +199,11 @@ void VulkanRenderer::createGraphicsPipeline() {
     depthStencilStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilStateInfo.depthTestEnable = VK_TRUE;
     depthStencilStateInfo.depthWriteEnable = VK_TRUE;
-    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencilStateInfo.stencilTestEnable = VK_FALSE;
     depthStencilStateInfo.depthBoundsTestEnable = VK_FALSE;
+    //depthStencil.minDepthBounds = 0.0f; // Optional
+    //depthStencil.maxDepthBounds = 1.0f; // Optional
 
     // Create graphics pipeline
     VkGraphicsPipelineCreateInfo graphicsPipelineInfo = {};
@@ -406,44 +408,6 @@ void VulkanRenderer::createTextureImage() {
     VulkanUtil::endSingleTimeCommands(
         window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
     );
-}
-
-void VulkanRenderer::createImage(
-    uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-    uint32_t memoryTypeIndex, VkImage &image, VkDeviceMemory &imageMemory
-) {
-    VkImageCreateInfo imageInfo = {};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling; // If you want to be able to directly access texels in the memory of the image, then you must use VK_IMAGE_TILING_LINEAR
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = usage;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    if (vkCreateImage(window->device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create image!");
-    }
-
-    // Allocate memory
-    VkMemoryRequirements memoryReq;
-    vkGetImageMemoryRequirements(window->device, image, &memoryReq);
-
-    VkMemoryAllocateInfo memoryAllocInfo = {};
-    memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocInfo.allocationSize = memoryReq.size;
-    memoryAllocInfo.memoryTypeIndex = memoryTypeIndex;
-    if (vkAllocateMemory(window->device, &memoryAllocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate image memory");
-    }
-
-    // Assign memory
-    vkBindImageMemory(window->device, image, imageMemory, 0);
 }
 
 void VulkanRenderer::createTextureImageView() {
@@ -791,6 +755,7 @@ void VulkanRenderer::startNextFrame(
     renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
     renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
+    /*
     VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
     VkClearDepthStencilValue clearDS = { 1, 0 };
     VkClearValue clearValues[3] = {};
@@ -798,6 +763,13 @@ void VulkanRenderer::startNextFrame(
     clearValues[1].depthStencil = clearDS;
     renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
     renderPassInfo.pClearValues = clearValues;
+    */
+
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+    clearValues[1].depthStencil = { 1.0f, 0 };
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);

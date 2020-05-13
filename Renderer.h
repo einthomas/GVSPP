@@ -61,10 +61,6 @@ private:
 
     void loadModel();
     void createTextureImage();
-    void createImage(
-        uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-        uint32_t memoryTypeIndex, VkImage& image, VkDeviceMemory& imageMemory
-    );
     void createTextureImageView();
     void createTextureSampler();
     void transitionImageLayout(
