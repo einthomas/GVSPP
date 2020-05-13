@@ -155,7 +155,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
     //rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizerInfo.lineWidth = 1.0f;
+    rasterizerInfo.lineWidth = 0.5f;
     //rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;

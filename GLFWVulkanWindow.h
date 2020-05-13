@@ -69,26 +69,6 @@ public:
 
 private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
-    size_t currentFrame = 0;
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
-    std::vector<VkFence> imagesInFlight;
-    std::vector<VkCommandBuffer> commandBuffers;
-    void createCommandPool();
-    void createSyncObjects();
-    void createCommandBuffers();
-    void createDepthResources();
-    void createColorResources();
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-    VkFormat findDepthFormat();
-    VkImage depthImage;
-    VkDeviceMemory depthImageMemory;
-    VkImageView depthImageView;
-    VkImage colorImage;     // MSAA render target
-    VkDeviceMemory colorImageMemory;
-    VkImageView colorImageView;
-
 
     GLFWwindow* window;
     VkInstance instance;
@@ -100,12 +80,25 @@ private:
     VkPipelineLayout pipelineLayout;
     VulkanRenderer *renderer;
 
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
+    VkImage colorImage;     // MSAA render target
+    VkDeviceMemory colorImageMemory;
+    VkImageView colorImageView;
+
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
     std::vector<VkFramebuffer> swapChainFramebuffers;
+    size_t currentFrame = 0;
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
+    std::vector<VkFence> imagesInFlight;
+    std::vector<VkCommandBuffer> commandBuffers;
 
     void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     void createSurface();
@@ -122,11 +115,17 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     void createImageViews();
-    void createGraphicsPipeline();
     VkShaderModule createShaderModule(const std::vector<char> &shaderCode);
     std::vector<char> readBinaryFile(const std::string &filename);
     void createRenderPass();
     void createFramebuffers();
+    void createCommandPool();
+    void createSyncObjects();
+    void createCommandBuffers();
+    void createDepthResources();
+    void createColorResources();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat findDepthFormat();
     void cleanup();
 };
 
