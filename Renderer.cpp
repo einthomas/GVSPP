@@ -167,7 +167,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     VkPipelineMultisampleStateCreateInfo multisamplingInfo = {};
     multisamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     //multisamplingInfo.rasterizationSamples = window->sampleCountFlagBits();
-    multisamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisamplingInfo.rasterizationSamples = window->msaaSamples;
 
     // Describe color blending
     VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};

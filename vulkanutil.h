@@ -37,12 +37,14 @@ public:
     );
     static void createImage(
         VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
-        VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-        VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory
+        VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+        VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image,
+        VkDeviceMemory &imageMemory
     );
     static VkImageView createImageView(
         VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags
     );
+    static VkSampleCountFlagBits getMaxUsableMSAASampleCount(VkPhysicalDevice physicalDevice);
 
 private:
     static std::vector<char> readBinaryFile(const std::string &filename);

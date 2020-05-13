@@ -60,6 +60,7 @@ public:
     VkQueue graphicsQueue;
     VkExtent2D swapChainImageSize;
     VkCommandPool graphicsCommandPool;
+    VkSampleCountFlagBits msaaSamples;
 
     void initWindow();
     void initVulkan();
@@ -78,11 +79,15 @@ private:
     void createSyncObjects();
     void createCommandBuffers();
     void createDepthResources();
+    void createColorResources();
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
     VkFormat findDepthFormat();
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
+    VkImage colorImage;     // MSAA render target
+    VkDeviceMemory colorImageMemory;
+    VkImageView colorImageView;
 
 
     GLFWwindow* window;
