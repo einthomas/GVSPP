@@ -30,14 +30,14 @@ struct GeometryInstance {
 
 class VisibilityManager {
 public:
-    VisibilityManager(int RAYS_PER_ITERATION);
+    VisibilityManager();
     void init(
         VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
         VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
         const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers
     );
     void addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal);
-    void generateHaltonPoints(int n, int p2 = 7);
+    void generateHaltonPoints(int n, int offset = 0, int p2 = 7);
     void rayTrace(const std::vector<uint32_t> &indices);
     void releaseResources();
     VkBuffer getPVSIndexBuffer(
@@ -45,12 +45,15 @@ public:
     );
 
 private:
-    const size_t RAYS_PER_ITERATION;
-    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const size_t MAX_ABS_TRIANGLES_PER_ITERATION;
-    const size_t MAX_EDGE_SUBDIV_RAYS = 900;
+    const bool USE_TERMINATION_CRITERION = true;
+    const size_t RAY_COUNT_TERMINATION_THRESHOLD = 1000000;
+    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
+
+    const int RAYS_PER_ITERATION = 16000;
+    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 50;
+    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 90000;
+    const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
-    //const size_t MIN_ABS_RAYS = size_t(floor(MAX_ABS_RAYS * 0.2));
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
@@ -148,7 +151,7 @@ private:
     );
     VkDeviceSize copyShaderIdentifier(uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex);
     void createCommandBuffers();
-    void createHaltonPointsBuffer();
+    void copyHaltonPointsToBuffer();
     void createViewCellBuffer();
     void createBuffers(const std::vector<uint32_t> &indices);
     void createDescriptorSets();

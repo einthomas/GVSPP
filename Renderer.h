@@ -24,7 +24,6 @@ public:
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
     );
     void togglePVSVisualization();
-    void saveWindowContentToImage();
     void startVisibilityThread();
 
 private:
@@ -78,7 +77,6 @@ private:
     void updateUniformBuffer(uint32_t swapChainImageIndex);
 
     // Visibility
-    const int RAYS_PER_ITERATION = 1600;
     bool visualizePVS = false;
     std::thread visibilityThread;
 

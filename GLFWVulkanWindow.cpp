@@ -55,7 +55,6 @@ void GLFWVulkanWindow::createInstance() {
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
     if (enableValidationLayers) {
-        std::cout << "yes" << std::endl;
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
     } else {
@@ -74,10 +73,12 @@ void GLFWVulkanWindow::createInstance() {
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
     // Print supported extensions
+    /*
     std::cout << "available extensions:" << std::endl;
     for (const auto& extension : extensions) {
         std::cout << "\t" << extension.extensionName << std::endl;
     }
+    */
 
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
         throw std::runtime_error("failed to create Vulkan instance");
@@ -183,7 +184,6 @@ QueueFamilyIndices GLFWVulkanWindow::findQueueFamilies(VkPhysicalDevice device) 
     for (const auto& queueFamily : queueFamilies) {
         if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT && !indices.graphicsFamily.has_value()) {
             indices.graphicsFamily = i;
-           std::cout << "gf" << i << std::endl;
         }
 
         VkBool32 presentSupport = false;
@@ -238,7 +238,6 @@ void GLFWVulkanWindow::createLogicalDevice() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
     if (enableValidationLayers) {
-        std::cout << "yes2" << std::endl;
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
     } else {

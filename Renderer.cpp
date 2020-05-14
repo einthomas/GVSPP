@@ -44,7 +44,7 @@ VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
 */
 
 VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
-    : window(w), visibilityManager(RAYS_PER_ITERATION)
+    : window(w), visibilityManager()
 {
     initResources();
 }
@@ -820,13 +820,6 @@ void VulkanRenderer::togglePVSVisualization() {
     visualizePVS = !visualizePVS;
     std::cout << "Visualize PVS: " << visualizePVS << std::endl;
 }
-
-void VulkanRenderer::saveWindowContentToImage() {
-    std::cout << "TODO" << std::endl;
-    //window->grab().save("screenshot.png");
-    //qDebug() << "Window content saved to screenshot.png";
-}
-
 void VulkanRenderer::initVisibilityManager() {
     glm::vec3 pos = glm::vec3(10.5f,6.3f,-5.2f);
     glm::vec3 center = glm::vec3(7.0f,6.0f,-2.0f);
