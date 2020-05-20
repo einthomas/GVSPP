@@ -26,20 +26,31 @@ layout(binding = 1, set = 2) readonly buffer edgeSubdivWorkingBuffer {
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
-const float THRESHOLD = 0.01;
+const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
 const int MAX_SUBDIVISION_STEPS = 3;
 
 void main() {
     uint launchIndex = gl_LaunchIDNV.x;
     uint currentTriangleIndex = uint(floor(launchIndex / 9.0));
+    const int numSamplesPerEdge = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
 
+    // Get two adjacent samples
     Sample s0 = edgeSubdivWorking[launchIndex];
     Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0) + 9 * currentTriangleIndex)];
-    const int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
+
+    // Only subdivide the edge between two adjacent samples if they correspond to
+    // different triangles
     if (s0.triangleID != s1.triangleID) {
-        Sample samples[numSamples];
-        samples[0] = s0;
-        samples[1] = s1;
+        int index = int(numSamplesPerEdge / 2.0f);
+
+        // Initialize the array storing the generated samples
+        Sample samplesOutput[numSamplesPerEdge];
+        for (int i = 0; i < numSamplesPerEdge; i++) {
+            samplesOutput[i] = Sample(-2, vec3(0.0), vec3(0.0), vec3(0.0));
+        }
+
+        samplesOutput[0] = s0;
+        samplesOutput[numSamplesPerEdge - 1] = s1;
 
         vec3 rayOrigin;
         if (s0.triangleID != -1) {
@@ -48,62 +59,73 @@ void main() {
             rayOrigin = s1.rayOrigin;
         }
 
-        vec3 samplePos = (s0.pos + s1.pos) * 0.5;
-        vec3 rayDir = normalize(samplePos - rayOrigin);
-        traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+        // Calculate the first sample in the middle of the edge
+        vec3 samplePos = (samplesOutput[numSamplesPerEdge - 1].pos + samplesOutput[0].pos) / 2.0f;
+        traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+        samplesOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
 
-        int triangleID = int(hitInfo.w);
-        if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
-            samples[2] = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
-        }
-        
-        int end = 3;
-        int numInserted = 1;
-        for (int j = 0; j < MAX_SUBDIVISION_STEPS - 1; j++) {
-            for (int i = 0; i < numInserted; i++) {
-                for (int k = 0; k < 2; k++) {
-                    s0 = samples[k];
-                    s1 = samples[1 + numInserted + i];
+        vec3 offset = (samplesOutput[numSamplesPerEdge - 1].pos - samplesOutput[0].pos) / 2.0f;
+        for (int i = 0; i < MAX_SUBDIVISION_STEPS - 1; i++) {
+            offset /= 2.0f;
 
-                    if (s0.triangleID == s1.triangleID) {
-                        // Both samples are on the same triangle, no new sample has to be generated
-                        samples[end] = s0;
+            // Continue subdivision only if the distance of the new samples are
+            // further than a threshold
+            if (length(offset) <= SAMPLE_DISTANCE_THRESHOLD) {
+                continue;
+            }
+
+            for (int k = 0; k < pow(2, i); k++) {
+                int currentIndex = index + (index * 2) * k;
+                Sample currentSample = samplesOutput[currentIndex];
+                if (currentSample.triangleID == -2) {
+                    continue;
+                }
+
+                // Check if a new sample should be generated and a ray traced, that is if two adjacent
+                // samples correspond to different triangles
+                if (currentSample.triangleID != samplesOutput[int(currentIndex + index)].triangleID) {
+                    vec3 rayOrigin;
+                    if (currentSample.triangleID != -1) {
+                        rayOrigin = currentSample.rayOrigin;
                     } else {
-                        // TODO: Check sample distance for threshold
-
-                        if (s0.triangleID != -1) {
-                            rayOrigin = s0.rayOrigin;
-                        } else {
-                            rayOrigin = s1.rayOrigin;
-                        }
-                        samplePos = (s0.pos + s1.pos) * 0.5;
-                        rayDir = normalize(samplePos - rayOrigin);
-                        traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-
-                        triangleID = int(hitInfo.w);
-                        if (triangleID != s0.triangleID || triangleID != s1.triangleID) {
-                            // The new sample is on a new triangle than at least one of its adjacent samples
-                            samples[end] = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
-                        } else {
-                            // The new sample is on the same triangle as s0 and as s1, no new sample has
-                            // to be generated
-                            samples[end] = s0;
-                        }
+                        rayOrigin = samplesOutput[int(currentIndex + index)].rayOrigin;
                     }
-                    end++;
+
+                    // Calculate the position of a new sample in direction +offset of the current sample
+                    vec3 samplePos = currentSample.pos + offset;
+                    traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+                    samplesOutput[int(currentIndex + index / 2.0f)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                }
+
+                if (currentSample.triangleID != samplesOutput[int(currentIndex - index)].triangleID) {
+                    vec3 rayOrigin;
+                    if (currentSample.triangleID != -1) {
+                        rayOrigin = currentSample.rayOrigin;
+                    } else {
+                        rayOrigin = samplesOutput[int(currentIndex - index)].rayOrigin;
+                    }
+
+                    // Calculate the position of a new sample in direction -offset of the current sample
+                    vec3 samplePos = currentSample.pos - offset;
+                    traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+                    samplesOutput[int(currentIndex - index / 2.0f)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
                 }
             }
-            numInserted *= 2;
+
+            index = int(index / 2.0f);
         }
 
-        for (int i = 0; i < numSamples; i++) {
-            edgeSubdivOutput[launchIndex * numSamples + i] = samples[i];
+        // Add the samples to the output buffer
+        for (int i = 0; i < numSamplesPerEdge; i++) {
+            if (samplesOutput[i].triangleID == -2) {
+                edgeSubdivOutput[launchIndex * numSamplesPerEdge + i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
+            } else {
+                edgeSubdivOutput[launchIndex * numSamplesPerEdge + i] = samplesOutput[i];
+            }
         }
     } else {
-        // Both samples correspond to the same triangle, therefore there can't be another triangle
-        // between these two samples
-        for (int i = 0; i < numSamples; i++) {
-            edgeSubdivOutput[launchIndex * numSamples + i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
+        for (int i = 0; i < numSamplesPerEdge; i++) {
+            edgeSubdivOutput[launchIndex * numSamplesPerEdge + i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
         }
-    }
+    }    
 }

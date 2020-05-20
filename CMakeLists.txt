@@ -34,6 +34,7 @@ add_executable(Vulkan_RTX_Master_Qt_CMake ${SRC_FILES})
 #target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Core)
 #target_link_libraries(Vulkan_RTX_Master_Qt_CMake Qt5::Gui)
 target_link_libraries(Vulkan_RTX_Master_Qt_CMake C:/Users/thoma/Documents/dev/cpplib/glfw-3.3.2.bin.WIN64/lib-mingw-w64/libglfw3.a)
+#target_link_libraries(Vulkan_RTX_Master_Qt_CMake C:/Users/thoma/Documents/dev/cpplib/glfw-3.3.2.bin.WIN64/lib-vc2019/glfw3.lib)
 target_link_libraries(Vulkan_RTX_Master_Qt_CMake E:/VulkanSDK/1.2.135.0/Lib/vulkan-1.lib)
 
 if (UNIX)

@@ -291,7 +291,9 @@ void VulkanRenderer::createIndexBuffer() {
 
     // Copy index data from the staging buffer to the index buffer
     VulkanUtil::copyBuffer(
-        window->device, window->graphicsCommandPool, window->graphicsQueue,stagingBuffer, indexBuffer, bufferSize);
+        window->device, window->graphicsCommandPool, window->graphicsQueue,stagingBuffer,
+        indexBuffer, bufferSize
+    );
 
     vkDestroyBuffer(window->device, stagingBuffer, nullptr);
     vkFreeMemory(window->device, stagingBufferMemory, nullptr);
@@ -303,7 +305,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
@@ -823,6 +825,7 @@ void VulkanRenderer::togglePVSVisualization() {
 void VulkanRenderer::initVisibilityManager() {
     glm::vec3 pos = glm::vec3(10.5f,6.3f,-5.2f);
     glm::vec3 center = glm::vec3(7.0f,6.0f,-2.0f);
+
     visibilityManager.addViewCell(
         pos,
         glm::vec2(0.2f, 0.2f),

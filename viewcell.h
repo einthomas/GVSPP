@@ -1,8 +1,8 @@
 #ifndef VIEWCELL_H
 #define VIEWCELL_H
 
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include <glm/glm.hpp>
+#include <glm/vec3.hpp>
+#include <glm/vec2.hpp>
 
 class ViewCell {
 public:
@@ -10,6 +10,7 @@ public:
     alignas(8) glm::vec2 size;
     alignas(16) glm::vec3 normal;
 
+    ViewCell();
     ViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal);
 };
 

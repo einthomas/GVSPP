@@ -165,14 +165,16 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     // Edge subdivision buffers
     VulkanUtil::createBuffer(
         physicalDevice,
-        logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
+        logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
+        //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
         //logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * 9 * 2,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         edgeSubdivOutputBuffer, edgeSubdivOutputBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
     VulkanUtil::createBuffer(
         physicalDevice,
-        logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS,
+        logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
+        //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         edgeSubdivWorkingBuffer, edgeSubdivWorkingBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
@@ -1228,13 +1230,18 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
         samples.size(), 1, 1
     );
     vkEndCommandBuffer(commandBufferEdgeSubdiv);
+
+    //auto start = std::chrono::steady_clock::now();
     VulkanUtil::executeCommandBuffer(
         logicalDevice, computeQueue, commandBufferEdgeSubdiv, commandBufferFence
     );
+    //auto end = std::chrono::steady_clock::now();
+    //std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms " << samples.size() << std::endl;
 
     // Copy intersected triangles from VRAM to CPU accessible memory
-    int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
-    std::vector<Sample> intersectedTriangles(samples.size() * numSamples);
+    //int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
+    //std::vector<Sample> intersectedTriangles(samples.size() * numSamples);
+    std::vector<Sample> intersectedTriangles(samples.size());
     {
         VkDeviceSize bufferSize = sizeof(Sample) * intersectedTriangles.size();
 
@@ -1375,10 +1382,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
             size_t k = 0;
             while (k < samples.size()) {
                 std::vector<Sample> edgeSubdivQueue;
-                int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>(((samples.size() - k) * 0.5)));
+                int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>((samples.size() - k) * 0.5));
                 numRays += numSamples;
                 edgeSubdivQueue.reserve(numSamples);
-                for (int i = 0; i < numSamples; i++) {
+                for (int i = 0; i < numSamples && k < samples.size(); i++) {
                     // Check if ray through the k+1-th hit a triangle
                     if (samples[k + 1].triangleID != -1) {
                         // In this case, the k-th sample corresponds to the triangle in front of the
@@ -1393,7 +1400,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
                 // Insert the newly found triangles into the PVS and into the newSamples set for which
                 // ABS is going to be executed again
-                for (auto sample : edgeSubdivide(edgeSubdivQueue)) {
+                auto samples = edgeSubdivide(edgeSubdivQueue);
+                for (auto sample : samples) {
+                    //std::cout << glm::to_string(samples) << std::endl;
                     if (sample.triangleID != -1) {
                         auto result = pvs.insert(sample.triangleID);
                         if (result.second) {
@@ -1404,6 +1413,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
             }
         }
     }
+
     auto end = std::chrono::steady_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms " << std::endl;
 }
