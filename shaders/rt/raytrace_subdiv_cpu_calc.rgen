@@ -1,0 +1,37 @@
+#version 460
+#extension GL_NV_ray_tracing : require
+
+struct Vertex {
+    vec3 pos;
+    vec3 worldPos;
+    vec3 normal;
+    vec3 color;
+    vec2 uv;
+};
+struct Sample {
+    int triangleID;
+    vec3 rayOrigin;
+    vec3 rayHitPos;
+    vec3 pos;
+};
+
+layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+
+layout(binding = 0, set = 2) writeonly buffer edgeSubdivOutputBuffer {
+    Sample edgeSubdivOutput[];
+};
+layout(binding = 1, set = 2) readonly buffer edgeSubdivWorkingBuffer {
+    Sample edgeSubdivWorking[];
+};
+
+layout(location = 0) rayPayloadNV vec4 hitInfo;
+
+const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
+const int MAX_SUBDIVISION_STEPS = 3;
+
+void main() {
+    uint launchIndex = gl_LaunchIDNV.x;
+    Sample s = edgeSubdivWorking[launchIndex];
+    traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, s.rayOrigin, 0.001, normalize(s.pos - s.rayOrigin), 100000.0, 0);
+    edgeSubdivOutput[launchIndex] = Sample(int(hitInfo.w), s.rayOrigin, hitInfo.xyz, s.pos);
+}

@@ -49,6 +49,7 @@ public:
 
 private:
     const bool USE_TERMINATION_CRITERION = true;
+    const bool USE_EDGE_SUBDIV_CPU = false;
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 1000000;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
 

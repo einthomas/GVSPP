@@ -305,7 +305,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 

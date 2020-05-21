@@ -10,3 +10,4 @@ E:/VulkanSDK/1.2.135.0/Bin/glslc.exe C:/Users/thoma/Documents/dev/Master/Vulkan_
 E:/VulkanSDK/1.2.135.0/Bin/glslc.exe C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_abs.rchit -o C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_abs.rchit.spv
 
 E:/VulkanSDK/1.2.135.0/Bin/glslc.exe C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_subdiv.rgen -o C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_subdiv.rgen.spv
+E:/VulkanSDK/1.2.135.0/Bin/glslc.exe C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_subdiv_cpu_calc.rgen -o C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/rt/raytrace_subdiv_cpu_calc.rgen.spv

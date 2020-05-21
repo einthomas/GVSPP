@@ -845,7 +845,11 @@ void VisibilityManager::createEdgeSubdivPipeline() {
     VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = {};
     rayGenShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     rayGenShaderStageInfo.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv.rgen.spv");
+    if (USE_EDGE_SUBDIV_CPU) {
+        rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv_cpu_calc.rgen.spv");
+    } else {
+        rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv.rgen.spv");
+    }
     rayGenShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo rayClosestHitShaderStageInfo = {};
@@ -1231,12 +1235,9 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
     );
     vkEndCommandBuffer(commandBufferEdgeSubdiv);
 
-    //auto start = std::chrono::steady_clock::now();
     VulkanUtil::executeCommandBuffer(
         logicalDevice, computeQueue, commandBufferEdgeSubdiv, commandBufferFence
     );
-    //auto end = std::chrono::steady_clock::now();
-    //std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms " << samples.size() << std::endl;
 
     // Copy intersected triangles from VRAM to CPU accessible memory
     //int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
@@ -1379,34 +1380,172 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices) {
 
             // Place new samples along the edge between each two adjacent ABS samples by repeated
             // subdivision
-            size_t k = 0;
-            while (k < samples.size()) {
-                std::vector<Sample> edgeSubdivQueue;
-                int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>((samples.size() - k) * 0.5));
-                numRays += numSamples;
-                edgeSubdivQueue.reserve(numSamples);
-                for (int i = 0; i < numSamples && k < samples.size(); i++) {
-                    // Check if ray through the k+1-th hit a triangle
-                    if (samples[k + 1].triangleID != -1) {
-                        // In this case, the k-th sample corresponds to the triangle in front of the
-                        // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
-                        // actual ABS sample
-                        edgeSubdivQueue.emplace_back(samples[k + 1]);
-                    } else {
-                        edgeSubdivQueue.emplace_back(samples[k]);
-                    }
-                    k += 2;
-                }
+            if (USE_EDGE_SUBDIV_CPU) {
+                int MAX_SUBDIVISION_STEPS = 3;
+                const float SAMPLE_DISTANCE_THRESHOLD = 0.0001;
+                std::vector<std::vector<Sample>> subdivSamples;
+                subdivSamples.reserve(samples.size() * 0.5 - 1);
+                int numSamplesPerEdge = pow(2, MAX_SUBDIVISION_STEPS) + 1;
 
-                // Insert the newly found triangles into the PVS and into the newSamples set for which
-                // ABS is going to be executed again
-                auto samples = edgeSubdivide(edgeSubdivQueue);
-                for (auto sample : samples) {
-                    //std::cout << glm::to_string(samples) << std::endl;
-                    if (sample.triangleID != -1) {
-                        auto result = pvs.insert(sample.triangleID);
-                        if (result.second) {
-                            absSampleQueue.push_back(sample);
+                size_t k = 0;
+                while (k < samples.size()) {
+                    int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>(samples.size() - k));
+                    std::vector<Sample> edgeSubdivQueue;
+
+                    // Initially, fill an array for each edge that holds all the samples that will
+                    // be generated
+                    int next = 0;
+                    for (int i = 0; i < numSamples - 2; i += 2) {
+                        Sample s0;
+                        if (samples[i + 1].triangleID != -1) {
+                            s0 = samples[i + 1];
+                        } else {
+                            s0 = samples[i];
+                        }
+
+                        Sample s1;
+                        if (i % 18 == 0 && i > 0) {
+                            if (samples[i + 1 - 18].triangleID != -1) {
+                                s1 = samples[i + 1 - 18];
+                            } else {
+                                s1 = samples[i - 18];
+                            }
+                        } else {
+                            if (samples[i + 3].triangleID != -1) {
+                                s1 = samples[i + 3];
+                            } else {
+                                s1 = samples[i + 2];
+                            }
+                        }
+
+                        // Generate a new sample half-way on the edge defined by s0 and s1 iff they
+                        // correspond to different triangles
+                        if (s0.triangleID != s1.triangleID) {
+                            subdivSamples.emplace_back(std::vector<Sample>(numSamplesPerEdge, Sample(-2, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(0.0f))));
+                            subdivSamples[next][0] = s0;
+                            subdivSamples[next][numSamplesPerEdge - 1] = s1;
+
+                            glm::vec3 rayOrigin;
+                            if (s0.triangleID != -1) {
+                                rayOrigin = s0.rayOrigin;
+                            } else {
+                                rayOrigin = s1.rayOrigin;
+                            }
+
+                            edgeSubdivQueue.emplace_back(0, rayOrigin, glm::vec3(0.0f), (s0.pos + s1.pos) * 0.5f);
+
+                            next++;
+                        }
+                    }
+
+                    k += numSamples;
+
+                    // Ray trace
+                    auto edgeSubdivResult = edgeSubdivide(edgeSubdivQueue);
+
+                    // Store the newly generated samples in the array of each edge
+                    for (int i = 0; i < edgeSubdivResult.size(); i++) {
+                        subdivSamples[i][int(numSamplesPerEdge / 2.0f)] = edgeSubdivResult[i];
+                    }
+
+                    for (int i = 0; i < edgeSubdivResult.size(); i++) {
+                        subdivSamples[i].emplace_back(edgeSubdivResult[i]);
+                        if (edgeSubdivResult[i].triangleID != -1) {
+                            auto result = pvs.insert(edgeSubdivResult[i].triangleID);
+                            if (result.second) {
+                                absSampleQueue.push_back(edgeSubdivResult[i]);
+                            }
+                        }
+                    }
+
+                    // Repeatedly subdivide the edge up to MAX_SUBDIVISION_STEPS - 1 times
+                    std::vector<int> numGeneratedSamplesPerEdge(numSamples);
+                    for (int i = 0; i < MAX_SUBDIVISION_STEPS - 1; i++) {
+                        edgeSubdivQueue.clear();
+                        std::fill(numGeneratedSamplesPerEdge.begin(), numGeneratedSamplesPerEdge.end(), 0);
+                        int index = numSamplesPerEdge / pow(2, i + 1);
+
+                        // Go through all edges and generate a new sample between two samples iff
+                        // they correspond to different triangles
+                        for (int m = 0; m < subdivSamples.size(); m++) {
+                            glm::vec3 offset = (subdivSamples[m][numSamplesPerEdge - 1].pos - subdivSamples[m][0].pos) / glm::vec3(pow(2, i + 2));
+
+                            if (offset.length() <= SAMPLE_DISTANCE_THRESHOLD) {
+                                continue;
+                            }
+
+                            for (int k = 0; k < pow(2, i); k++) {
+                                int currentIndex = index + (index * 2) * k;
+                                Sample currentSample = subdivSamples[m][currentIndex];
+
+                                if (currentSample.triangleID == -2) {
+                                    continue;
+                                }
+
+                                if (currentSample.triangleID != subdivSamples[m][currentIndex - index].triangleID) {
+                                    // Calculate the position of a new sample in direction +offset of the current sample
+                                    glm::vec3 samplePos = currentSample.pos - offset;
+                                    edgeSubdivQueue.emplace_back(0, currentSample.rayOrigin, glm::vec3(0.0f), samplePos);
+                                    numGeneratedSamplesPerEdge[m]++;
+                                }
+
+                                if (currentSample.triangleID != subdivSamples[m][currentIndex + index].triangleID) {
+                                    // Calculate the position of a new sample in direction +offset of the current sample
+                                    glm::vec3 samplePos = currentSample.pos + offset;
+                                    edgeSubdivQueue.emplace_back(0, currentSample.rayOrigin, glm::vec3(0.0f), samplePos);
+                                    numGeneratedSamplesPerEdge[m]++;
+                                }
+                            }
+                        }
+
+                        if (edgeSubdivQueue.size() == 0) {
+                            continue;
+                        }
+
+                        // ray trace
+                        int acc = 0;
+                        auto edgeSubdivResult = edgeSubdivide(edgeSubdivQueue);
+                        for (int i = 0; i < numGeneratedSamplesPerEdge.size(); i++) {
+                            for (int k = 0; k < numGeneratedSamplesPerEdge[i]; k++) {
+                                int currentIndex = (index / 2.0f) + index * k;
+
+                                // check if neighbors different triangles
+                                subdivSamples[i][int(currentIndex )] = edgeSubdivResult[acc + k];
+                            }
+                            acc += numGeneratedSamplesPerEdge[i];
+                        }
+                    }
+                }
+            } else {
+                size_t k = 0;
+                while (k < samples.size()) {
+                    std::vector<Sample> edgeSubdivQueue;
+                    int numSamples = std::min(MAX_EDGE_SUBDIV_RAYS, static_cast<size_t>((samples.size() - k) * 0.5));
+                    numRays += numSamples;
+                    edgeSubdivQueue.reserve(numSamples);
+                    for (int i = 0; i < numSamples && k < samples.size(); i++) {
+                        // Check if ray through the k+1-th hit a triangle
+                        if (samples[k + 1].triangleID != -1) {
+                            // In this case, the k-th sample corresponds to the triangle in front of the
+                            // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
+                            // actual ABS sample
+                            edgeSubdivQueue.emplace_back(samples[k + 1]);
+                        } else {
+                            edgeSubdivQueue.emplace_back(samples[k]);
+                        }
+                        k += 2;
+                    }
+
+                    // Insert the newly found triangles into the PVS and into the newSamples set for which
+                    // ABS is going to be executed again
+                    auto samples = edgeSubdivide(edgeSubdivQueue);
+                    for (auto sample : samples) {
+                        //std::cout << glm::to_string(samples) << std::endl;
+                        if (sample.triangleID != -1) {
+                            auto result = pvs.insert(sample.triangleID);
+                            if (result.second) {
+                                absSampleQueue.push_back(sample);
+                            }
                         }
                     }
                 }

@@ -127,5 +127,5 @@ void main() {
         for (int i = 0; i < numSamplesPerEdge; i++) {
             edgeSubdivOutput[launchIndex * numSamplesPerEdge + i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
         }
-    }    
+    }
 }
