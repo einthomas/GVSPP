@@ -1,15 +1,29 @@
-#ifndef PVS_H
-#define PVS_H
+#ifndef CONCURRENTUNORDEREDSET_H
+#define CONCURRENTUNORDEREDSET_H
 
 #include <unordered_set>
-#include <glm/glm.hpp>
-#include <glm/gtx/hash.hpp>
+#include <mutex>
 
+template<class T>
 class PVS {
 public:
-    std::unordered_set<glm::uvec3> triangles;
+    PVS() {
+    }
 
-    PVS();
+    const std::unordered_set<T> &getSet() {
+        return set;
+    }
+
+    auto insert(T value) {
+        writeMutex.lock();
+        auto result = set.insert(value);
+        writeMutex.unlock();
+        return result;
+    }
+
+private:
+    std::unordered_set<T> set;
+    std::mutex writeMutex;
 };
 
-#endif // PVS_H
+#endif // CONCURRENTUNORDEREDSET_H

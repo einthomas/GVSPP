@@ -16,7 +16,7 @@ void VulkanUtil::createBuffer(
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateBuffer(logicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-        //qWarning("failed to create buffer");
+        throw std::runtime_error("failed to create buffer");
     }
 
     // Allocate memory
@@ -42,7 +42,7 @@ void VulkanUtil::createBuffer(
 
 void VulkanUtil::copyBuffer(
     VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-    VkBuffer dstBuffer, VkDeviceSize size
+    VkBuffer dstBuffer, VkDeviceSize size, std::mutex *mutex
 ) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(logicalDevice, commandPool);
 
@@ -51,7 +51,7 @@ void VulkanUtil::copyBuffer(
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    endSingleTimeCommands(logicalDevice, commandBuffer, commandPool, queue);
+    endSingleTimeCommands(logicalDevice, commandBuffer, commandPool, queue, mutex);
 }
 
 VkCommandBuffer VulkanUtil::beginSingleTimeCommands(
@@ -77,7 +77,8 @@ VkCommandBuffer VulkanUtil::beginSingleTimeCommands(
 }
 
 void VulkanUtil::endSingleTimeCommands(
-    VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue
+    VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue,
+    std::mutex *mutex
 ) {
     vkEndCommandBuffer(commandBuffer);
 
@@ -94,7 +95,13 @@ void VulkanUtil::endSingleTimeCommands(
     VkFence fence;
     vkCreateFence(logicalDevice, &fenceInfo, NULL, &fence);
 
+    if (mutex != nullptr) {
+        mutex->lock();
+    }
     vkQueueSubmit(queue, 1, &submitInfo, fence);
+    if (mutex != nullptr) {
+        mutex->unlock();
+    }
 
     VkResult result;
     // Wait for the command buffer to complete execution in a loop in case it takes longer to
@@ -191,14 +198,23 @@ VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const std::strin
 }
 
 void VulkanUtil::executeCommandBuffer(
-    VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence
+    VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence,
+    std::mutex *mutex
 ) {
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
+    //std::lock_guard<std::mutex> lock(mutex);
+    if (mutex != nullptr) {
+        mutex->lock();
+    }
     vkQueueSubmit(queue, 1, &submitInfo, fence);
+    if (mutex != nullptr) {
+        mutex->unlock();
+    }
+
     //vkQueueWaitIdle(window->graphicsQueue());
     VkResult result;
     // Wait for the command buffer to complete execution in a loop in case it takes longer to

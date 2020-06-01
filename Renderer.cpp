@@ -99,7 +99,7 @@ void VulkanRenderer::releaseResources() {
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    visibilityThread.join();
+    //visibilityThread.join();
 
     visibilityManager.releaseResources();
 }
@@ -305,7 +305,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
@@ -822,6 +822,7 @@ void VulkanRenderer::togglePVSVisualization() {
     visualizePVS = !visualizePVS;
     std::cout << "Visualize PVS: " << visualizePVS << std::endl;
 }
+
 void VulkanRenderer::initVisibilityManager() {
     glm::vec3 pos = glm::vec3(10.5f,6.3f,-5.2f);
     glm::vec3 center = glm::vec3(7.0f,6.0f,-2.0f);
@@ -839,10 +840,12 @@ void VulkanRenderer::initVisibilityManager() {
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers
+        uniformBuffers, 9
     );
 }
 
 void VulkanRenderer::startVisibilityThread() {
-    visibilityThread = std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices);
+    for (int i = 0; i < 9; i++) {
+        visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i));
+    }
 }

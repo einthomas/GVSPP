@@ -6,8 +6,7 @@
 
 #include <string>
 #include <vector>
-//#include <QString>
-//#include <QFile>
+#include <mutex>
 
 class VulkanUtil {
 public:
@@ -18,14 +17,14 @@ public:
     );
     static void copyBuffer(
         VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-        VkBuffer dstBuffer, VkDeviceSize size
+        VkBuffer dstBuffer, VkDeviceSize size, std::mutex *mutex = nullptr
     );
     static VkCommandBuffer beginSingleTimeCommands(
         VkDevice logicalDevice, VkCommandPool commandPool
     );
     static void endSingleTimeCommands(
         VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool,
-        VkQueue queue
+        VkQueue queue, std::mutex *mutex = nullptr
     );
     static uint32_t findMemoryType(
         VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties
@@ -33,7 +32,8 @@ public:
     static uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags queueFlags, int k = -1);
     static VkShaderModule createShader(VkDevice logicalDevice, const std::string &filename);
     static void executeCommandBuffer(
-        VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence
+        VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence,
+        std::mutex *mutex = nullptr
     );
     static void createImage(
         VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,

@@ -78,7 +78,8 @@ private:
 
     // Visibility
     bool visualizePVS = false;
-    std::thread visibilityThread;
+    //std::thread visibilityThread;
+    std::vector<std::thread> visibilityThreads;
 
     VisibilityManager visibilityManager;
     VkDescriptorSet rtDescriptorSetsABS;
