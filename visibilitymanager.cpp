@@ -481,10 +481,7 @@ void VisibilityManager::initRayTracing(
         std::array<VkDescriptorSet, 3> dd = {
             descriptorSet[i], descriptorSetABS[i], descriptorSetEdgeSubdiv[i]
         };
-        if (vkAllocateDescriptorSets(
-                logicalDevice, &allocInfo, dd.data()
-            ) != VK_SUCCESS
-        ) {
+        if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, dd.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets");
         }
         descriptorSet[i] = dd[0];
@@ -783,10 +780,7 @@ void VisibilityManager::createDescriptorPool() {
     poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = 3 * numThreads;
 
-    if (vkCreateDescriptorPool(
-            logicalDevice, &poolInfo, nullptr, &descriptorPool
-        ) != VK_SUCCESS
-    ) {
+    if (vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create rt descriptor pool");
     }
 }
@@ -1387,6 +1381,8 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
 void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId) {
     //pvs.clear();
 
+    //std::cout << pvs.getSet().size() << std::endl;
+
     auto start = std::chrono::steady_clock::now();
 
     //size_t numRays = 0;
@@ -1603,11 +1599,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                             // predicted hit point (reverse sampling). Therefore, the k+1-th sample is the
                             // actual ABS sample
                             edgeSubdivQueue.emplace_back(absSamplingResult[k + 1]);
-                            /*
-                            if (pvs.find(samples[k].triangleID) != pvs.end()) {
-                                asdf++;
-                            }
-                            */
                         } else {
                             edgeSubdivQueue.emplace_back(absSamplingResult[k]);
                         }
@@ -1642,37 +1633,55 @@ void VisibilityManager::releaseResources() {
     for (int i = 0; i < numThreads; i++) {
         vkDestroyBuffer(logicalDevice, haltonPointsBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, haltonPointsBufferMemory[i], nullptr);
+
         vkDestroyBuffer(logicalDevice, viewCellBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, viewCellBufferMemory[i], nullptr);
+
         vkDestroyBuffer(logicalDevice, randomSamplingOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, randomSamplingOutputBufferMemory[i], nullptr);
+
         vkDestroyBuffer(logicalDevice, absOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absOutputBufferMemory[i], nullptr);
         vkDestroyBuffer(logicalDevice, absWorkingBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absWorkingBufferMemory[i], nullptr);
 
+        vkDestroyBuffer(logicalDevice, edgeSubdivOutputBuffer[i], nullptr);
+        vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
+        vkDestroyBuffer(logicalDevice, edgeSubdivWorkingBuffer[i], nullptr);
+        vkFreeMemory(logicalDevice, edgeSubdivWorkingBufferMemory[i], nullptr);
+
         vkDestroyFence(logicalDevice, commandBufferFence[i], nullptr);
 
         VkCommandBuffer commandBuffers[] = {
             commandBuffer[i],
-            commandBufferABS[i]
+            commandBufferABS[i],
+            commandBufferEdgeSubdiv[i]
         };
-        vkFreeCommandBuffers(logicalDevice, commandPool[i], 2, commandBuffers);
+        vkFreeCommandBuffers(logicalDevice, commandPool[i], 3, commandBuffers);
+
+        vkDestroyCommandPool(logicalDevice, commandPool[i], nullptr);
     }
+
     vkDestroyBuffer(logicalDevice, pvsVisualizationBuffer, nullptr);
     vkFreeMemory(logicalDevice, pvsVisualizationBufferMemory, nullptr);
+
     vkDestroyBuffer(logicalDevice, shaderBindingTable, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemory, nullptr);
     vkDestroyBuffer(logicalDevice, shaderBindingTableABS, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemoryABS, nullptr);
+    vkDestroyBuffer(logicalDevice, shaderBindingTableEdgeSubdiv, nullptr);
+    vkFreeMemory(logicalDevice, shaderBindingTableMemoryEdgeSubdiv, nullptr);
 
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutABS, nullptr);
+    vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutEdgeSubdiv, nullptr);
 
     vkDestroyPipeline(logicalDevice, pipeline, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineLayout, nullptr);
     vkDestroyPipeline(logicalDevice, pipelineABS, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineABSLayout, nullptr);
+    vkDestroyPipeline(logicalDevice, pipelineEdgeSubdiv, nullptr);
+    vkDestroyPipelineLayout(logicalDevice, pipelineEdgeSubdivLayout, nullptr);
 
     vkDestroyDescriptorPool(logicalDevice, descriptorPool, nullptr);
 
@@ -1717,7 +1726,7 @@ VkBuffer VisibilityManager::getPVSIndexBuffer(
     // Copy PVS data from the staging buffer to the GPU-visible PVS visualization buffer (used as an index buffer when drawing)
     VulkanUtil::copyBuffer(
         logicalDevice, commandPool, queue, stagingBuffer, pvsVisualizationBuffer,
-        bufferSize, queueSubmitMutex
+        bufferSize//, queueSubmitMutex
     );
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
