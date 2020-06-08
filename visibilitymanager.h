@@ -62,7 +62,7 @@ private:
     const int RAYS_PER_ITERATION = 16000;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 5;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 90000;
-    const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9
+    const size_t MAX_EDGE_SUBDIV_RAYS = 900000;       // Has to be a multiple of 9
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;

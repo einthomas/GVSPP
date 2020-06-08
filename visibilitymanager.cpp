@@ -97,28 +97,10 @@ void VisibilityManager::generateHaltonPoints(int n, int offset, int p2) {
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
     VkDeviceSize bufferSize = sizeof(haltonPoints[threadId][0]) * haltonPoints[threadId].size();
 
-    // Create staging buffer using host-visible memory
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    VulkanUtil::createBuffer(
-        physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    // Copy halton points to the staging buffer
     void *data;
-    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    vkMapMemory(logicalDevice, haltonPointsBufferMemory[threadId], 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
     memcpy(data, haltonPoints[threadId].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-    vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-    // Copy halton points from the staging buffer to the halton points buffer
-    VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[threadId], computeQueue, stagingBuffer, haltonPointsBuffer[threadId],
-        bufferSize, queueSubmitMutex
-    );
-
-    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    vkUnmapMemory(logicalDevice, haltonPointsBufferMemory[threadId]);
 }
 
 void VisibilityManager::createViewCellBuffer() {
@@ -153,8 +135,8 @@ void VisibilityManager::createViewCellBuffer() {
         // Copy view cell to the staging buffer
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        //memcpy(data, viewCells.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        memcpy(data, &viewCell, (size_t) bufferSize);
+        memcpy(data, viewCells.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+        //memcpy(data, &viewCell, (size_t) bufferSize);
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         // Create view cell buffer using GPU memory
@@ -200,7 +182,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             physicalDevice,
             logicalDevice, sizeof(Sample) * RAYS_PER_ITERATION,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
 
         // ABS buffers
@@ -208,36 +190,36 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             physicalDevice,
             logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * 9 * 2,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            absOutputBuffer[i], absOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            absOutputBuffer[i], absOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            absWorkingBuffer[i], absWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            absWorkingBuffer[i], absWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
         );
 
         // Edge subdivision buffers
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
-            //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
+            //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
+            logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
             //logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * 9 * 2,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
             //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            edgeSubdivWorkingBuffer[i], edgeSubdivWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            edgeSubdivWorkingBuffer[i], edgeSubdivWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
         );
 
         // Create halton points buffer using GPU memory
         VulkanUtil::createBuffer(
             physicalDevice, logicalDevice, sizeof(haltonPoints[0]) * RAYS_PER_ITERATION, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
         );
     }
 
@@ -442,7 +424,7 @@ void VisibilityManager::initRayTracing(
         VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
         instanceBuffer,
         instanceBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
     );
     void *data;
     vkMapMemory(logicalDevice, instanceBufferMemory, 0, instanceBufferSize, 0, &data);
@@ -1106,6 +1088,7 @@ std::vector<Sample> VisibilityManager::randomSample(int numRays, int threadId) {
         numRays, 1, 1
     );
     vkEndCommandBuffer(commandBuffer[threadId]);
+
     VulkanUtil::executeCommandBuffer(
         logicalDevice, computeQueue, commandBuffer[threadId], commandBufferFence[threadId],
         queueSubmitMutex
@@ -1116,28 +1099,10 @@ std::vector<Sample> VisibilityManager::randomSample(int numRays, int threadId) {
     {
         VkDeviceSize bufferSize = sizeof(intersectedTriangles[0]) * intersectedTriangles.size();
 
-        // Create host buffer
-        VkBuffer hostBuffer;
-        VkDeviceMemory hostBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
-            hostBuffer, bufferSize, queueSubmitMutex
-        );
-
-        // Map host buffer memory into CPU accessible memory
         void *data;
-        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(logicalDevice, randomSamplingOutputBufferMemory[threadId], 0, bufferSize, 0, &data);
         memcpy(intersectedTriangles.data(), data, bufferSize);
-        vkUnmapMemory(logicalDevice, hostBufferMemory);
-        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
-        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
+        vkUnmapMemory(logicalDevice, randomSamplingOutputBufferMemory[threadId]);
     }
 
     return intersectedTriangles;
@@ -1148,29 +1113,10 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     {
         VkDeviceSize bufferSize = sizeof(triangles[0]) * triangles.size();
 
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy triangles data to the staging buffer
         void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+        vkMapMemory(logicalDevice, absWorkingBufferMemory[threadId], 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
         memcpy(data, triangles.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer, absWorkingBuffer[threadId],
-            bufferSize, queueSubmitMutex
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+        vkUnmapMemory(logicalDevice, absWorkingBufferMemory[threadId]);
     }
 
     // Record and execute a command buffer for running the actual ABS on the GPU
@@ -1207,32 +1153,10 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     {
         VkDeviceSize bufferSize = sizeof(intersectedTriangles[0]) * intersectedTriangles.size();
 
-        // Create host buffer
-        VkBuffer hostBuffer;
-        VkDeviceMemory hostBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer,
-            hostBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId], hostBuffer,
-            bufferSize, queueSubmitMutex
-        );
-
-        // Map host buffer memory into CPU accessible memory
         void *data;
-        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
-
-
+        vkMapMemory(logicalDevice, absOutputBufferMemory[threadId], 0, bufferSize, 0, &data);
         memcpy(intersectedTriangles.data(), data, bufferSize);
-
-
-        vkUnmapMemory(logicalDevice, hostBufferMemory);
-        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
-        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
+        vkUnmapMemory(logicalDevice, absOutputBufferMemory[threadId]);
     }
 
     return intersectedTriangles;
@@ -1241,33 +1165,15 @@ std::vector<Sample> VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 std::vector<Sample> VisibilityManager::edgeSubdivide(
     const std::vector<Sample> &samples, int threadId
 ) {
+
     // Copy triangles vector to GPU accessible buffer
     {
         VkDeviceSize bufferSize = sizeof(samples[0]) * samples.size();
 
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy triangles data to the staging buffer
         void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+        vkMapMemory(logicalDevice, edgeSubdivWorkingBufferMemory[threadId], 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
         memcpy(data, samples.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer,
-            edgeSubdivWorkingBuffer[threadId], bufferSize, queueSubmitMutex
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+        vkUnmapMemory(logicalDevice, edgeSubdivWorkingBufferMemory[threadId]);
     }
 
     // Record and execute a command buffer for running the actual ABS on the GPU
@@ -1304,34 +1210,16 @@ std::vector<Sample> VisibilityManager::edgeSubdivide(
     );
 
     // Copy intersected triangles from VRAM to CPU accessible memory
-    //int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
-    //std::vector<Sample> intersectedTriangles(samples.size() * numSamples);
-    std::vector<Sample> intersectedTriangles(samples.size());
+    int numSamples = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
+    std::vector<Sample> intersectedTriangles(samples.size() * numSamples);
+    //std::vector<Sample> intersectedTriangles(samples.size());
     {
         VkDeviceSize bufferSize = sizeof(Sample) * intersectedTriangles.size();
 
-        // Create host buffer
-        VkBuffer hostBuffer;
-        VkDeviceMemory hostBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer,
-            hostBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId], hostBuffer,
-            bufferSize, queueSubmitMutex
-        );
-
-        // Map host buffer memory into CPU accessible memory
         void *data;
-        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(logicalDevice, edgeSubdivOutputBufferMemory[threadId], 0, bufferSize, 0, &data);
         memcpy(intersectedTriangles.data(), data, bufferSize);
-        vkUnmapMemory(logicalDevice, hostBufferMemory);
-        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
-        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
+        vkUnmapMemory(logicalDevice, edgeSubdivOutputBufferMemory[threadId]);
     }
 
     return intersectedTriangles;
@@ -1405,6 +1293,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         // Execute random sampling
         tracedRays += RAYS_PER_ITERATION;
+
         randomSamplingResult = randomSample(RAYS_PER_ITERATION, threadId);
 
         // Insert the newly found triangles into the PVS
