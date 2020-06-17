@@ -10,7 +10,7 @@ public:
     PVS() {
     }
 
-    const std::unordered_set<T> &getSet() {
+    std::unordered_set<T> &getSet() {
         return set;
     }
 

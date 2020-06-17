@@ -10,7 +10,6 @@
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "visibilitymanager.h"
-#include "pvs.h"
 
 class VulkanRenderer { // : public QVulkanWindowRenderer {
 public:

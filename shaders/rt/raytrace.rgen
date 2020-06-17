@@ -1,14 +1,39 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
+struct Vertex {
+    vec3 pos;
+    vec3 worldPos;
+    vec3 normal;
+    vec3 color;
+    vec2 uv;
+};
 struct Sample {
     int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
     vec3 pos;
 };
+struct TriangleOut {
+    int triangleID;
+    vec3 rayOrigin;
+    vec3 rayHitPos;
+};
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+
+layout(binding = 1, set = 0) uniform cameraProperties {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} camera;
+layout(binding = 2, set = 0) buffer Vertices {
+    vec4 v[];
+} vertices;
+layout(binding = 3, set = 0) buffer Indices {
+    uint i[];
+} indices;
+
 layout(binding = 4, set = 0) readonly buffer haltonPoints {
     vec2 points[];
 };
@@ -18,54 +43,366 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 normal;
 } viewCell;
 layout(binding = 6, set = 0) writeonly buffer randomSamplingOutputBuffer {
-    Sample randomSamplingOutput[];
+    TriangleOut randomSamplingOutput[];
+};
+layout(binding = 7, set = 0) readonly buffer triangleBuffer {
+    TriangleOut triangles[];
+};
+layout(binding = 8, set = 0) buffer triangleCounter {
+    uint edgeSubidvCounter;
 };
 
+layout(push_constant) uniform PushConstants {
+	bool randomSampling;
+} pushConstants;
+
 layout(location = 0) rayPayloadNV vec4 hitInfo;
+
+const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
+const int MAX_SUBDIVISION_STEPS = 3;
+const int NUM_ABS_SAMPLES = 9;
+
+Vertex unpackVertexData(uint index) {
+    vec4 d0 = vertices.v[3 * index + 0];
+    vec4 d1 = vertices.v[3 * index + 1];
+    vec4 d2 = vertices.v[3 * index + 2];
+
+    Vertex vertex;
+    vertex.pos = d0.xyz;
+    vertex.worldPos = vec3(camera.model * vec4(vertex.pos, 1.0));
+    vertex.normal = vec3(d0.w, d1.xy);
+    vertex.color = vec3(d1.zw, d2.x);
+    vertex.uv = d2.yz;
+
+    return vertex;
+}
+
+vec3 intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir) {
+    float t = dot(d - rayOrigin, normal) / dot(rayDir, normal);
+    return rayOrigin + t * rayDir;
+}
 
 void main() {
     // Calculate 1D launch index
     uint launchIndex = gl_LaunchIDNV.x;
 
-    // Construct view cell coordinate system
-    vec3 up = vec3(0.0, 1.0, 0.0);
-    vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-    vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
-    
-    // Map Halton point to point on view cell
-    vec2 haltonPoint = points[launchIndex];
-    vec2 offset = (haltonPoint - vec2(0.5)) * viewCell.size;
-    vec3 rayOrigin = viewCell.pos + offset.x * viewCellRight + offset.y * viewCellUp;
+    TriangleOut initialTriangleSample;
+    vec3 rayOrigin;
+    vec3 rayDir;
+    if (pushConstants.randomSampling) {
+        // Construct view cell coordinate system
+        vec3 up = vec3(0.0, 1.0, 0.0);
+        vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+        vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+        
+        // Map Halton point to point on view cell
+        //vec2 haltonPoint = vec2(points[launchIndex * 2], points[launchIndex * 2 + 1]);
+        vec2 haltonPoint = points[launchIndex];
+        vec2 offset = (haltonPoint - vec2(0.5)) * viewCell.size;
+        rayOrigin = viewCell.pos + offset.x * viewCellRight + offset.y * viewCellUp;
 
-    // Use a different Halton point to calculate the ray direction
-    haltonPoint = points[gl_LaunchSizeNV.x - launchIndex - 1];
+        // Use a different Halton point to calculate the ray direction
+        //haltonPoint = vec2(points[(gl_LaunchSizeNV.x - launchIndex - 2) * 2], points[(gl_LaunchSizeNV.x - launchIndex - 2) * 2 + 1]);
 
-    // Map Halton point to point on hemisphere
-    float phi = 2.0 * 3.1415926 * haltonPoint.y;
-    float r = sqrt(max(1.0 - haltonPoint.x * haltonPoint.x, 0.0));
-    vec3 rayDir = normalize(vec3(r * cos(phi), r * sin(phi), haltonPoint.x));
+        //haltonPoint = points[(gl_LaunchSizeNV.x - launchIndex - 1)];
+        haltonPoint = points[int(mod(launchIndex + gl_LaunchSizeNV.x * 0.5, gl_LaunchSizeNV.x))];
 
-    // Transform hemisphere point to view cell coordinate system
-    rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
+        // Map Halton point to point on hemisphere
+        float phi = 2.0 * 3.1415926 * haltonPoint.y;
+        float r = sqrt(max(1.0 - haltonPoint.x * haltonPoint.x, 0.0));
+        rayDir = normalize(vec3(r * cos(phi), r * sin(phi), haltonPoint.x));
+
+        // Transform hemisphere point to view cell coordinate system
+        rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
+
+        // Trace ray
+        uint rayFlags = gl_RayFlagsOpaqueNV;
+        uint cullMask = 0xff;
+        float tmin = 0.001;
+        float tmax = 100000.0;
+        traceNV(
+            topLevelAS,     // acceleration structure
+            rayFlags,       // rayFlags
+            cullMask,       // cullMask
+            0,              // sbtRecordOffset
+            0,              // sbtRecordStride
+            0,              // missIndex
+            rayOrigin.xyz,  // ray origin
+            tmin,           // ray min range
+            rayDir.xyz,     // ray direction
+            tmax,           // ray max range
+            0               // payload (location = 0)
+        );
+
+        initialTriangleSample = TriangleOut(int(hitInfo.w), rayOrigin, hitInfo.xyz);
+    } else {
+        initialTriangleSample = triangles[launchIndex];
+    }
     
-    // Trace ray
-    uint rayFlags = gl_RayFlagsOpaqueNV;
-    uint cullMask = 0xff;
-    float tmin = 0.001;
-    float tmax = 100000.0;
-    traceNV(
-        topLevelAS,     // acceleration structure
-        rayFlags,       // rayFlags
-        cullMask,       // cullMask
-        0,              // sbtRecordOffset
-        0,              // sbtRecordStride
-        0,              // missIndex
-        rayOrigin.xyz,  // ray origin
-        tmin,           // ray min range
-        rayDir.xyz,     // ray direction
-        tmax,           // ray max range
-        0               // payload (location = 0)
-    );
+    for (int i = 0; i < NUM_ABS_SAMPLES + 1; i++) {
+        randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1) + i] = TriangleOut(-1, vec3(0.0f), vec3(0.0f));
+    }
     
-    randomSamplingOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+    if (initialTriangleSample.triangleID != -1) {
+        //randomSamplingOutput[launchIndex * 82] = TriangleOut(initialTriangleSample.triangleID, initialTriangleSample.rayOrigin, initialTriangleSample.rayHitPos); //initialTriangleSample;
+        randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1)] = initialTriangleSample; //TriangleOut(initialTriangleSample.triangleID, initialTriangleSample.rayOrigin, initialTriangleSample.rayHitPos); //initialTriangleSample;
+        // ABS
+        int currentTriangleIndex = initialTriangleSample.triangleID;
+        Sample absSamples[9];
+        for (int i = 0; i < NUM_ABS_SAMPLES; i++) {
+            int currentVertexIndex = i;
+            
+            Vertex v0 = unpackVertexData(indices.i[3 * initialTriangleSample.triangleID + currentVertexIndex]);
+            Vertex v1 = unpackVertexData(indices.i[3 * initialTriangleSample.triangleID + int(mod(currentVertexIndex + 1, 3))]);
+            Vertex v2 = unpackVertexData(indices.i[3 * initialTriangleSample.triangleID + int(mod(currentVertexIndex + 2, 3))]);
+
+            rayOrigin = initialTriangleSample.rayOrigin;
+            vec3 vec = v0.worldPos - rayOrigin;
+            
+            vec3 directions[3];
+            directions[0] = normalize(cross(vec, v2.worldPos - v0.worldPos));
+            directions[1] = normalize(cross(vec, v0.worldPos - v1.worldPos));
+            if (dot(directions[0], directions[1]) > 0.0) {
+                directions[2] = normalize(directions[0] + directions[1]);
+            } else {
+                directions[2] = normalize(cross(vec, directions[1]) + cross(directions[0], vec));
+            }
+
+            float epsilon = 5e-5;
+            uint outerVertexIndex = uint(mod(launchIndex, 3.0));
+            vec3 outerTrianglePoint = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
+            rayDir = normalize(outerTrianglePoint - rayOrigin);
+
+            // Trace ray
+            uint rayFlags = gl_RayFlagsOpaqueNV;
+            uint cullMask = 0xff;
+            float tmin = 0.001;
+            float tmax = 100000.0;
+            traceNV(
+                topLevelAS,     // acceleration structure
+                rayFlags,       // rayFlags
+                cullMask,       // cullMask
+                0,              // sbtRecordOffset
+                0,              // sbtRecordStride
+                0,              // missIndex
+                rayOrigin,      // ray origin
+                tmin,           // ray min range
+                rayDir,         // ray direction
+                tmax,           // ray max range
+                0               // payload (location = 0)
+            );
+
+            vec3 hitPoint = hitInfo.xyz;
+            int triangleID = int(hitInfo.w);
+            //randomSamplingOutput[launchIndex * 19 + 1 + i * 2] = triangleID; //Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
+            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2] = vec4(triangleID); //Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
+            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2] = TriangleOut(triangleID, rayOrigin, hitPoint);
+            //randomSamplingOutput[launchIndex * 82 + 1 + i] = TriangleOut(triangleID, rayOrigin, hitPoint);
+            randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1) + 1 + i] = TriangleOut(triangleID, rayOrigin, hitPoint);
+            absSamples[i] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
+
+            // Check for discontinuity (reverse sampling)
+            TriangleOut reverseSamplingTriangle = TriangleOut(-1, vec3(0.0f), vec3(0.0f));
+            if (triangleID != -1) {
+                // Intersect ray with the plane of the original triangle
+                vec3 planeNormal = normalize(cross(v1.worldPos - v0.worldPos, v2.worldPos - v0.worldPos));
+                vec3 predictedHitPoint = intersectRayPlane(v0.worldPos, planeNormal, rayOrigin, rayDir);
+
+                // Check if there is a triangle in front of the predicted hit point
+                if ((abs(length(predictedHitPoint - rayOrigin)) - abs(length(hitPoint - rayOrigin))) > 0.985) {
+                    // Construct plane though the ray origin, the hit point of the original triangle and the
+                    // hit point of the new triangle
+                    planeNormal = normalize(cross(initialTriangleSample.rayHitPos - rayOrigin, hitPoint - rayOrigin));
+                    vec3 planePoint = initialTriangleSample.rayHitPos;
+
+                    // Get the vertices of the intersected, closer triangle
+                    Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
+                    Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
+                    Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
+
+                    // Choose the two vertices that are on the same side of the plane
+                    bool vertexSide[3] = {
+                        dot(planeNormal, v0.worldPos - planePoint) > 0,
+                        dot(planeNormal, v1.worldPos - planePoint) > 0,
+                        dot(planeNormal, v2.worldPos - planePoint) > 0
+                    };
+                    Vertex a, b, c;
+                    if (vertexSide[0] == vertexSide[1]) {
+                        a = v0;
+                        b = v1;
+                        c = v2;
+                    } else if (vertexSide[0] == vertexSide[2]) {
+                        a = v0;
+                        b = v2;
+                        c = v1;
+                    } else if (vertexSide[1] == vertexSide[2]) {
+                        a = v1;
+                        b = v2;
+                        c = v0;
+                    }
+
+                    // Construct a line between the two vertices on the same side of the plane each and the vertex on
+                    // the opposite side and intersect them with the plane
+                    vec3 p0 = intersectRayPlane(planePoint, planeNormal, a.worldPos, normalize(c.worldPos - a.worldPos));
+                    vec3 p1 = intersectRayPlane(planePoint, planeNormal, b.worldPos, normalize(c.worldPos - b.worldPos));
+
+                    // Compute corners of the view cell
+                    vec3 up = vec3(0.0, 1.0, 0.0);
+                    vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+                    vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+                    vec3 s0 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
+                    vec3 s1 = viewCell.pos + viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
+                    vec3 s2 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 - viewCellUp * viewCell.size.y * 0.5;
+
+                    // Construct points along the intersection line right outside of the triangle (on both sides)
+                    vec3 pointOutsideTriangle[2];
+                    pointOutsideTriangle[0] = p0 + normalize(p0 - p1) * 0.01;
+                    pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
+                    vec3 rayViewCellHitPoint;
+                    for (int k = 0; k < 2; k++) {
+                        // Check if the ray through the point right outside of the triangle and the predicted hit point
+                        // intersects the view cell
+                        vec3 rayDir = normalize(pointOutsideTriangle[k] - predictedHitPoint);
+                        rayViewCellHitPoint = intersectRayPlane(viewCell.pos, viewCell.normal, pointOutsideTriangle[k], rayDir);
+
+                        // Check if the ray-plane hit point lies within the bounds of the view cell
+                        // Project ray-plane hit point on local basis of the view cell
+                        float u = dot(rayViewCellHitPoint - s0, s1 - s0);
+                        float v = dot(rayViewCellHitPoint - s0, s2 - s0);
+
+                        // Check if the u & v coordinates are within the view cell
+                        if (u >= 0.0 && v >= 0.0 && u <= dot(s1 - s0, s1 - s0) && v <= dot(s2 - s0, s2 - s0)) {
+                            rayDir = -rayDir;
+                            rayOrigin = rayViewCellHitPoint;
+                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+
+                            reverseSamplingTriangle.triangleID = int(hitInfo.w);
+                            reverseSamplingTriangle.rayOrigin = rayOrigin;
+                            reverseSamplingTriangle.rayHitPos = hitInfo.xyz;
+                            //reverseSamplingSample.pos = pointOutsideTriangle[i];
+
+                            break;
+                        }
+                    }
+                }
+            }
+            //randomSamplingOutput[launchIndex * 19 + 1 + i * 2 + 1] = reverseSamplingTriangleID;
+            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2 + 1] = vec4(reverseSamplingTriangleID);
+            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2 + 1] = reverseSamplingTriangle;
+            if (reverseSamplingTriangle.triangleID != -1) {
+                uint insertionIndex = atomicAdd(edgeSubidvCounter, 1);
+                //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES + insertionIndex] = reverseSamplingTriangle;
+                //randomSamplingOutput[82 + NUM_ABS_SAMPLES * 82 + insertionIndex] = reverseSamplingTriangle;
+                randomSamplingOutput[gl_LaunchSizeNV.x * (NUM_ABS_SAMPLES + 1) + insertionIndex] = reverseSamplingTriangle;
+            }
+        }
+
+
+        // Edge subdivision
+        for (int i = 0; i < NUM_ABS_SAMPLES; i++) {
+            const int numSamplesPerEdge = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
+
+            // Get two adjacent samples
+            Sample s0 = absSamples[i];
+            Sample s1 = absSamples[int(mod(i + 1, NUM_ABS_SAMPLES))];
+
+            // Only subdivide the edge between two adjacent samples if they correspond to
+            // different triangles
+            if (s0.triangleID != s1.triangleID) {
+                int index = int(numSamplesPerEdge / 2.0f);
+
+                // Initialize the array storing the generated samples
+                Sample samplesOutput[numSamplesPerEdge];
+                for (int k = 0; k < numSamplesPerEdge; k++) {
+                    samplesOutput[k] = Sample(-2, vec3(0.0), vec3(0.0), vec3(0.0));
+                }
+
+                samplesOutput[0] = s0;
+                samplesOutput[numSamplesPerEdge - 1] = s1;
+
+                vec3 rayOrigin;
+                if (s0.triangleID != -1) {
+                    rayOrigin = s0.rayOrigin;
+                } else {
+                    rayOrigin = s1.rayOrigin;
+                }
+
+                // Calculate the first sample in the middle of the edge
+                vec3 samplePos = (samplesOutput[numSamplesPerEdge - 1].pos + samplesOutput[0].pos) / 2.0f;
+                traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+                samplesOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+
+                vec3 offset = (samplesOutput[numSamplesPerEdge - 1].pos - samplesOutput[0].pos) / 2.0f;
+                for (int k = 0; k < MAX_SUBDIVISION_STEPS - 1; k++) {
+                    offset /= 2.0f;
+
+                    // Continue subdivision only if the distance of the new samples are
+                    // further than a threshold
+                    if (length(offset) <= SAMPLE_DISTANCE_THRESHOLD) {
+                        continue;
+                    }
+
+                    for (int m = 0; m < pow(2, k); m++) {
+                        int currentIndex = index + (index * 2) * m;
+                        Sample currentSample = samplesOutput[currentIndex];
+                        if (currentSample.triangleID == -2) {
+                            continue;
+                        }
+
+                        // Check if a new sample should be generated and a ray traced, that is if two adjacent
+                        // samples correspond to different triangles
+                        if (currentSample.triangleID != samplesOutput[int(currentIndex + index)].triangleID) {
+                            vec3 rayOrigin;
+                            if (currentSample.triangleID != -1) {
+                                rayOrigin = currentSample.rayOrigin;
+                            } else {
+                                rayOrigin = samplesOutput[int(currentIndex + index)].rayOrigin;
+                            }
+
+                            // Calculate the position of a new sample in direction +offset of the current sample
+                            vec3 samplePos = currentSample.pos + offset;
+                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+                            samplesOutput[int(currentIndex + index / 2.0f)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                        }
+
+                        if (currentSample.triangleID != samplesOutput[int(currentIndex - index)].triangleID) {
+                            vec3 rayOrigin;
+                            if (currentSample.triangleID != -1) {
+                                rayOrigin = currentSample.rayOrigin;
+                            } else {
+                                rayOrigin = samplesOutput[int(currentIndex - index)].rayOrigin;
+                            }
+
+                            // Calculate the position of a new sample in direction -offset of the current sample
+                            vec3 samplePos = currentSample.pos - offset;
+                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+                            samplesOutput[int(currentIndex - index / 2.0f)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                        }
+                    }
+
+                    index = int(index / 2.0f);
+                }
+
+                // Add the samples to the output buffer
+                const int numSubdivSamples = numSamplesPerEdge - 2;
+                uint foundTriangles = 0;
+                for (int k = 0; k < numSubdivSamples; k++) {
+                    if (samplesOutput[k + 1].triangleID >= 0) {
+                        foundTriangles++;
+                    }
+                }
+                uint insertionIndex = atomicAdd(edgeSubidvCounter, foundTriangles - 1);
+                for (int k = 0, m = 0; k < numSubdivSamples; k++) {
+                    //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES * 2 + i * numSubdivSamples + k] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
+                    if (samplesOutput[k + 1].triangleID >= 0) {
+                        //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES + insertionIndex + k] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
+                        randomSamplingOutput[gl_LaunchSizeNV.x * (NUM_ABS_SAMPLES + 1) + insertionIndex + m] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
+                        m++;
+                    }
+                }
+            }
+        }
+    }
+    
+    //randomSamplingOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
 }
