@@ -305,7 +305,7 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
@@ -717,7 +717,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     );
 
     ubo.view = glm::lookAt(
-        glm::vec3(10.5f,6.3f,-5.2f),
+        glm::vec3(10.5f,8.0f,-5.2f),
         glm::vec3(7.0f,6.0f,-2.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
         /*
@@ -747,7 +747,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 void VulkanRenderer::startNextFrame(
     uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
 ) {
-    updateUniformBuffer(0);
+    //updateUniformBuffer(0);
 
     // Rasterization
     VkRenderPassBeginInfo renderPassInfo = {};
@@ -808,7 +808,7 @@ void VulkanRenderer::startNextFrame(
         &descriptorSets[swapChainImageIndex], 0, nullptr
     );
 
-    updateUniformBuffer(swapChainImageIndex);
+    //updateUniformBuffer(swapChainImageIndex);
 
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -824,13 +824,15 @@ void VulkanRenderer::togglePVSVisualization() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(10.5f, 6.3f, -5.2f);
+    glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
     glm::vec3 center = glm::vec3(7.0f, 6.0f, -2.0f);
+
+    updateUniformBuffer(0);
+    updateUniformBuffer(1);
 
     visibilityManager.addViewCell(
         pos,
         glm::vec2(0.2f, 0.2f),
-        //glm::vec3(0.0f, 0.0f, -1.0f)
         glm::normalize(center - pos)
         //-glm::normalize(pos)
         //glm::vec3(16.0f, 4.0f, 0.0f),
@@ -840,12 +842,12 @@ void VulkanRenderer::initVisibilityManager() {
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers, 9
+        uniformBuffers, 1
     );
 }
 
 void VulkanRenderer::startVisibilityThread() {
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < 1; i++) {
         visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i));
     }
 }
