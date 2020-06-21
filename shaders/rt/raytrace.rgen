@@ -96,15 +96,11 @@ void main() {
         vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
         
         // Map Halton point to point on view cell
-        //vec2 haltonPoint = vec2(points[launchIndex * 2], points[launchIndex * 2 + 1]);
         vec2 haltonPoint = points[launchIndex];
         vec2 offset = (haltonPoint - vec2(0.5)) * viewCell.size;
         rayOrigin = viewCell.pos + offset.x * viewCellRight + offset.y * viewCellUp;
 
         // Use a different Halton point to calculate the ray direction
-        //haltonPoint = vec2(points[(gl_LaunchSizeNV.x - launchIndex - 2) * 2], points[(gl_LaunchSizeNV.x - launchIndex - 2) * 2 + 1]);
-
-        //haltonPoint = points[(gl_LaunchSizeNV.x - launchIndex - 1)];
         haltonPoint = points[int(mod(launchIndex + gl_LaunchSizeNV.x * 0.5, gl_LaunchSizeNV.x))];
 
         // Map Halton point to point on hemisphere
@@ -139,13 +135,9 @@ void main() {
         initialTriangleSample = triangles[launchIndex];
     }
     
-    for (int i = 0; i < NUM_ABS_SAMPLES + 1; i++) {
-        randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1) + i] = TriangleOut(-1, vec3(0.0f), vec3(0.0f));
-    }
-    
     if (initialTriangleSample.triangleID != -1) {
-        //randomSamplingOutput[launchIndex * 82] = TriangleOut(initialTriangleSample.triangleID, initialTriangleSample.rayOrigin, initialTriangleSample.rayHitPos); //initialTriangleSample;
-        randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1)] = initialTriangleSample; //TriangleOut(initialTriangleSample.triangleID, initialTriangleSample.rayOrigin, initialTriangleSample.rayHitPos); //initialTriangleSample;
+        randomSamplingOutput[launchIndex] = initialTriangleSample;
+
         // ABS
         int currentTriangleIndex = initialTriangleSample.triangleID;
         Sample absSamples[9];
@@ -194,11 +186,6 @@ void main() {
 
             vec3 hitPoint = hitInfo.xyz;
             int triangleID = int(hitInfo.w);
-            //randomSamplingOutput[launchIndex * 19 + 1 + i * 2] = triangleID; //Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
-            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2] = vec4(triangleID); //Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
-            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2] = TriangleOut(triangleID, rayOrigin, hitPoint);
-            //randomSamplingOutput[launchIndex * 82 + 1 + i] = TriangleOut(triangleID, rayOrigin, hitPoint);
-            randomSamplingOutput[launchIndex * (NUM_ABS_SAMPLES + 1) + 1 + i] = TriangleOut(triangleID, rayOrigin, hitPoint);
             absSamples[i] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
 
             // Check for discontinuity (reverse sampling)
@@ -279,24 +266,34 @@ void main() {
                             reverseSamplingTriangle.triangleID = int(hitInfo.w);
                             reverseSamplingTriangle.rayOrigin = rayOrigin;
                             reverseSamplingTriangle.rayHitPos = hitInfo.xyz;
-                            //reverseSamplingSample.pos = pointOutsideTriangle[i];
 
                             break;
                         }
                     }
                 }
             }
-            //randomSamplingOutput[launchIndex * 19 + 1 + i * 2 + 1] = reverseSamplingTriangleID;
-            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2 + 1] = vec4(reverseSamplingTriangleID);
-            //randomSamplingOutput[launchIndex * 82 + 1 + i * 2 + 1] = reverseSamplingTriangle;
             if (reverseSamplingTriangle.triangleID != -1) {
                 uint insertionIndex = atomicAdd(edgeSubidvCounter, 1);
-                //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES + insertionIndex] = reverseSamplingTriangle;
-                //randomSamplingOutput[82 + NUM_ABS_SAMPLES * 82 + insertionIndex] = reverseSamplingTriangle;
-                randomSamplingOutput[gl_LaunchSizeNV.x * (NUM_ABS_SAMPLES + 1) + insertionIndex] = reverseSamplingTriangle;
+                randomSamplingOutput[gl_LaunchSizeNV.x + insertionIndex] = reverseSamplingTriangle;
             }
         }
 
+        // Insert non-duplicate ABS triangles into the output buffer
+        for (int i = 0; i < NUM_ABS_SAMPLES; i++) {
+            if (absSamples[i].triangleID != -1) {
+                bool duplicate = false;
+                for (int k = i + 1; k < NUM_ABS_SAMPLES; k++) {
+                    if (absSamples[i].triangleID == absSamples[k].triangleID) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    uint insertionIndex = atomicAdd(edgeSubidvCounter, 1);
+                    randomSamplingOutput[gl_LaunchSizeNV.x + insertionIndex] = TriangleOut(absSamples[i].triangleID, absSamples[i].rayOrigin, absSamples[i].rayHitPos);
+                }
+            }
+        }
 
         // Edge subdivision
         for (int i = 0; i < NUM_ABS_SAMPLES; i++) {
@@ -393,16 +390,12 @@ void main() {
                 }
                 uint insertionIndex = atomicAdd(edgeSubidvCounter, foundTriangles - 1);
                 for (int k = 0, m = 0; k < numSubdivSamples; k++) {
-                    //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES * 2 + i * numSubdivSamples + k] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
                     if (samplesOutput[k + 1].triangleID >= 0) {
-                        //randomSamplingOutput[launchIndex * 82 + 1 + NUM_ABS_SAMPLES + insertionIndex + k] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
-                        randomSamplingOutput[gl_LaunchSizeNV.x * (NUM_ABS_SAMPLES + 1) + insertionIndex + m] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
+                        randomSamplingOutput[gl_LaunchSizeNV.x + insertionIndex + m] = TriangleOut(samplesOutput[k + 1].triangleID, samplesOutput[k + 1].rayOrigin, samplesOutput[k + 1].rayHitPos);
                         m++;
                     }
                 }
             }
         }
     }
-    
-    //randomSamplingOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
 }

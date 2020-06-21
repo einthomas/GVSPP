@@ -306,6 +306,7 @@ void VulkanRenderer::loadModel() {
     std::string warn, err;
 
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
@@ -717,6 +718,11 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     );
 
     ubo.view = glm::lookAt(
+                /*
+        glm::vec3(0.0f, 0.0f, 30.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f)
+                    */
         glm::vec3(10.5f,8.0f,-5.2f),
         glm::vec3(7.0f,6.0f,-2.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)
@@ -826,6 +832,9 @@ void VulkanRenderer::togglePVSVisualization() {
 void VulkanRenderer::initVisibilityManager() {
     glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
     glm::vec3 center = glm::vec3(7.0f, 6.0f, -2.0f);
+
+    //glm::vec3 pos = glm::vec3(0.0f, 0.0f, 3.0f);
+    //glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);

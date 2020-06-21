@@ -1250,7 +1250,7 @@ unsigned int VisibilityManager::randomSample(
     );
 
     // Get number of intersected triangles from the GPU
-    int numTriangles = 0;
+    int numTriangles = numRays;
     {
         VkDeviceSize bufferSize = sizeof(unsigned int);
 
@@ -1270,10 +1270,7 @@ unsigned int VisibilityManager::randomSample(
         void *data;
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
-        numTriangles = 10 * numRays;
-        if (n[0] > 0) {
-            numTriangles += n[0] + 1;
-        }
+        numTriangles += n[0];
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
