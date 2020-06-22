@@ -47,6 +47,12 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     : window(w), visibilityManager()
 {
     initResources();
+
+    cameraPos = glm::vec3(10.5f, 8.0f, -5.2f);
+    glm::vec3 cameraTarget = glm::vec3(7.0f, 6.0f, -2.0f);
+    cameraForward = glm::normalize(cameraTarget - cameraPos);
+    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
 }
 
 void VulkanRenderer::initResources() {
@@ -717,21 +723,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
         glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
     );
 
-    ubo.view = glm::lookAt(
-                /*
-        glm::vec3(0.0f, 0.0f, 30.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-                    */
-        glm::vec3(10.5f,8.0f,-5.2f),
-        glm::vec3(7.0f,6.0f,-2.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-        /*
-        glm::vec3(0.0f, 0.0f, -10.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-        */
-    );
+    ubo.view = glm::lookAt(cameraPos, cameraPos + cameraForward, glm::vec3(0.0f, 1.0f, 0.0f));
 
     ubo.projection = glm::perspective(
         glm::radians(45.0f),
@@ -753,7 +745,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 void VulkanRenderer::startNextFrame(
     uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
 ) {
-    //updateUniformBuffer(0);
+    updateUniformBuffer(swapChainImageIndex);
 
     // Rasterization
     VkRenderPassBeginInfo renderPassInfo = {};
@@ -829,25 +821,37 @@ void VulkanRenderer::togglePVSVisualization() {
     std::cout << "Visualize PVS: " << visualizePVS << std::endl;
 }
 
+void VulkanRenderer::nextCorner() {
+    glm::vec3 viewCellRight = glm::normalize(glm::cross(visibilityManager.viewCells[0].normal, glm::vec3(0.0f, 1.0f, 0.0f)));
+    glm::vec3 viewCellUp = glm::normalize(glm::cross(visibilityManager.viewCells[0].normal, viewCellRight));
+
+    glm::vec2 halfSize = visibilityManager.viewCells[0].size * 0.5f;
+    glm::vec2 offset(0.0f);
+    if (currentViewCellCornerView == 0) {
+        offset = glm::vec2(-halfSize.x, halfSize.y);
+    } else if (currentViewCellCornerView == 1) {
+        offset = glm::vec2(halfSize.x, halfSize.y);
+    } else if (currentViewCellCornerView == 2) {
+        offset = glm::vec2(-halfSize.x, -halfSize.y);
+    } else if (currentViewCellCornerView == 3) {
+        offset = glm::vec2(halfSize.x, -halfSize.y);
+    }
+    currentViewCellCornerView = (currentViewCellCornerView + 1) % 4;
+
+    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;
+}
+
 void VulkanRenderer::initVisibilityManager() {
     glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
     glm::vec3 center = glm::vec3(7.0f, 6.0f, -2.0f);
-
-    //glm::vec3 pos = glm::vec3(0.0f, 0.0f, 3.0f);
-    //glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
     visibilityManager.addViewCell(
         pos,
-        glm::vec2(0.2f, 0.2f),
+        glm::vec2(1.2f, 1.2f),
         glm::normalize(center - pos)
-        //-glm::normalize(pos)
-        //glm::vec3(16.0f, 4.0f, 0.0f),
-        //glm::vec2(1.0f, 1.0f),
-        //glm::normalize(glm::vec3(0.0) - glm::vec3(16.0f, 4.0f, 0.0f))
-        //glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,

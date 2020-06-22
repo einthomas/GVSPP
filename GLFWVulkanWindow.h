@@ -100,7 +100,14 @@ private:
     std::vector<VkFence> imagesInFlight;
     std::vector<VkCommandBuffer> commandBuffers;
 
-    void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    float deltaTime = 0.0f;
+    float lastFrame = 0.0f;
+    bool firstMouse = true;
+    double lastX;
+    double lastY;
+    double yaw;
+    double pitch;
+
     void createSurface();
     void createInstance();
     bool checkValidationLayerSupport();
@@ -127,6 +134,8 @@ private:
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
     VkFormat findDepthFormat();
     void cleanup();
+    static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 };
 
 #endif // GLFWWINDOW_H

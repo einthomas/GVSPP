@@ -13,6 +13,11 @@
 
 class VulkanRenderer { // : public QVulkanWindowRenderer {
 public:
+    glm::vec3 cameraPos;
+    glm::vec3 cameraForward;
+    glm::vec3 cameraRight;
+    glm::vec3 cameraUp;
+
     VulkanRenderer(GLFWVulkanWindow *w);
 
     void initResources();
@@ -23,9 +28,10 @@ public:
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
     );
     void togglePVSVisualization();
+    void nextCorner();
     void startVisibilityThread();
 
-private:
+private:    
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
 
@@ -52,6 +58,7 @@ private:
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
     VkSampler textureSampler;
+    int currentViewCellCornerView = 0;
 
     void createGraphicsPipeline();
     void createVertexBuffer();

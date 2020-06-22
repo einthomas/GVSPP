@@ -534,17 +534,36 @@ void GLFWVulkanWindow::createFramebuffers() {
     }
 }
 
-bool vReleased = false;
 void GLFWVulkanWindow::mainLoop() {
+    glfwSetWindowUserPointer(window, this);
+
+    glfwSetKeyCallback(window, GLFWVulkanWindow::keyCallback);
+
     while (!glfwWindowShouldClose(window)) {
+        float currentTime = glfwGetTime();
+        deltaTime = currentTime - lastFrame;
+        lastFrame = currentTime;
+
         glfwPollEvents();
 
-        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && vReleased) {
-            renderer->togglePVSVisualization();
-            vReleased = false;
+        float cameraSpeed = 1.5f * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            renderer->cameraPos += cameraSpeed * renderer->cameraForward;
         }
-        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_RELEASE) {
-            vReleased = true;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            renderer->cameraPos -= cameraSpeed * renderer->cameraForward;
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            renderer->cameraPos += glm::normalize(glm::cross(renderer->cameraForward, renderer->cameraUp)) * cameraSpeed;
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            renderer->cameraPos -= glm::normalize(glm::cross(renderer->cameraForward, renderer->cameraUp)) * cameraSpeed;
+        }
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            renderer->cameraPos -= renderer->cameraUp * cameraSpeed;
+        }
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+            renderer->cameraPos += renderer->cameraUp * cameraSpeed;
         }
 
         uint32_t imageIndex;
@@ -758,4 +777,61 @@ void GLFWVulkanWindow::cleanup() {
     glfwDestroyWindow(window);
 
     glfwTerminate();
+}
+
+void GLFWVulkanWindow::mouseCallback(GLFWwindow *window, double xpos, double ypos) {
+    // https://learnopengl.com/
+    GLFWVulkanWindow *vulkanWindow = static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window));
+
+    if (vulkanWindow->firstMouse) {
+        vulkanWindow->lastX = xpos;
+        vulkanWindow->lastY = ypos;
+        vulkanWindow->firstMouse = false;
+    }
+
+    float xoffset = xpos - vulkanWindow->lastX;
+    float yoffset = vulkanWindow->lastY - ypos;
+    vulkanWindow->lastX = xpos;
+    vulkanWindow->lastY = ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    vulkanWindow->yaw += xoffset;
+    vulkanWindow->pitch += yoffset;
+
+    if (vulkanWindow->pitch > 89.0f) {
+        vulkanWindow->pitch = 89.0f;
+    } else if (vulkanWindow->pitch < -89.0f) {
+        vulkanWindow->pitch = -89.0f;
+    }
+
+    glm::vec3 direction;
+    direction.x = cos(glm::radians(vulkanWindow->yaw)) * cos(glm::radians(vulkanWindow->pitch));
+    direction.y = sin(glm::radians(vulkanWindow->pitch));
+    direction.z = sin(glm::radians(vulkanWindow->yaw)) * cos(glm::radians(vulkanWindow->pitch));
+    vulkanWindow->renderer->cameraForward = glm::normalize(direction);
+}
+
+void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    if (action == GLFW_RELEASE) {
+        if (key == GLFW_KEY_V) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->togglePVSVisualization();
+        }
+
+        if (key == GLFW_KEY_ESCAPE) {
+            if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                glfwSetCursorPosCallback(window, GLFWVulkanWindow::mouseCallback);
+            } else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                glfwSetCursorPosCallback(window, nullptr);
+            }
+        }
+
+        if (key == GLFW_KEY_F) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->nextCorner();
+        }
+    }
 }

@@ -35,6 +35,8 @@ struct GeometryInstance {
 
 class VisibilityManager {
 public:
+    std::vector<ViewCell> viewCells;
+
     VisibilityManager();
     void init(
         VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
@@ -68,7 +70,6 @@ private:
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
 
     std::vector<std::vector<glm::vec2>> haltonPoints;
-    std::vector<ViewCell> viewCells;
     PVS<int> pvs;
     std::mutex *queueSubmitMutex;
     std::atomic<int> tracedRays;
