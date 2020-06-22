@@ -58,7 +58,7 @@ private:
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 1000000;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
 
-    const size_t RAYS_PER_ITERATION = 2560;
+    const size_t RAYS_PER_ITERATION = 51200;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 9;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 25600;
     const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9

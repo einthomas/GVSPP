@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iterator>
 #include <algorithm>
+#include <random>
 
 #include <unordered_set>
 
@@ -67,13 +68,16 @@ void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 nor
  * From "Sampling with Hammersley and Halton Points" (Wong et al. 1997)
  */
 void VisibilityManager::generateHaltonPoints(int n, int offset, int p2) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
     haltonPoints.resize(numThreads);
     for (int i = 0; i < numThreads; i++) {
         haltonPoints[i].resize(n);
 
         float p, u, v, ip;
         int k, kk, pos, a;
-        for (k = offset, pos = 0; k < n + offset; k++) {
+        for (k = offset + i * n, pos = 0; k < n + offset + i * n; k++) {
             u = 0;
             for (p = 0.5, kk = k; kk; p *= 0.5, kk >>= 1) {
                 if (kk & 1) {
@@ -93,6 +97,8 @@ void VisibilityManager::generateHaltonPoints(int n, int offset, int p2) {
             haltonPoints[i][pos].y = v;
             pos++;
         }
+
+        std::shuffle(haltonPoints[i].begin(), haltonPoints[i].end(), gen);
     }
 }
 

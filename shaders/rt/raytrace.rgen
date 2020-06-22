@@ -101,15 +101,15 @@ void main() {
         rayOrigin = viewCell.pos + offset.x * viewCellRight + offset.y * viewCellUp;
 
         // Use a different Halton point to calculate the ray direction
-        haltonPoint = points[int(mod(launchIndex + gl_LaunchSizeNV.x * 0.5, gl_LaunchSizeNV.x))];
+        haltonPoint = points[int(mod(launchIndex + 1, gl_LaunchSizeNV.x))];
 
         // Map Halton point to point on hemisphere
         float phi = 2.0 * 3.1415926 * haltonPoint.y;
         float r = sqrt(max(1.0 - haltonPoint.x * haltonPoint.x, 0.0));
-        rayDir = normalize(vec3(r * cos(phi), r * sin(phi), haltonPoint.x));
+        rayDir = (vec3(r * cos(phi), r * sin(phi), haltonPoint.x));
 
         // Transform hemisphere point to view cell coordinate system
-        rayDir = rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal;
+        rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal);
 
         // Trace ray
         uint rayFlags = gl_RayFlagsOpaqueNV;
@@ -294,6 +294,7 @@ void main() {
                 }
             }
         }
+
 
         // Edge subdivision
         for (int i = 0; i < NUM_ABS_SAMPLES; i++) {
