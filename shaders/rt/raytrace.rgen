@@ -104,9 +104,10 @@ void main() {
         haltonPoint = points[int(mod(launchIndex + 1, gl_LaunchSizeNV.x))];
 
         // Map Halton point to point on hemisphere
+        float z = haltonPoint.x;
         float phi = 2.0 * 3.1415926 * haltonPoint.y;
-        float r = sqrt(max(1.0 - haltonPoint.x * haltonPoint.x, 0.0));
-        rayDir = (vec3(r * cos(phi), r * sin(phi), haltonPoint.x));
+        float r = sqrt(max(1.0 - z * z, 0.0));
+        rayDir = (vec3(r * cos(phi), r * sin(phi), z));
 
         // Transform hemisphere point to view cell coordinate system
         rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCell.normal);
@@ -186,11 +187,22 @@ void main() {
 
             vec3 hitPoint = hitInfo.xyz;
             int triangleID = int(hitInfo.w);
-            absSamples[i] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
+
+            v0 = unpackVertexData(indices.i[3 * triangleID]);
+            v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
+            v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
+            if (dot(viewCell.normal, v0.worldPos - viewCell.pos) > 0
+                || dot(viewCell.normal, v1.worldPos - viewCell.pos) > 0
+                || dot(viewCell.normal, v2.worldPos - viewCell.pos) > 0)
+            {
+                absSamples[i] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
+            } else {
+                absSamples[i] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
+            }
 
             // Check for discontinuity (reverse sampling)
-            TriangleOut reverseSamplingTriangle = TriangleOut(-1, vec3(0.0f), vec3(0.0f));
             if (triangleID != -1) {
+                TriangleOut reverseSamplingTriangle = TriangleOut(-1, vec3(0.0f), vec3(0.0f));
                 // Intersect ray with the plane of the original triangle
                 vec3 planeNormal = normalize(cross(v1.worldPos - v0.worldPos, v2.worldPos - v0.worldPos));
                 vec3 predictedHitPoint = intersectRayPlane(v0.worldPos, planeNormal, rayOrigin, rayDir);
@@ -201,11 +213,6 @@ void main() {
                     // hit point of the new triangle
                     planeNormal = normalize(cross(initialTriangleSample.rayHitPos - rayOrigin, hitPoint - rayOrigin));
                     vec3 planePoint = initialTriangleSample.rayHitPos;
-
-                    // Get the vertices of the intersected, closer triangle
-                    Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
-                    Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
-                    Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
 
                     // Choose the two vertices that are on the same side of the plane
                     bool vertexSide[3] = {
@@ -271,10 +278,11 @@ void main() {
                         }
                     }
                 }
-            }
-            if (reverseSamplingTriangle.triangleID != -1) {
-                uint insertionIndex = atomicAdd(edgeSubidvCounter, 1);
-                randomSamplingOutput[gl_LaunchSizeNV.x + insertionIndex] = reverseSamplingTriangle;
+
+                if (reverseSamplingTriangle.triangleID != -1) {
+                    uint insertionIndex = atomicAdd(edgeSubidvCounter, 1);
+                    randomSamplingOutput[gl_LaunchSizeNV.x + insertionIndex] = reverseSamplingTriangle;
+                }
             }
         }
 

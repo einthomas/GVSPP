@@ -842,16 +842,19 @@ void VulkanRenderer::nextCorner() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
-    glm::vec3 center = glm::vec3(7.0f, 6.0f, -2.0f);
+    //glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
+    //glm::vec3 normal = glm::normalize(glm::vec3(7.0f, 6.0f, -2.0f) - pos);
+
+    glm::vec3 pos = glm::vec3(5.095511, 6.358510, -0.314647);
+    glm::vec3 normal = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
     visibilityManager.addViewCell(
         pos,
-        glm::vec2(1.2f, 1.2f),
-        glm::normalize(center - pos)
+        glm::vec2(0.2f, 0.2f),
+        normal
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,

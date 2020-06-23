@@ -3,6 +3,8 @@
 
 #include "Renderer.h"
 
+#include <glm/gtx/string_cast.hpp>
+
 void GLFWVulkanWindow::initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // Tell GLFW to not create an OpenGL context
@@ -832,6 +834,12 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
 
         if (key == GLFW_KEY_F) {
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->nextCorner();
+        }
+
+        if (key == GLFW_KEY_Q) {
+            auto *vulkanWindow = static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window));
+            std::cout << glm::to_string(vulkanWindow->renderer->cameraPos) << " "
+                      << glm::to_string(vulkanWindow->renderer->cameraForward) << std::endl;
         }
     }
 }
