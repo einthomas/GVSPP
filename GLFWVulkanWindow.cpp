@@ -835,11 +835,18 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
         if (key == GLFW_KEY_F) {
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->nextCorner();
         }
+        if (key == GLFW_KEY_N) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->alignCameraWithViewCellNormal();
+        }
 
         if (key == GLFW_KEY_Q) {
             auto *vulkanWindow = static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window));
-            std::cout << glm::to_string(vulkanWindow->renderer->cameraPos) << " "
-                      << glm::to_string(vulkanWindow->renderer->cameraForward) << std::endl;
+            std::cout << "glm::vec3 pos = glm::"
+                      << glm::to_string(vulkanWindow->renderer->cameraPos)
+                      << "; glm::vec3 normal = glm::normalize(glm::"
+                      << glm::to_string(vulkanWindow->renderer->cameraForward)
+                      << ");"
+                      << std::endl;
         }
     }
 }

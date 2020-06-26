@@ -51,28 +51,33 @@ void VisibilityManager::init(
     }
 
     createBuffers(indices);
-    generateHaltonPoints(RAYS_PER_ITERATION);
+
+    generateHaltonPoints2d(RAYS_PER_ITERATION);
     for (int i = 0; i < numThreads; i++) {
         copyHaltonPointsToBuffer(i);
     }
+
     createViewCellBuffer();
 
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
 }
 
-void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal) {
+void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal) {
     viewCells.push_back(ViewCell(pos, size, normal));
 }
 
 /*
  * From "Sampling with Hammersley and Halton Points" (Wong et al. 1997)
  */
-void VisibilityManager::generateHaltonPoints(int n, int offset, int p2) {
+void VisibilityManager::generateHaltonPoints2d(int n, int offset, int p2) {
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    haltonPoints.resize(numThreads);
+    if (haltonPoints.size() == 0) {
+        haltonPoints.resize(numThreads);
+    }
     for (int i = 0; i < numThreads; i++) {
+        haltonPoints[i].clear();
         haltonPoints[i].resize(n);
 
         float p, u, v, ip;
@@ -103,7 +108,8 @@ void VisibilityManager::generateHaltonPoints(int n, int offset, int p2) {
 }
 
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
-    VkDeviceSize bufferSize = sizeof(haltonPoints[threadId][0]) * haltonPoints[threadId].size();
+    VkDeviceSize bufferSize;
+    bufferSize = sizeof(haltonPoints[threadId][0]) * haltonPoints[threadId].size();
 
     // Create staging buffer using host-visible memory
     VkBuffer stagingBuffer;
@@ -116,7 +122,7 @@ void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
     // Copy halton points to the staging buffer
     void *data;
     vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-    memcpy(data, haltonPoints[threadId].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+    memcpy(data, haltonPoints[threadId].data(), (size_t) bufferSize);  // Copy 2d halton points to mapped memory
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
     // Copy halton points from the staging buffer to the halton points buffer
@@ -211,7 +217,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     randomSamplingOutputPointer.resize(numThreads);
 
     // Random sampling buffers
-    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * std::max(RAYS_PER_ITERATION, MAX_ABS_TRIANGLES_PER_ITERATION) * 82;
+    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * (std::max(RAYS_PER_ITERATION, MAX_ABS_TRIANGLES_PER_ITERATION) * 9 * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 2 + 1);
     for (int i = 0; i < numThreads; i++) {
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -1594,7 +1600,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         absWorkingVector.clear();
 
-        generateHaltonPoints(RAYS_PER_ITERATION, RAYS_PER_ITERATION * i);
+           generateHaltonPoints2d(RAYS_PER_ITERATION, RAYS_PER_ITERATION * i);
         copyHaltonPointsToBuffer(threadId);
     }
 

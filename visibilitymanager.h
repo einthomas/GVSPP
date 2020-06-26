@@ -44,8 +44,8 @@ public:
         const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
         int numThreads
     );
-    void addViewCell(glm::vec3 pos, glm::vec2 size, glm::vec3 normal);
-    void generateHaltonPoints(int n, int offset = 0, int p2 = 7);
+    void addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
+    void generateHaltonPoints2d(int n, int offset = 0, int p2 = 3);
     void rayTrace(const std::vector<uint32_t> &indices, int threadId);
     void releaseResources();
     VkBuffer getPVSIndexBuffer(
@@ -60,7 +60,7 @@ private:
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 1000000;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
 
-    const size_t RAYS_PER_ITERATION = 51200;
+    const size_t RAYS_PER_ITERATION = 5120;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 9;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 25600;
     const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9
@@ -70,6 +70,7 @@ private:
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
 
     std::vector<std::vector<glm::vec2>> haltonPoints;
+    std::vector<std::vector<glm::vec3>> haltonPoints3d;
     PVS<int> pvs;
     std::mutex *queueSubmitMutex;
     std::atomic<int> tracedRays;

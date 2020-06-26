@@ -29,6 +29,7 @@ public:
     );
     void togglePVSVisualization();
     void nextCorner();
+    void alignCameraWithViewCellNormal();
     void startVisibilityThread();
 
 private:    

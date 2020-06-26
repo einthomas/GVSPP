@@ -48,11 +48,14 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 {
     initResources();
 
-    cameraPos = glm::vec3(10.5f, 8.0f, -5.2f);
-    glm::vec3 cameraTarget = glm::vec3(7.0f, 6.0f, -2.0f);
+    cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
+    glm::vec3 cameraTarget = glm::vec3(0.0f);
     cameraForward = glm::normalize(cameraTarget - cameraPos);
     cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
     cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+
+    nextCorner();
+    alignCameraWithViewCellNormal();
 }
 
 void VulkanRenderer::initResources() {
@@ -70,9 +73,6 @@ void VulkanRenderer::initResources() {
     createDescriptorSets();
 
     initVisibilityManager();
-
-    // Start visibility ray tracing
-    //visibilityThread = std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices);
 }
 
 void VulkanRenderer::initSwapChainResources() {
@@ -311,7 +311,9 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/rstest/rstest.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
@@ -745,6 +747,9 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 void VulkanRenderer::startNextFrame(
     uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
 ) {
+    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+
     updateUniformBuffer(swapChainImageIndex);
 
     // Rasterization
@@ -825,35 +830,32 @@ void VulkanRenderer::nextCorner() {
     glm::vec3 viewCellRight = glm::normalize(glm::cross(visibilityManager.viewCells[0].normal, glm::vec3(0.0f, 1.0f, 0.0f)));
     glm::vec3 viewCellUp = glm::normalize(glm::cross(visibilityManager.viewCells[0].normal, viewCellRight));
 
-    glm::vec2 halfSize = visibilityManager.viewCells[0].size * 0.5f;
-    glm::vec2 offset(0.0f);
-    if (currentViewCellCornerView == 0) {
-        offset = glm::vec2(-halfSize.x, halfSize.y);
-    } else if (currentViewCellCornerView == 1) {
-        offset = glm::vec2(halfSize.x, halfSize.y);
-    } else if (currentViewCellCornerView == 2) {
-        offset = glm::vec2(-halfSize.x, -halfSize.y);
-    } else if (currentViewCellCornerView == 3) {
-        offset = glm::vec2(halfSize.x, -halfSize.y);
-    }
-    currentViewCellCornerView = (currentViewCellCornerView + 1) % 4;
+    glm::vec3 offset;
+    offset.x = currentViewCellCornerView % 2 == 0 ? -1.0f : 1.0f;
+    offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
+    offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
-    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;
+    glm::vec3 halfSize = visibilityManager.viewCells[0].size * 0.5f;
+    offset *= halfSize;
+    std::cout << glm::to_string(offset) << std::endl;
+    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y + visibilityManager.viewCells[0].normal * offset.z;
+    currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
+}
+
+void VulkanRenderer::alignCameraWithViewCellNormal() {
+    cameraForward = visibilityManager.viewCells[0].normal;
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    //glm::vec3 pos = glm::vec3(10.5f, 8.0f, -5.2f);
-    //glm::vec3 normal = glm::normalize(glm::vec3(7.0f, 6.0f, -2.0f) - pos);
-
-    glm::vec3 pos = glm::vec3(5.095511, 6.358510, -0.314647);
-    glm::vec3 normal = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);
+    glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
     visibilityManager.addViewCell(
         pos,
-        glm::vec2(0.2f, 0.2f),
+        glm::vec3(0.5f),
         normal
     );
     visibilityManager.init(
