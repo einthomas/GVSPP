@@ -1,6 +1,8 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
+//#define USE_3D_VIEW_CELL
+
 struct Vertex {
     vec3 pos;
     vec3 worldPos;
@@ -32,7 +34,7 @@ layout(binding = 4, set = 0) readonly buffer haltonPoints {
 };
 layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
-    vec2 size;
+    vec3 size;
     vec3 normal;
 } viewCell;
 
@@ -41,6 +43,9 @@ layout(binding = 0, set = 1) writeonly buffer absOutputBuffer {
 };
 layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
+};
+layout(binding = 2, set = 1) buffer triangleCounterBuffer {
+    uint triangleCounter;
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
@@ -66,9 +71,9 @@ vec3 intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir) {
 }
 
 void main() {
-    uint launchIndex = gl_LaunchIDNV.x;
-    uint currentTriangleIndex = uint(floor(launchIndex / 9.0));   // for each triangle 9 rays are shot i.e. for each triangle the shader is invoked 9 times
-    uint currentVertexIndex = uint(mod(floor(launchIndex / 3.0), 3.0));
+    const uint launchIndex = gl_LaunchIDNV.x;
+    const uint currentTriangleIndex = uint(floor(launchIndex / 9.0));   // for each triangle 9 rays are shot i.e. for each triangle the shader is invoked 9 times
+    const uint currentVertexIndex = uint(mod(floor(launchIndex / 3.0), 3.0));
 
     Sample s = absWorking[currentTriangleIndex];
     Vertex v0 = unpackVertexData(indices.i[3 * s.triangleID + currentVertexIndex]);
@@ -89,8 +94,8 @@ void main() {
 
     float epsilon = 5e-5;
     uint outerVertexIndex = uint(mod(launchIndex, 3.0));
-    vec3 outerTrianglePoint = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
-    vec3 rayDir = normalize(outerTrianglePoint - rayOrigin);
+    vec3 samplePos = v0.worldPos + epsilon * length(vec) * directions[outerVertexIndex];
+    vec3 rayDir = normalize(samplePos - rayOrigin);
 
     // Trace ray
     uint rayFlags = gl_RayFlagsOpaqueNV;
@@ -111,97 +116,177 @@ void main() {
         0               // payload (location = 0)
     );
 
-    vec3 hitPoint = hitInfo.xyz;
     int triangleID = int(hitInfo.w);
-    absOutput[launchIndex * 2] = Sample(triangleID, rayOrigin, hitPoint, outerTrianglePoint);
 
-    // // Check for discontinuity
-    Sample reverseSamplingSample = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
-    int reverseSamplingTriangleID = -1;
-    
+    absOutput[launchIndex * 2].triangleID = -1;
+    absOutput[launchIndex * 2 + 1].triangleID = -1;
+
     if (triangleID != -1) {
-        // Intersect ray with the plane of the original triangle
-        vec3 planeNormal = normalize(cross(v1.worldPos - v0.worldPos, v2.worldPos - v0.worldPos));
-        vec3 predictedHitPoint = intersectRayPlane(v0.worldPos, planeNormal, rayOrigin, rayDir);
+        vec3 hitPoint = hitInfo.xyz;
 
-        // Check if there is a triangle in front of the predicted hit point
-        if ((abs(length(predictedHitPoint - rayOrigin)) - abs(length(hitPoint - rayOrigin))) > 0.985) {
-            // Construct plane though the ray origin, the hit point of the original triangle and the
-            // hit point of the new triangle
-            planeNormal = normalize(cross(s.rayHitPos - rayOrigin, hitPoint - rayOrigin));
-            vec3 planePoint = s.rayHitPos;
+        #ifndef USE_3D_VIEW_CELL
+            v0 = unpackVertexData(indices.i[3 * triangleID]);
+            v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
+            v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
+            if (dot(viewCell.normal, v0.worldPos - viewCell.pos) > 0
+                || dot(viewCell.normal, v1.worldPos - viewCell.pos) > 0
+                || dot(viewCell.normal, v2.worldPos - viewCell.pos) > 0)
+            {
+        #endif
+            absOutput[launchIndex * 2] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
 
-            // Get the vertices of the intersected, closer triangle
-            Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
-            Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
-            Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
+            // Check for discontinuity
+            Sample reverseSamplingSample = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
 
-            // Choose the two vertices that are on the same side of the plane
-            bool vertexSide[3] = {
-                dot(planeNormal, v0.worldPos - planePoint) > 0,
-                dot(planeNormal, v1.worldPos - planePoint) > 0,
-                dot(planeNormal, v2.worldPos - planePoint) > 0
-            };
-            Vertex a, b, c;
-            if (vertexSide[0] == vertexSide[1]) {
-                a = v0;
-                b = v1;
-                c = v2;
-            } else if (vertexSide[0] == vertexSide[2]) {
-                a = v0;
-                b = v2;
-                c = v1;
-            } else if (vertexSide[1] == vertexSide[2]) {
-                a = v1;
-                b = v2;
-                c = v0;
-            }
+            #ifdef USE_3D_VIEW_CELL
+                vec3 up = vec3(0.0, 1.0, 0.0);
+                vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+                vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+                vec3 viewCellPos = viewCell.pos;
+                vec3 viewCellNormal = viewCell.normal;
 
-            // Construct a line between the two vertices on the same side of the plane each and the vertex on
-            // the opposite side and intersect them with the plane
-            vec3 p0 = intersectRayPlane(planePoint, planeNormal, a.worldPos, normalize(c.worldPos - a.worldPos));
-            vec3 p1 = intersectRayPlane(planePoint, planeNormal, b.worldPos, normalize(c.worldPos - b.worldPos));
+                const vec3 faceNormals[6] = { viewCell.normal, viewCellRight, -viewCell.normal, -viewCellRight, viewCellUp, -viewCellUp };
+                const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCell.normal, viewCell.normal };
+                const vec3 faceRights[6] = { viewCellRight, -viewCell.normal, -viewCellRight, viewCell.normal, viewCellRight, viewCellRight };
+            #endif
+            
+            // Intersect ray with the plane of the original triangle
+            vec3 planeNormal = normalize(cross(v1.worldPos - v0.worldPos, v2.worldPos - v0.worldPos));
+            vec3 predictedHitPoint = intersectRayPlane(v0.worldPos, planeNormal, rayOrigin, rayDir);
 
-            // Compute corners of the view cell
-            vec3 up = vec3(0.0, 1.0, 0.0);
-            vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-            vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
-            vec3 s0 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
-            vec3 s1 = viewCell.pos + viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
-            vec3 s2 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 - viewCellUp * viewCell.size.y * 0.5;
+            // Check if there is a triangle in front of the predicted hit point
+            if ((abs(length(predictedHitPoint - rayOrigin)) - abs(length(hitPoint - rayOrigin))) > 0.985) {
+                // Construct plane though the ray origin, the hit point of the original triangle and the
+                // hit point of the new triangle
+                planeNormal = normalize(cross(s.rayHitPos - rayOrigin, hitPoint - rayOrigin));
+                vec3 planePoint = s.rayHitPos;
 
-            // Construct points along the intersection line right outside of the triangle (on both sides)
-            vec3 pointOutsideTriangle[2];
-            pointOutsideTriangle[0] = p0 + normalize(p0 - p1) * 0.01;
-            pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
-            vec3 rayViewCellHitPoint;
-            for (int i = 0; i < 2; i++) {
-                // Check if the ray through the point right outside of the triangle and the predicted hit point
-                // intersects the view cell
-                vec3 rayDir = normalize(pointOutsideTriangle[i] - predictedHitPoint);
-                rayViewCellHitPoint = intersectRayPlane(viewCell.pos, viewCell.normal, pointOutsideTriangle[i], rayDir);
+                // Get the vertices of the intersected, closer triangle
+                Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
+                Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
+                Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
 
-                // Check if the ray-plane hit point lies within the bounds of the view cell
-                // Project ray-plane hit point on local basis of the view cell
-                float u = dot(rayViewCellHitPoint - s0, s1 - s0);
-                float v = dot(rayViewCellHitPoint - s0, s2 - s0);
+                // Choose the two vertices that are on the same side of the plane
+                bool vertexSide[3] = {
+                    dot(planeNormal, v0.worldPos - planePoint) > 0,
+                    dot(planeNormal, v1.worldPos - planePoint) > 0,
+                    dot(planeNormal, v2.worldPos - planePoint) > 0
+                };
+                Vertex a, b, c;
+                if (vertexSide[0] == vertexSide[1]) {
+                    a = v0;
+                    b = v1;
+                    c = v2;
+                } else if (vertexSide[0] == vertexSide[2]) {
+                    a = v0;
+                    b = v2;
+                    c = v1;
+                } else if (vertexSide[1] == vertexSide[2]) {
+                    a = v1;
+                    b = v2;
+                    c = v0;
+                }
 
-                // Check if the u & v coordinates are within the view cell
-                if (u >= 0.0 && v >= 0.0 && u <= dot(s1 - s0, s1 - s0) && v <= dot(s2 - s0, s2 - s0)) {
-                    rayDir = -rayDir;
-                    rayOrigin = rayViewCellHitPoint;
-                    traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                // Construct a line between the two vertices on the same side of the plane each and the vertex on
+                // the opposite side and intersect them with the plane
+                vec3 p0 = intersectRayPlane(planePoint, planeNormal, a.worldPos, normalize(c.worldPos - a.worldPos));
+                vec3 p1 = intersectRayPlane(planePoint, planeNormal, b.worldPos, normalize(c.worldPos - b.worldPos));
 
-                    reverseSamplingSample.triangleID = int(hitInfo.w);
-                    reverseSamplingSample.rayOrigin = rayOrigin;
-                    reverseSamplingSample.rayHitPos = hitInfo.xyz;
-                    reverseSamplingSample.pos = pointOutsideTriangle[i];
+                // Construct points along the intersection line right outside of the triangle (on both sides)
+                vec3 pointOutsideTriangle[2];
+                pointOutsideTriangle[0] = p0 + normalize(p0 - p1) * 0.01;
+                pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
+
+                #ifndef USE_3D_VIEW_CELL
+                    // Compute corners of the 2d view cell
+                    vec3 up = vec3(0.0, 1.0, 0.0);
+                    vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+                    vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+                    vec3 s0 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
+                    vec3 s1 = viewCell.pos + viewCellRight * viewCell.size.x * 0.5 + viewCellUp * viewCell.size.y * 0.5;
+                    vec3 s2 = viewCell.pos - viewCellRight * viewCell.size.x * 0.5 - viewCellUp * viewCell.size.y * 0.5;
+                #endif
+
+                // Intersect a ray through the predicted hit point and the points just outside the triangle each with
+                // the view cell
+                vec3 rayViewCellHitPoint;
+                for (int k = 0; k < 2; k++) {
+                    reverseSamplingSample.triangleID = -1;
                     
-                    break;
+                    vec3 rayDir = normalize(pointOutsideTriangle[k] - predictedHitPoint);
+
+                    #ifdef USE_3D_VIEW_CELL
+                        bool found = false;
+                        for (int m = 0; m < 6; m++) {
+                            if (dot(rayDir, faceNormals[m]) > 0) {
+                                continue;
+                            }
+
+                            // Intersect a ray through the point right outside of the triangle and the predicted hit point
+                            // with the current face of the view cell
+                            vec3 facePos = viewCell.pos + faceNormals[m] * viewCell.size * 0.5;
+                            rayViewCellHitPoint = intersectRayPlane(facePos, faceNormals[m], pointOutsideTriangle[k], rayDir);
+
+                            // Compute corners of the current view face
+                            vec3 s0 = facePos - faceRights[m] * viewCell.size.x * 0.5 + faceUps[m] * viewCell.size.y * 0.5;
+                            vec3 s1 = facePos + faceRights[m] * viewCell.size.x * 0.5 + faceUps[m] * viewCell.size.y * 0.5;
+                            vec3 s2 = facePos - faceRights[m] * viewCell.size.x * 0.5 - faceUps[m] * viewCell.size.y * 0.5;
+
+                            // Check if the ray-plane hit point lies within the bounds of the view cell
+                            // Project ray-plane hit point on local basis of the view cell
+                            float u = dot(rayViewCellHitPoint - s0, s1 - s0);
+                            float v = dot(rayViewCellHitPoint - s0, s2 - s0);
+
+                            // Check if the u & v coordinates are within the view cell
+                            if (u >= 0.0 && v >= 0.0 && u <= dot(s1 - s0, s1 - s0) && v <= dot(s2 - s0, s2 - s0)) {
+                                rayDir = -rayDir;
+                                rayOrigin = rayViewCellHitPoint;
+                                traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+
+                                reverseSamplingSample.triangleID = int(hitInfo.w);
+                                reverseSamplingSample.rayOrigin = rayOrigin;
+                                reverseSamplingSample.rayHitPos = hitInfo.xyz;
+                                reverseSamplingSample.pos = samplePos;
+
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (found) {
+                            break;
+                        }
+                    #else
+                        // Check if the ray through the point right outside of the triangle and the predicted hit point
+                        // intersects the view cell
+                        rayViewCellHitPoint = intersectRayPlane(viewCell.pos, viewCell.normal, pointOutsideTriangle[k], rayDir);
+
+                        // Check if the ray-plane hit point lies within the bounds of the view cell
+                        // Project ray-plane hit point on local basis of the view cell
+                        float u = dot(rayViewCellHitPoint - s0, s1 - s0);
+                        float v = dot(rayViewCellHitPoint - s0, s2 - s0);
+
+                        // Check if the u & v coordinates are within the view cell
+                        if (u >= 0.0 && v >= 0.0 && u <= dot(s1 - s0, s1 - s0) && v <= dot(s2 - s0, s2 - s0)) {
+                            rayDir = -rayDir;
+                            rayOrigin = rayViewCellHitPoint;
+                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+
+                            reverseSamplingSample.triangleID = int(hitInfo.w);
+                            reverseSamplingSample.rayOrigin = rayOrigin;
+                            reverseSamplingSample.rayHitPos = hitInfo.xyz;
+                            reverseSamplingSample.pos = samplePos;
+
+                            break;
+                        }
+                    #endif
+                }
+                
+                if (reverseSamplingSample.triangleID != -1) {
+                    absOutput[launchIndex * 2 + 1] = reverseSamplingSample;
                 }
             }
-        }
+        #ifndef USE_3D_VIEW_CELL
+            }
+        #endif
     }
-     
-    absOutput[launchIndex * 2 + 1] = reverseSamplingSample;
 }

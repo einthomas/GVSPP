@@ -311,22 +311,28 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/hairball/hairball.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/powerplant/powerplant.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/rstest/rstest.obj")) {
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
+    float scale = 0.001f;
+    //float scale = 1.0f;
+
     uint32_t i = 0;
     for (const auto &shape : shapes) {
         for (const auto &index : shape.mesh.indices) {
+
             Vertex vertex = {};
 
             vertex.pos = {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
+                attrib.vertices[3 * index.vertex_index + 0] * scale,
+                attrib.vertices[3 * index.vertex_index + 1] * scale,
+                attrib.vertices[3 * index.vertex_index + 2] * scale
             };
 
             vertex.normal = {
@@ -337,11 +343,15 @@ void VulkanRenderer::loadModel() {
 
             vertex.color = { 1.0f, 1.0f, 1.0f };
 
-            vertex.texCoord = {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0 - attrib.texcoords[2 * index.texcoord_index + 1],
-                0.0f
-            };
+            if (index.texcoord_index >= 0) {
+                vertex.texCoord = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0 - attrib.texcoords[2 * index.texcoord_index + 1],
+                    0.0f
+                };
+            } else {
+                vertex.texCoord = { 0.0f, 0.0f, 0.0f };
+            }
 
             if (uniqueVertices.count(vertex) == 0) {
                 uniqueVertices[vertex] = i;     // Store index of the vertex
@@ -747,83 +757,92 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 void VulkanRenderer::startNextFrame(
     uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
 ) {
-    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
-    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+    if (visualizePVS || renderWholeModel) {
+        cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
 
-    updateUniformBuffer(swapChainImageIndex);
+        updateUniformBuffer(swapChainImageIndex);
 
-    // Rasterization
-    VkRenderPassBeginInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = window->renderPass;
-    renderPassInfo.framebuffer = framebuffer;
-    renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
-    renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
+        // Rasterization
+        VkRenderPassBeginInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = window->renderPass;
+        renderPassInfo.framebuffer = framebuffer;
+        renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
+        renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
-    /*
-    VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    VkClearDepthStencilValue clearDS = { 1, 0 };
-    VkClearValue clearValues[3] = {};
-    clearValues[0].color = clearValues[2].color = clearColor;
-    clearValues[1].depthStencil = clearDS;
-    renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    renderPassInfo.pClearValues = clearValues;
-    */
+        /*
+        VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+        VkClearDepthStencilValue clearDS = { 1, 0 };
+        VkClearValue clearValues[3] = {};
+        clearValues[0].color = clearValues[2].color = clearColor;
+        clearValues[1].depthStencil = clearDS;
+        renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+        renderPassInfo.pClearValues = clearValues;
+        */
 
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    clearValues[1].depthStencil = { 1.0f, 0 };
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+        clearValues[1].depthStencil = { 1.0f, 0 };
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    // Define viewport
-    VkViewport viewport = {};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float) window->swapChainImageSize.width;
-    viewport.height = (float) window->swapChainImageSize.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        // Define viewport
+        VkViewport viewport = {};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float) window->swapChainImageSize.width;
+        viewport.height = (float) window->swapChainImageSize.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-    VkRect2D scissor = {};
-    scissor.offset = { 0, 0 };
-    scissor.extent.width = viewport.width;
-    scissor.extent.height = viewport.height;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        VkRect2D scissor = {};
+        scissor.offset = { 0, 0 };
+        scissor.extent.width = viewport.width;
+        scissor.extent.height = viewport.height;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // Bind vertex buffer
-    VkBuffer vertexBuffers[] = { vertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+        // Bind vertex buffer
+        VkBuffer vertexBuffers[] = { vertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-    if (visualizePVS) {
-        vkCmdBindIndexBuffer(commandBuffer, visibilityManager.getPVSIndexBuffer(indices, window->graphicsCommandPool, window->graphicsQueue), 0, VK_INDEX_TYPE_UINT32);
-    } else {
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        if (visualizePVS) {
+            vkCmdBindIndexBuffer(commandBuffer, visibilityManager.getPVSIndexBuffer(indices, window->graphicsCommandPool, window->graphicsQueue), 0, VK_INDEX_TYPE_UINT32);
+        } else if (renderWholeModel) {
+            vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        }
+
+        vkCmdBindDescriptorSets(
+            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+            &descriptorSets[swapChainImageIndex], 0, nullptr
+        );
+
+        //updateUniformBuffer(swapChainImageIndex);
+
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+        vkCmdEndRenderPass(commandBuffer);
+
+        //window->frameReady();
+        //window->requestUpdate(); // render continuously, throttled by the presentation rate
     }
-
-    vkCmdBindDescriptorSets(
-        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-        &descriptorSets[swapChainImageIndex], 0, nullptr
-    );
-
-    //updateUniformBuffer(swapChainImageIndex);
-
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-
-    vkCmdEndRenderPass(commandBuffer);
-
-    //window->frameReady();
-    //window->requestUpdate(); // render continuously, throttled by the presentation rate
 }
 
 void VulkanRenderer::togglePVSVisualization() {
-    visualizePVS = !visualizePVS;
-    std::cout << "Visualize PVS: " << visualizePVS << std::endl;
+    visualizePVS = true;
+    renderWholeModel = false;
+    std::cout << "Rendering PVS" << std::endl;
+}
+
+void VulkanRenderer::toggleWholeModelVisualization() {
+    visualizePVS = false;
+    renderWholeModel = true;
+    std::cout << "Rendering model" << std::endl;
 }
 
 void VulkanRenderer::nextCorner() {
@@ -833,12 +852,12 @@ void VulkanRenderer::nextCorner() {
     glm::vec3 offset;
     offset.x = currentViewCellCornerView % 2 == 0 ? -1.0f : 1.0f;
     offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
-    offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
+    //offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
     glm::vec3 halfSize = visibilityManager.viewCells[0].size * 0.5f;
     offset *= halfSize;
     std::cout << glm::to_string(offset) << std::endl;
-    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y + visibilityManager.viewCells[0].normal * offset.z;
+    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;// + visibilityManager.viewCells[0].normal * offset.z;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
 
@@ -847,8 +866,11 @@ void VulkanRenderer::alignCameraWithViewCellNormal() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);
-    glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
+    //glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
+    glm::vec3 pos = glm::vec3(-69.745071, 63.389126, 101.105545); glm::vec3 normal = glm::normalize(glm::vec3(0.655396, -0.235142, -0.717750));
+    //glm::vec3 pos = glm::vec3(9.888268, 68.691742, 18.343826); glm::vec3 normal = glm::normalize(glm::vec3(-0.682671, -0.113203, 0.721904));
+
+    //glm::vec3 pos = glm::vec3(-1.545267, 8.353479, 0.420563); glm::vec3 normal = glm::normalize(glm::vec3(-0.041313, -0.163326, -0.985707));
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
@@ -860,12 +882,17 @@ void VulkanRenderer::initVisibilityManager() {
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers, 1
+        uniformBuffers, 2
     );
 }
 
 void VulkanRenderer::startVisibilityThread() {
-    for (int i = 0; i < 1; i++) {
+    std::cout << "start" << std::endl;
+    for (int i = 0; i < 2; i++) {
         visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i));
     }
+    for (int i = 0; i < 2; i++) {
+        visibilityThreads[i].join();
+    }
+    std::cout << "done" << std::endl;
 }

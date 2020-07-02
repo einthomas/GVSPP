@@ -1,6 +1,8 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
+//#define USE_3D_VIEW_CELL
+
 struct Vertex {
     vec3 pos;
     vec3 worldPos;
@@ -16,31 +18,91 @@ struct Sample {
 };
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 1, set = 0) uniform cameraProperties {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} camera;
+layout(binding = 2, set = 0) buffer Vertices {
+    vec4 v[];
+} vertices;
+layout(binding = 3, set = 0) buffer Indices {
+    uint i[];
+} indices;
+layout(binding = 5, set = 0) uniform viewCellProperties {
+    vec3 pos;
+    vec3 size;
+    vec3 normal;
+} viewCell;
+
+layout(binding = 0, set = 1) readonly buffer absOutputBuffer {
+    Sample absOutput[];
+};
+layout(binding = 2, set = 1) buffer triangleCounterBuffer {
+    uint triangleCounter;
+};
 
 layout(binding = 0, set = 2) writeonly buffer edgeSubdivOutputBuffer {
     Sample edgeSubdivOutput[];
 };
-layout(binding = 1, set = 2) readonly buffer edgeSubdivWorkingBuffer {
-    Sample edgeSubdivWorking[];
-};
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
+
+Vertex unpackVertexData(uint index) {
+    vec4 d0 = vertices.v[3 * index + 0];
+    vec4 d1 = vertices.v[3 * index + 1];
+    vec4 d2 = vertices.v[3 * index + 2];
+
+    Vertex vertex;
+    vertex.pos = d0.xyz;
+    vertex.worldPos = vec3(camera.model * vec4(vertex.pos, 1.0));
+    vertex.normal = vec3(d0.w, d1.xy);
+    vertex.color = vec3(d1.zw, d2.x);
+    vertex.uv = d2.yz;
+
+    return vertex;
+}
+
+bool isTriangleFrontFacing(vec3 viewCellNormal, vec3 viewCellPos,  int triangleID) {
+    Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
+    Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
+    Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
+    return (dot(viewCellNormal, v0.worldPos - viewCellPos) > 0
+        || dot(viewCellNormal, v1.worldPos - viewCellPos) > 0
+        || dot(viewCellNormal, v2.worldPos - viewCellPos) > 0);
+}
 
 const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
 const int MAX_SUBDIVISION_STEPS = 3;
 
 void main() {
-    uint launchIndex = gl_LaunchIDNV.x;
-    uint currentTriangleIndex = uint(floor(launchIndex / 9.0));
+    const uint launchIndex = gl_LaunchIDNV.x;
+    const uint currentTriangleIndex = uint(floor(launchIndex / 9.0));
     const int numSamplesPerEdge = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
 
+    vec3 viewCellPos = viewCell.pos;
+
     // Get two adjacent samples
-    Sample s0 = edgeSubdivWorking[launchIndex];
-    Sample s1 = edgeSubdivWorking[int(mod(launchIndex + 1, 9.0) + 9 * currentTriangleIndex)];
+    uint i = launchIndex * 2;
+    Sample s0;
+    s0.triangleID = -1;
+    if (absOutput[i + 1].triangleID != -1) {    // Use the 
+        s0 = absOutput[i + 1];
+    } else if (absOutput[i].triangleID != -1) {
+        s0 = absOutput[i];
+    }
+    i = (int(mod(launchIndex + 1, 9.0) + 9 * currentTriangleIndex)) * 2;
+    Sample s1;
+    s1.triangleID = -1;
+    if (absOutput[i + 1].triangleID != -1) {
+        s1 = absOutput[i + 1];
+    } else if (absOutput[i].triangleID != -1) {
+        s1 = absOutput[i];
+    }
 
     // Only subdivide the edge between two adjacent samples if they correspond to
     // different triangles
-    if (s0.triangleID != s1.triangleID) {
+    if (s0.triangleID != s1.triangleID && s0.triangleID != -1 && s1.triangleID != -1) {
         int index = int(numSamplesPerEdge / 2.0f);
 
         // Initialize the array storing the generated samples
@@ -52,12 +114,7 @@ void main() {
         samplesOutput[0] = s0;
         samplesOutput[numSamplesPerEdge - 1] = s1;
 
-        vec3 rayOrigin;
-        if (s0.triangleID != -1) {
-            rayOrigin = s0.rayOrigin;
-        } else {
-            rayOrigin = s1.rayOrigin;
-        }
+        vec3 rayOrigin = s0.rayOrigin;
 
         // Calculate the first sample in the middle of the edge
         vec3 samplePos = (samplesOutput[numSamplesPerEdge - 1].pos + samplesOutput[0].pos) / 2.0f;
@@ -115,17 +172,31 @@ void main() {
             index = int(index / 2.0f);
         }
 
-        // Add the samples to the output buffer
-        for (int k = 0; k < numSamplesPerEdge; k++) {
-            if (samplesOutput[k].triangleID == -2) {
-                edgeSubdivOutput[launchIndex * numSamplesPerEdge + k] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
-            } else {
-                edgeSubdivOutput[launchIndex * numSamplesPerEdge + k] = samplesOutput[k];
-            }
+        // Count the number of triangles that have been found
+        const int numSubdivSamples = numSamplesPerEdge - 2;
+        uint foundTriangles = 0;
+        for (int k = 0; k < numSubdivSamples; k++) {
+            #ifdef USE_3D_VIEW_CELL
+                if (samplesOutput[k + 1].triangleID >= 0) {
+                    foundTriangles++;
+                }
+            #else
+                // In case of a 2d view cell, also check if the found triangle is front-facing
+                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCell.normal, viewCellPos, samplesOutput[k + 1].triangleID)) {
+                    foundTriangles++;
+                } else {
+                    samplesOutput[k + 1].triangleID = -1;
+                }
+            #endif
         }
-    } else {
-        for (int k = 0; k < numSamplesPerEdge; k++) {
-            edgeSubdivOutput[launchIndex * numSamplesPerEdge + k] = Sample(-1, vec3(0.0), vec3(0.0), vec3(0.0));
+
+        // Add the samples to the output buffer
+        uint insertionIndex = atomicAdd(triangleCounter, foundTriangles - 1);
+        for (int k = 0, m = 0; k < numSubdivSamples; k++) {
+            if (samplesOutput[k + 1].triangleID >= 0) {
+                edgeSubdivOutput[insertionIndex + m] = samplesOutput[k + 1];
+                m++;
+            }
         }
     }
 }

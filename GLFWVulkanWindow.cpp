@@ -548,7 +548,7 @@ void GLFWVulkanWindow::mainLoop() {
 
         glfwPollEvents();
 
-        float cameraSpeed = 1.5f * deltaTime;
+        float cameraSpeed = 5.0f * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             renderer->cameraPos += cameraSpeed * renderer->cameraForward;
         }
@@ -820,6 +820,9 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
     if (action == GLFW_RELEASE) {
         if (key == GLFW_KEY_V) {
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->togglePVSVisualization();
+        }
+        if (key == GLFW_KEY_C) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleWholeModelVisualization();
         }
 
         if (key == GLFW_KEY_ESCAPE) {

@@ -28,6 +28,7 @@ public:
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
     );
     void togglePVSVisualization();
+    void toggleWholeModelVisualization();
     void nextCorner();
     void alignCameraWithViewCellNormal();
     void startVisibilityThread();
@@ -85,6 +86,7 @@ private:
 
     // Visibility
     bool visualizePVS = false;
+    bool renderWholeModel = false;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
 
