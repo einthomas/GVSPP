@@ -183,37 +183,15 @@ void VisibilityManager::createViewCellBuffer() {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
 
-        glm::vec3 up = glm::vec3(0.0, 1.0, 0.0);
-        glm::vec3 viewCellRight = glm::normalize(glm::cross(viewCells[0].normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-        glm::vec3 viewCellUp = glm::normalize(glm::cross(viewCellRight, viewCells[0].normal));
-
-        /*
-        float step = viewCells[0].size.x / 3.0f;
-        ViewCell viewCell(
-            viewCells[0].pos
-                + viewCellRight * (-step + step * (i % 3))
-                + viewCellUp * (-step + step * int(i / 3.0f)),
-            viewCells[0].size / 3.0f,
-            viewCells[0].normal
-        );
-        */
-
-        ViewCell viewCell;
-        if (i == 0) {
-            viewCell.pos = viewCells[0].pos - viewCellUp * viewCells[0].size * 0.5f;
-            viewCell.size = viewCells[0].size * glm::vec3(1.0f, 0.5f, 1.0f);
-            viewCell.normal = viewCells[0].normal;
-        } else {
-            viewCell.pos = viewCells[0].pos + viewCellUp * viewCells[0].size * 0.5f;
-            viewCell.size = viewCells[0].size * glm::vec3(1.0f, 0.5f, 1.0f);
-            viewCell.normal = viewCells[0].normal;
-        }
+        ViewCell viewCellTile = getViewCellTile(numThreads, 0, i);
+        viewCells[0].tilePos = viewCellTile.tilePos;
+        viewCells[0].tileSize = viewCellTile.tileSize;
 
         // Copy view cell to the staging buffer
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        //memcpy(data, viewCells.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        memcpy(data, &viewCell, (size_t) bufferSize);
+        memcpy(data, viewCells.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+        //memcpy(data, &viewCell, (size_t) bufferSize);
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         // Create view cell buffer using GPU memory
@@ -232,6 +210,38 @@ void VisibilityManager::createViewCellBuffer() {
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
+}
+
+/*
+ * Possible number of thread counts (numThreads): 1, 2, 4, 6, 8, 9
+ */
+ViewCell VisibilityManager::getViewCellTile(int numThreads, int viewCellIndex, int threadId) {
+    glm::vec3 up = glm::vec3(0.0, 1.0, 0.0);
+    glm::vec3 viewCellRight = glm::normalize(glm::cross(viewCells[viewCellIndex].normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+    glm::vec3 viewCellUp = glm::normalize(glm::cross(viewCellRight, viewCells[viewCellIndex].normal));
+
+    ViewCell viewCell;
+    viewCell.normal = viewCells[viewCellIndex].normal;
+    if (numThreads == 1) {
+        viewCell.tilePos = viewCells[viewCellIndex].pos;
+        viewCell.tileSize = viewCells[viewCellIndex].size;
+    } else if (numThreads % 2 == 0) {
+        glm::vec2 split(
+            -0.5 + 1.0f / numThreads + 1.0f / (numThreads * 0.5f) * (threadId % int(numThreads * 0.5f)),
+            0.25f * (int(threadId / (numThreads * 0.5f)) == 0 ? 1.0f : -1.0f)
+        );
+        viewCell.tilePos = viewCells[viewCellIndex].pos + viewCellRight * split.x + viewCellUp * split.y;
+        viewCell.tileSize = glm::vec3(1.0f / (numThreads * 0.5f), 0.5f, 1.0f) * viewCells[viewCellIndex].size;
+    } else if (numThreads == 9) {
+        glm::vec2 split(
+            -0.5 + 1.0f / 6.0f + (1.0f / 3.0f) * (threadId % int(numThreads / 3.0f)),
+            (1.0f / 3.0f) * (int(threadId / (numThreads / 3.0f)) - 1.0f)
+        );
+        viewCell.tilePos = viewCells[viewCellIndex].pos + viewCellRight * split.x + viewCellUp * split.y;
+        viewCell.tileSize = glm::vec3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f) * viewCells[viewCellIndex].size;
+    }
+
+    return viewCell;
 }
 
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
@@ -886,10 +896,9 @@ void VisibilityManager::createDescriptorSetLayout() {
         throw std::runtime_error("failed to create rt descriptor set layout");
     }
 
-
     pushConstantRange = {};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    pushConstantRange.size = sizeof(VkBool32);
+    pushConstantRange.size = sizeof(int) * 7;
     pushConstantRange.offset = 0;
 }
 
@@ -1247,6 +1256,17 @@ void VisibilityManager::randomSample(int numRays, int threadId) {
         commandBuffer[threadId], VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipelineLayout, 0, 1,
         &descriptorSet[threadId], 0, nullptr
     );
+
+    if (faceIndices.count(numThreads)) {
+        vkCmdPushConstants(
+            commandBuffer[threadId],
+            pipelineLayout,
+            VK_SHADER_STAGE_RAYGEN_BIT_NV,
+            0,
+            sizeof(int) * faceIndices[numThreads][threadId].size(),
+            faceIndices[numThreads][threadId].data()
+        );
+    }
     vkCmdTraceRaysNV(
         commandBuffer[threadId],
         shaderBindingTable, bindingOffsetRayGenShader,
@@ -1924,6 +1944,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         Sample *outputSamples = (Sample*)randomSamplingOutputPointer[threadId];
 
         for (int i = 0; i < numTriangles; i++) {
+            //std::cout << outputSamples[i].triangleID << " " << glm::to_string(outputSamples[i].rayOrigin) << " " << glm::to_string(outputSamples[i].hitPos) << " " << glm::to_string(outputSamples[i].pos) << std::endl;
             if (outputSamples[i].triangleID != -1) {
                 auto result = pvs.insert(outputSamples[i].triangleID);
                 if (result.second) {

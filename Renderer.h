@@ -33,7 +33,9 @@ public:
     void alignCameraWithViewCellNormal();
     void startVisibilityThread();
 
-private:    
+private:
+    const int NUM_THREADS = 1;
+
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
 

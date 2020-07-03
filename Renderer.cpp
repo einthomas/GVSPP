@@ -312,16 +312,16 @@ void VulkanRenderer::loadModel() {
     std::string warn, err;
 
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/hairball/hairball.obj")) {
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/powerplant/powerplant.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/powerplant/powerplant.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/rstest/rstest.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
-    float scale = 0.001f;
-    //float scale = 1.0f;
+    //float scale = 0.001f;
+    float scale = 1.0f;
 
     uint32_t i = 0;
     for (const auto &shape : shapes) {
@@ -866,8 +866,8 @@ void VulkanRenderer::alignCameraWithViewCellNormal() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    //glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
-    glm::vec3 pos = glm::vec3(-69.745071, 63.389126, 101.105545); glm::vec3 normal = glm::normalize(glm::vec3(0.655396, -0.235142, -0.717750));
+    glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
+    //glm::vec3 pos = glm::vec3(-69.745071, 63.389126, 101.105545); glm::vec3 normal = glm::normalize(glm::vec3(0.655396, -0.235142, -0.717750));
     //glm::vec3 pos = glm::vec3(9.888268, 68.691742, 18.343826); glm::vec3 normal = glm::normalize(glm::vec3(-0.682671, -0.113203, 0.721904));
 
     //glm::vec3 pos = glm::vec3(-1.545267, 8.353479, 0.420563); glm::vec3 normal = glm::normalize(glm::vec3(-0.041313, -0.163326, -0.985707));
@@ -882,16 +882,16 @@ void VulkanRenderer::initVisibilityManager() {
     );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers, 2
+        uniformBuffers, NUM_THREADS
     );
 }
 
 void VulkanRenderer::startVisibilityThread() {
     std::cout << "start" << std::endl;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < NUM_THREADS; i++) {
         visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i));
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < NUM_THREADS; i++) {
         visibilityThreads[i].join();
     }
     std::cout << "done" << std::endl;

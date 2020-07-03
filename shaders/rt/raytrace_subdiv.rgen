@@ -33,6 +33,8 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
     vec3 size;
     vec3 normal;
+    vec3 tilePos;
+    vec3 tileSize;
 } viewCell;
 
 layout(binding = 0, set = 1) readonly buffer absOutputBuffer {

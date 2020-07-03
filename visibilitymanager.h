@@ -10,6 +10,7 @@
 #include <mutex>
 #include <atomic>
 #include <random>
+#include <map>
 
 #include <glm/glm.hpp>
 
@@ -69,6 +70,39 @@ private:
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
+
+    std::map<int, std::vector<std::vector<int>>> faceIndices = {
+        {
+            1,
+            { { 6, 0, 1, 2, 3, 4, 5 } }
+        },
+        {
+            2,
+            {
+                { 3, 0, 1, 4 },
+                { 3, 2, 3, 5 }
+            }
+        },
+        {
+            3,
+            {
+                { 2, 0, 4 },
+                { 2, 1, 5 },
+                { 2, 2, 3}
+            },
+        },
+        {
+            6,
+            {
+                { 1, 0 },
+                { 1, 1 },
+                { 1, 2 },
+                { 1, 3 },
+                { 1, 4 },
+                { 1, 5 }
+            }
+        }
+    };
 
     std::vector<std::vector<glm::vec2>> haltonPoints;
     std::random_device rd;
@@ -196,6 +230,7 @@ private:
     void createEdgeSubdivPipeline();
     void createEdgeSubdivDescriptorSetLayout();
     void createEdgeSubdivDescriptorSets(int threadId);
+    ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
 
     void randomSample(int numRays, int threadId);
     unsigned int adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);

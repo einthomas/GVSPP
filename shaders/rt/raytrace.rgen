@@ -18,12 +18,18 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
     vec3 size;
     vec3 normal;
+    vec3 tilePos;
+    vec3 tileSize;
 } viewCell;
 layout(binding = 6, set = 0) writeonly buffer randomSamplingOutputBuffer {
     Sample randomSamplingOutput[];
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
+
+layout(push_constant) uniform PushConstants {
+	int faceIndices[7];  // faceIndices[0] stores the number of faces
+} pushConstants;
 
 void main() {
     // Calculate 1D launch index
@@ -33,11 +39,15 @@ void main() {
     vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
     vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
-    vec3 viewCellPos = viewCell.pos;
+    vec3 viewCellPos = viewCell.tilePos;
     vec3 viewCellNormal = viewCell.normal;
+    vec3 viewCellSize = viewCell.tileSize;
 
     #ifdef USE_3D_VIEW_CELL
-        const int faceIndex = int(launchIndex / (gl_LaunchSizeNV.x / 6.0f));
+        int index = int(launchIndex / int(gl_LaunchSizeNV.x / float(pushConstants.faceIndices[0])));
+        index = index > pushConstants.faceIndices[0] - 1 ? index - 1 : index;
+        index += 1;
+        const int faceIndex = pushConstants.faceIndices[index];
         
         const vec3 faceNormals[6] = { viewCell.normal, viewCellRight, -viewCell.normal, -viewCellRight, viewCellUp, -viewCellUp };
         const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCell.normal, viewCell.normal };
@@ -47,6 +57,7 @@ void main() {
         viewCellRight = faceRights[faceIndex];
         viewCellUp = faceUps[faceIndex];
         viewCellPos = viewCell.pos + viewCellNormal * viewCell.size * 0.5;
+        viewCellSize = size;
     #endif
 
     vec3 rayOrigin;
@@ -54,7 +65,7 @@ void main() {
 
     // Map Halton point to point on view cell
     vec2 haltonPoint = points[launchIndex];
-    vec2 offset = (haltonPoint - vec2(0.5)) * viewCell.size.xy;
+    vec2 offset = (haltonPoint - vec2(0.5)) * viewCellSize.xy;
     rayOrigin = viewCellPos + offset.x * viewCellRight + offset.y * viewCellUp;
 
     // Use a different Halton point to calculate the ray direction
