@@ -1,5 +1,7 @@
 #include "sample.h"
 
+#include <iostream>
+
 Sample::Sample() {
     triangleID = 0;
     rayOrigin = glm::vec3(0.0f);

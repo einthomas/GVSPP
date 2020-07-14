@@ -14,10 +14,14 @@ public:
         return set;
     }
 
-    auto insert(T value) {
-        writeMutex.lock();
+    auto insert(T value, bool useMutex) {
+        if (useMutex) {
+            writeMutex.lock();
+        }
         auto result = set.insert(value);
-        writeMutex.unlock();
+        if (useMutex) {
+            writeMutex.unlock();
+        }
         return result;
     }
 

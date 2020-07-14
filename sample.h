@@ -4,6 +4,9 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
+#include <glm/gtx/string_cast.hpp>
+
+#include <iostream>
 
 class Sample {
 public:
@@ -15,7 +18,13 @@ public:
     Sample(int triangleID, glm::vec3 rayOrigin, glm::vec3 hitPos, glm::vec3 pos);
 
     bool operator==(const Sample &other) const;
+    friend std::ostream &operator<<(std::ostream &ostream, const Sample &sample);
 };
+
+inline std::ostream &operator<<(std::ostream &stream, const Sample &sample) {
+    return stream << "triangleID: " << sample.triangleID << " rayOrigin: " << glm::to_string(sample.rayOrigin) << " hitPos: " << glm::to_string(sample.hitPos) << " pos: " << glm::to_string(sample.pos);
+}
+
 
 // See https://en.cppreference.com/w/cpp/utility/hash
 namespace std {

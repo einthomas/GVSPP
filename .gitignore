@@ -3,3 +3,7 @@ models
 .vs
 screenshot.png
 *.spv
+
+abs_rs_halton.vs
+new.vs
+old.vs

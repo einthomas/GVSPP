@@ -12,7 +12,7 @@ struct Sample {
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
 layout(binding = 4, set = 0) readonly buffer haltonPoints {
-    vec2 points[];
+    vec4 points[];
 };
 layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
@@ -23,6 +23,10 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
 } viewCell;
 layout(binding = 6, set = 0) writeonly buffer randomSamplingOutputBuffer {
     Sample randomSamplingOutput[];
+};
+layout(binding = 8, set = 0) buffer triangleCounterBuffer {
+    uint triangleCounter;
+    uint rayCounter;
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
@@ -64,17 +68,17 @@ void main() {
     vec3 rayDir;
 
     // Map Halton point to point on view cell
-    vec2 haltonPoint = points[launchIndex];
+    vec2 haltonPoint = points[launchIndex].xy;
     vec2 offset = (haltonPoint - vec2(0.5)) * viewCellSize.xy;
     rayOrigin = viewCellPos + offset.x * viewCellRight + offset.y * viewCellUp;
 
     // Use a different Halton point to calculate the ray direction
-    haltonPoint = points[int(mod(launchIndex + 1, gl_LaunchSizeNV.x))];
+    haltonPoint = points[launchIndex].zw;
 
     // Map Halton point to point on hemisphere
-    float phi = 2.0 * 3.1415926 * haltonPoint.y;
-    float r = sqrt(max(1.0 - haltonPoint.x * haltonPoint.x, 0.0));
-    rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.x);
+    float phi = 2.0 * 3.1415926 * haltonPoint.x;
+    float r = sqrt(max(1.0 - haltonPoint.y * haltonPoint.y, 0.0));
+    rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
 
     // Transform direction to view cell coordinate system
     rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
@@ -98,5 +102,7 @@ void main() {
         0               // payload (location = 0)
     );
 
-    randomSamplingOutput[launchIndex] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+    if (int(hitInfo.w) != -1) {
+        randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+    }
 }

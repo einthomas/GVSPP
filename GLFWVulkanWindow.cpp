@@ -348,7 +348,7 @@ VkSurfaceFormatKHR GLFWVulkanWindow::chooseSwapSurfaceFormat(const std::vector<V
 
 VkPresentModeKHR GLFWVulkanWindow::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
     for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR) {
             return availablePresentMode;
         }
     }
@@ -548,7 +548,7 @@ void GLFWVulkanWindow::mainLoop() {
 
         glfwPollEvents();
 
-        float cameraSpeed = 5.0f * deltaTime;
+        float cameraSpeed = 50.0f * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             renderer->cameraPos += cameraSpeed * renderer->cameraForward;
         }
@@ -819,10 +819,7 @@ void GLFWVulkanWindow::mouseCallback(GLFWwindow *window, double xpos, double ypo
 void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (action == GLFW_RELEASE) {
         if (key == GLFW_KEY_V) {
-            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->togglePVSVisualization();
-        }
-        if (key == GLFW_KEY_C) {
-            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleWholeModelVisualization();
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleShadedRendering();
         }
 
         if (key == GLFW_KEY_ESCAPE) {

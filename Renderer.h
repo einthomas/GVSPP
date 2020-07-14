@@ -27,8 +27,7 @@ public:
     void startNextFrame(
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
     );
-    void togglePVSVisualization();
-    void toggleWholeModelVisualization();
+    void toggleShadedRendering();
     void nextCorner();
     void alignCameraWithViewCellNormal();
     void startVisibilityThread();
@@ -46,6 +45,7 @@ private:
     VkPipelineLayout pipelineLayout;
     VkShaderModule fragShaderModule;
     VkShaderModule vertShaderModule;
+    VkPushConstantRange pushConstantRange;
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
@@ -87,8 +87,9 @@ private:
     void updateUniformBuffer(uint32_t swapChainImageIndex);
 
     // Visibility
-    bool visualizePVS = false;
+    bool shadedRendering = true;
     bool renderWholeModel = false;
+    std::string modelPath;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
 
@@ -96,6 +97,7 @@ private:
     VkDescriptorSet rtDescriptorSetsABS;
     VkDescriptorSetLayout rtDescriptorSetLayoutABS;
     void initVisibilityManager();
+    void loadSceneFile(std::string scene, int viewCell);
 };
 
 #endif // RENDERER_H

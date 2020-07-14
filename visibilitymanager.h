@@ -18,6 +18,7 @@
 #include "Vertex.h"
 #include "sample.h"
 #include "pvs.h"
+#include "Statistics.h"
 
 struct AccelerationStructure {
     VkDeviceMemory deviceMemory;
@@ -35,9 +36,15 @@ struct GeometryInstance {
     uint64_t accelerationStructureHandle;
 };
 
+struct ShaderExecutionInfo {
+    unsigned int numTriangles;
+    unsigned int numRays;
+};
+
 class VisibilityManager {
 public:
     std::vector<ViewCell> viewCells;
+    PVS<int> pvs;
 
     VisibilityManager();
     void init(
@@ -47,11 +54,12 @@ public:
         int numThreads
     );
     void addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
-    void generateHaltonPoints2d(int n, int threadId, int offset = 0, int p2 = 3);
+    void generateHaltonPoints2d(int n, int threadId, int offset = 0);
     void rayTrace(const std::vector<uint32_t> &indices, int threadId);
     void releaseResources();
     VkBuffer getPVSIndexBuffer(
-        const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue
+        const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue,
+        bool inverted
     );
 
 private:
@@ -60,11 +68,13 @@ private:
     const bool USE_TERMINATION_CRITERION = true;
     const bool USE_EDGE_SUBDIV_CPU = false;
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 1000000;
-    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
+    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
+    const int NUM_ABS_SAMPLES = 16;
+    const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
 
-    const size_t RAYS_PER_ITERATION = 20000;
-    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 9;
-    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
+    const size_t RAYS_PER_ITERATION = 500000;
+    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 2;
+    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
     const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
@@ -104,10 +114,10 @@ private:
         }
     };
 
-    std::vector<std::vector<glm::vec2>> haltonPoints;
+    Statistics statistics;
+    std::vector<std::vector<glm::vec4>> haltonPoints;
     std::random_device rd;
     std::mt19937 gen;
-    PVS<int> pvs;
     std::mutex *queueSubmitMutex;
     std::atomic<int> tracedRays;
 
@@ -232,9 +242,9 @@ private:
     void createEdgeSubdivDescriptorSets(int threadId);
     ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
 
-    void randomSample(int numRays, int threadId);
-    unsigned int adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);
-    unsigned int edgeSubdivide(int numSamples, int threadId);
+    ShaderExecutionInfo randomSample(int numRays, int threadId);
+    ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);
+    ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId);
 };
 
 #endif // VISIBILITYMANAGER_H

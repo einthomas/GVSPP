@@ -8,6 +8,9 @@
 #include "GLFWVulkanWindow.h"
 #include "Renderer.h"
 
+#include <sstream>
+#include <string>
+
 int main(int argc, char *argv[]) {
     /*
     QGuiApplication app(argc, argv);

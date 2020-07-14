@@ -59,6 +59,13 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 }
 
 void VulkanRenderer::initResources() {
+    loadSceneFile("SPONZA", 0);
+
+    std::cout << "model: " << modelPath << std::endl;
+    std::cout << "view cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
+    std::cout << "view cell size: " << glm::to_string(visibilityManager.viewCells[0].size) << std::endl;
+    std::cout << "view cell normal: " << glm::to_string(visibilityManager.viewCells[0].normal) << std::endl;
+
     loadModel();
 
     createDescriptorSetLayout();
@@ -66,7 +73,21 @@ void VulkanRenderer::initResources() {
     //createTextureImage();
     //createTextureImageView();
     //createTextureSampler();
+
+    // Create vertex buffer using GPU memory
+    VulkanUtil::createBuffer(
+        window->physicalDevice,
+        window->device, sizeof(vertices[0]) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
     createVertexBuffer();
+
+    // Create index buffer using GPU memory
+    VulkanUtil::createBuffer(
+        window->physicalDevice,
+        window->device, sizeof(indices[0]) * indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        indexBuffer, indexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
     createIndexBuffer();
     createUniformBuffers();
     createDescriptorPool();
@@ -104,8 +125,6 @@ void VulkanRenderer::releaseResources() {
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-    //visibilityThread.join();
 
     visibilityManager.releaseResources();
 }
@@ -159,8 +178,8 @@ void VulkanRenderer::createGraphicsPipeline() {
     // Describe rasterizer
     VkPipelineRasterizationStateCreateInfo rasterizerInfo = {};
     rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
-    //rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    //rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
+    rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerInfo.lineWidth = 0.5f;
     //rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
@@ -189,6 +208,9 @@ void VulkanRenderer::createGraphicsPipeline() {
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    std::array<VkPushConstantRange, 1> pushConstantRanges = { pushConstantRange };
+    pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
+    pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
     if (vkCreatePipelineLayout(window->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout");
     }
@@ -256,12 +278,14 @@ void VulkanRenderer::createVertexBuffer() {
     memcpy(data, vertices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
     vkUnmapMemory(window->device, stagingBufferMemory);
 
+    /*
     // Create vertex buffer using GPU memory
     VulkanUtil::createBuffer(
         window->physicalDevice,
         window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
+    */
 
     // Copy vertex data from the staging buffer to the vertex buffer
     VulkanUtil::copyBuffer(window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer, vertexBuffer, bufferSize);
@@ -288,12 +312,7 @@ void VulkanRenderer::createIndexBuffer() {
     memcpy(data, indices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
     vkUnmapMemory(window->device, stagingBufferMemory);
 
-    // Create index buffer using GPU memory
-    VulkanUtil::createBuffer(
-        window->physicalDevice,
-        window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        indexBuffer, indexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
+
 
     // Copy index data from the staging buffer to the index buffer
     VulkanUtil::copyBuffer(
@@ -311,17 +330,20 @@ void VulkanRenderer::loadModel() {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/hairball/hairball.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/powerplant/powerplant.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/rstest/rstest.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/citymodel/citymodel.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
     //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
+    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/canyon/canyon_normals.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
     //float scale = 0.001f;
-    float scale = 1.0f;
+    float scale = 10.0f;
 
     uint32_t i = 0;
     for (const auto &shape : shapes) {
@@ -613,6 +635,11 @@ void VulkanRenderer::createDescriptorSetLayout() {
     ) {
         throw std::runtime_error("failed to create descriptor set layout");
     }
+
+    pushConstantRange = {};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pushConstantRange.size = sizeof(VkBool32);
+    pushConstantRange.offset = 0;
 }
 
 void VulkanRenderer::createDescriptorPool() {
@@ -757,92 +784,82 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 void VulkanRenderer::startNextFrame(
     uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
 ) {
-    if (visualizePVS || renderWholeModel) {
-        cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
-        cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
 
-        updateUniformBuffer(swapChainImageIndex);
+    updateUniformBuffer(swapChainImageIndex);
 
-        // Rasterization
-        VkRenderPassBeginInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = window->renderPass;
-        renderPassInfo.framebuffer = framebuffer;
-        renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
-        renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
+    // Rasterization
+    VkRenderPassBeginInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = window->renderPass;
+    renderPassInfo.framebuffer = framebuffer;
+    renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
+    renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
-        /*
-        VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-        VkClearDepthStencilValue clearDS = { 1, 0 };
-        VkClearValue clearValues[3] = {};
-        clearValues[0].color = clearValues[2].color = clearColor;
-        clearValues[1].depthStencil = clearDS;
-        renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-        renderPassInfo.pClearValues = clearValues;
-        */
+    /*
+    VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+    VkClearDepthStencilValue clearDS = { 1, 0 };
+    VkClearValue clearValues[3] = {};
+    clearValues[0].color = clearValues[2].color = clearColor;
+    clearValues[1].depthStencil = clearDS;
+    renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+    renderPassInfo.pClearValues = clearValues;
+    */
 
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-        clearValues[1].depthStencil = { 1.0f, 0 };
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+    clearValues[1].depthStencil = { 1.0f, 0 };
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-        // Define viewport
-        VkViewport viewport = {};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float) window->swapChainImageSize.width;
-        viewport.height = (float) window->swapChainImageSize.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    // Define viewport
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float) window->swapChainImageSize.width;
+    viewport.height = (float) window->swapChainImageSize.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-        VkRect2D scissor = {};
-        scissor.offset = { 0, 0 };
-        scissor.extent.width = viewport.width;
-        scissor.extent.height = viewport.height;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    VkRect2D scissor = {};
+    scissor.offset = { 0, 0 };
+    scissor.extent.width = viewport.width;
+    scissor.extent.height = viewport.height;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // Bind vertex buffer
-        VkBuffer vertexBuffers[] = { vertexBuffer };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    // Bind vertex buffer
+    VkBuffer vertexBuffers[] = { vertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        if (visualizePVS) {
-            vkCmdBindIndexBuffer(commandBuffer, visibilityManager.getPVSIndexBuffer(indices, window->graphicsCommandPool, window->graphicsQueue), 0, VK_INDEX_TYPE_UINT32);
-        } else if (renderWholeModel) {
-            vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-        }
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdBindDescriptorSets(
-            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-            &descriptorSets[swapChainImageIndex], 0, nullptr
-        );
+    vkCmdBindDescriptorSets(
+        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+        &descriptorSets[swapChainImageIndex], 0, nullptr
+    );
 
-        //updateUniformBuffer(swapChainImageIndex);
+    std::array<VkBool32, 1> p = { shadedRendering };
+    vkCmdPushConstants(
+        commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(VkBool32),
+        p.data()
+    );
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-        vkCmdEndRenderPass(commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
 
-        //window->frameReady();
-        //window->requestUpdate(); // render continuously, throttled by the presentation rate
-    }
+    //window->frameReady();
+    //window->requestUpdate(); // render continuously, throttled by the presentation rate
 }
 
-void VulkanRenderer::togglePVSVisualization() {
-    visualizePVS = true;
-    renderWholeModel = false;
-    std::cout << "Rendering PVS" << std::endl;
-}
-
-void VulkanRenderer::toggleWholeModelVisualization() {
-    visualizePVS = false;
-    renderWholeModel = true;
-    std::cout << "Rendering model" << std::endl;
+void VulkanRenderer::toggleShadedRendering() {
+    shadedRendering = !shadedRendering;
 }
 
 void VulkanRenderer::nextCorner() {
@@ -856,8 +873,8 @@ void VulkanRenderer::nextCorner() {
 
     glm::vec3 halfSize = visibilityManager.viewCells[0].size * 0.5f;
     offset *= halfSize;
-    std::cout << glm::to_string(offset) << std::endl;
     cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;// + visibilityManager.viewCells[0].normal * offset.z;
+    std::cout << glm::to_string(cameraPos) << glm::to_string(offset) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
 
@@ -866,7 +883,9 @@ void VulkanRenderer::alignCameraWithViewCellNormal() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
+    //glm::vec3 pos = glm::vec3(0.3, -0.2, 0.6); glm::vec3 normal = glm::vec3(0.0f, 0.0f, -1.0);
+    //glm::vec3 pos = glm::vec3(6.243304, 2.284803, 3.346602); glm::vec3 normal = glm::normalize(glm::vec3(-0.614086, -0.071497, -0.785994));
+    //glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
     //glm::vec3 pos = glm::vec3(-69.745071, 63.389126, 101.105545); glm::vec3 normal = glm::normalize(glm::vec3(0.655396, -0.235142, -0.717750));
     //glm::vec3 pos = glm::vec3(9.888268, 68.691742, 18.343826); glm::vec3 normal = glm::normalize(glm::vec3(-0.682671, -0.113203, 0.721904));
 
@@ -875,15 +894,56 @@ void VulkanRenderer::initVisibilityManager() {
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
-    visibilityManager.addViewCell(
-        pos,
-        glm::vec3(0.5f),
-        normal
-    );
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
         uniformBuffers, NUM_THREADS
     );
+}
+
+void VulkanRenderer::loadSceneFile(std::string scene, int viewCell) {
+    int i = 0;
+    int currentViewCell = 0;
+    bool found = false;
+
+    float x, y, z;
+    glm::vec3 v[3];
+
+    std::ifstream file("scenes.txt");
+    std::string line;
+    while (std::getline(file, line)) {
+        if (i == 3) {
+            break;
+        }
+
+        if (line.find(scene) != std::string::npos) {
+            found = true;
+
+            std::istringstream iss(line);
+            iss >> modelPath >> modelPath;
+        } else if (found) {
+            if (line.length() == 0) {
+                currentViewCell++;
+            } else if (currentViewCell == viewCell) {
+                std::istringstream iss(line);
+                iss >> x >> y >> z;
+                v[i] = { x, y, z };
+
+                i++;
+            }
+        }
+    }
+
+    glm::vec3 pos = v[0];
+    glm::vec3 size = v[1];
+    glm::vec3 normal = glm::normalize(v[2]);
+
+    glm::vec3 right = glm::normalize(glm::cross(normal, { 0.0f, 1.0f, 0.0f }));
+    glm::vec3 up = -glm::normalize(glm::cross(normal, right));
+
+    pos += right * size.x * 0.5f;
+    pos += up * size.y * 0.5f;
+
+    visibilityManager.addViewCell(pos, size, normal);
 }
 
 void VulkanRenderer::startVisibilityThread() {
@@ -895,4 +955,19 @@ void VulkanRenderer::startVisibilityThread() {
         visibilityThreads[i].join();
     }
     std::cout << "done" << std::endl;
+
+    for (int i = 0; i < int(indices.size() / 3.0f); i++) {
+        glm::vec3 color = glm::vec3(1.0f, 0.0f, 0.0f);
+        vertices[indices[3 * i]].color = color;
+        vertices[indices[3 * i + 1]].color = color;
+        vertices[indices[3 * i + 2]].color = color;
+    }
+    for (auto triangleID : visibilityManager.pvs.getSet()) {
+        glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);
+        vertices[indices[3 * triangleID]].color = color;
+        vertices[indices[3 * triangleID + 1]].color = color;
+        vertices[indices[3 * triangleID + 2]].color = color;
+    }
+
+    createVertexBuffer();
 }
