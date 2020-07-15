@@ -10,6 +10,10 @@ Statistics::Statistics(int samplesPerLine)
     : samplesPerLine(samplesPerLine)
 {
     entries.push_back(StatisticsEntry());
+
+    for (int i = 0; i < elapsedTimes.size(); i++) {
+        elapsedTimes[i] = 0;
+    }
 }
 
 void Statistics::update() {
@@ -65,5 +69,44 @@ void Statistics::print() {
     }
     printf("\n\n");
 
+    auto randSum = elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT];
+    auto absSum = elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT];
+    auto esSum = elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT];
+
+    printf("%-15s%-15s%-15s\n", "Rand (ms)", "Rand Insert (ms)", "Total (ms)");
+    printf(
+        "%-15i%-15i%-15i\n", elapsedTimes[RANDOM_SAMPLING], elapsedTimes[RANDOM_SAMPLING_INSERT],
+        elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT], randSum
+    );
+    printf("%-15s%-15s%-15s\n", "ABS (ms)", "ABS Insert (ms)", "Total (ms)");
+    printf(
+        "%-15i%-15i%-15i\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING],
+        elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT], absSum
+
+    );
+    printf("%-15s%-15s%-15s\n", "ES (ms)", "ES Insert (ms)", "Total (ms)");
+    printf(
+        "%-15i%-15i%-15i\n", elapsedTimes[EDGE_SUBDIVISION], elapsedTimes[EDGE_SUBDIVISION_INSERT],
+        esSum
+    );
+    printf("===\n");
+    printf(
+        "%-15i%-15i%-15i\n",
+        elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION],
+        elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT],
+        randSum + absSum + esSum
+    );
+
+    printf("\n\n");
+
     setlocale(LC_NUMERIC, "en_US");
+}
+
+void Statistics::startOperation(OPERATION_TYPE operationType) {
+    startTimes[operationType] = std::chrono::steady_clock::now();
+}
+
+void Statistics::endOperation(OPERATION_TYPE operationType) {
+    auto end = std::chrono::steady_clock::now();
+    elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTimes[operationType]).count();
 }

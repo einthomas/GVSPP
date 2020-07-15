@@ -1682,12 +1682,8 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
 
 void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId) {
     auto startTotal = std::chrono::steady_clock::now();
-
     auto start = std::chrono::steady_clock::now();
     auto end = std::chrono::steady_clock::now();
-    auto randomSamplingTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    auto absTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    auto edgeSubdivTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     auto haltonTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     std::vector<Sample> absSampleQueue;
@@ -1709,15 +1705,16 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         newTriangles = pvs.getSet().size();
 
         // Execute random sampling
-        start = std::chrono::steady_clock::now();
+        statistics.startOperation(RANDOM_SAMPLING);
         ShaderExecutionInfo randomSampleInfo = randomSample(RAYS_PER_ITERATION, threadId);
+        statistics.endOperation(RANDOM_SAMPLING);
+
         statistics.entries.back().numShaderExecutions += RAYS_PER_ITERATION;
         statistics.entries.back().rnsRays += randomSampleInfo.numRays;
-        //tracedRays += RAYS_PER_ITERATION;
-        //unsigned int numTriangles = RAYS_PER_ITERATION;
+
         Sample *outputSamples = (Sample*)randomSamplingOutputPointer[threadId];
+        statistics.startOperation(RANDOM_SAMPLING_INSERT);
         for (int i = 0; i < randomSampleInfo.numTriangles; i++) {
-            //std::cout << outputSamples[i] << std::endl;
             auto result = pvs.insert(outputSamples[i].triangleID, numThreads > 1);
             if (result.second) {
                 statistics.entries.back().rnsTris++;
@@ -1728,17 +1725,14 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 absSampleQueue.push_back(outputSamples[i]);
             }
         }
+        statistics.endOperation(RANDOM_SAMPLING_INSERT);
+
         statistics.entries.back().pvsSize = pvs.getSet().size();
         statistics.update();
-        end = std::chrono::steady_clock::now();
-        randomSamplingTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_RAYS rays at a time as
         // long as there are a number of MIN_ABS_RAYS unprocessed triangles left
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
-            //std::cout << absSampleQueue.size() << std::endl;
-
-                    start = std::chrono::steady_clock::now();
             // Get a maximum of MAX_ABS_RAYS triangles for which ABS will be run at a time
             int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
@@ -1749,7 +1743,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             absSampleQueue.erase(absSampleQueue.end() - numAbsRays, absSampleQueue.end());
 
             // Execute ABS
+            statistics.startOperation(ADAPTIVE_BORDER_SAMPLING);
             ShaderExecutionInfo absInfo = adaptiveBorderSample(absWorkingVector, threadId);
+            statistics.endOperation(ADAPTIVE_BORDER_SAMPLING);
+
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
             statistics.entries.back().absRays += absWorkingVector.size() * NUM_ABS_SAMPLES;
             statistics.entries.back().rsRays += absInfo.numRays - absWorkingVector.size() * NUM_ABS_SAMPLES;
@@ -1757,8 +1754,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             // Insert the newly found triangles into the PVS and into the newSamples set for which
             // ABS is going to be executed again
             Sample *absOutputSamples = (Sample*)absOutputPointer[threadId];
+            statistics.startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             for (int i = 0; i < absInfo.numTriangles; i++) {
-                //std::cout << i << " " << absOutputSamples[i] << std::endl;
                 if (absOutputSamples[i].triangleID != -1) {
                     auto result = pvs.insert(absOutputSamples[i].triangleID, numThreads > 1);
                     if (result.second) {
@@ -1775,17 +1772,21 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     }
                 }
             }
+            statistics.endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
+
             statistics.entries.back().pvsSize = pvs.getSet().size();
             statistics.update();
-                    end = std::chrono::steady_clock::now();
-                    absTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-
-                    start = std::chrono::steady_clock::now();
+            // Execute edge subdivision
+            statistics.startOperation(EDGE_SUBDIVISION);
             ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
+            statistics.endOperation(EDGE_SUBDIVISION);
+
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
             statistics.entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
+
             Sample *edgeSubdivOutputSamples = (Sample*)edgeSubdivOutputPointer[threadId];
+            statistics.startOperation(EDGE_SUBDIVISION_INSERT);
             for (int i = 0; i < edgeSubdivideInfo.numTriangles; i++) {
                 if (edgeSubdivOutputSamples[i].triangleID != -1) {
                     auto result = pvs.insert(edgeSubdivOutputSamples[i].triangleID, numThreads > 1);
@@ -1799,9 +1800,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     }
                 }
             }
+            statistics.endOperation(EDGE_SUBDIVISION_INSERT);
+
             statistics.entries.back().pvsSize = pvs.getSet().size();
-                    end = std::chrono::steady_clock::now();
-                    edgeSubdivTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
             statistics.update();
         }
 
@@ -1809,18 +1810,15 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         break;
 
-                start = std::chrono::steady_clock::now();
+        start = std::chrono::steady_clock::now();
         generateHaltonPoints2d(RAYS_PER_ITERATION, threadId, RAYS_PER_ITERATION * i);
         copyHaltonPointsToBuffer(threadId);
-                end = std::chrono::steady_clock::now();
-                haltonTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        end = std::chrono::steady_clock::now();
+        haltonTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
 
     auto endTotal = std::chrono::steady_clock::now();
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
-    std::cout << "Random sampling time: " << randomSamplingTime << "ms" << std::endl;
-    std::cout << "ABS + Reverse sampling time: " << absTime << "ms" << std::endl;
-    std::cout << "Edge subdivision time: " << edgeSubdivTime << "ms" << std::endl;
     std::cout << "Halton time: " << haltonTime << "ms" << std::endl;
 }
 

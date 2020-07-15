@@ -59,7 +59,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 }
 
 void VulkanRenderer::initResources() {
-    loadSceneFile("SPONZA", 0);
+    loadSceneFile("CANYON", 0);
 
     std::cout << "model: " << modelPath << std::endl;
     std::cout << "view cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
@@ -343,7 +343,7 @@ void VulkanRenderer::loadModel() {
     }
 
     //float scale = 0.001f;
-    float scale = 10.0f;
+    float scale = 1.0f;
 
     uint32_t i = 0;
     for (const auto &shape : shapes) {
