@@ -73,18 +73,18 @@ void Statistics::print() {
     auto absSum = elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT];
     auto esSum = elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT];
 
-    printf("%-15s%-15s%-15s\n", "Rand (ms)", "Rand Insert (ms)", "Total (ms)");
+    printf("%-15s%-15s%-15s\n", "Rand", "Rand Insert", "Total (ms)");
     printf(
         "%-15i%-15i%-15i\n", elapsedTimes[RANDOM_SAMPLING], elapsedTimes[RANDOM_SAMPLING_INSERT],
         elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT], randSum
     );
-    printf("%-15s%-15s%-15s\n", "ABS (ms)", "ABS Insert (ms)", "Total (ms)");
+    printf("%-15s%-15s%-15s\n", "ABS", "ABS Insert", "Total (ms)");
     printf(
         "%-15i%-15i%-15i\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING],
         elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT], absSum
 
     );
-    printf("%-15s%-15s%-15s\n", "ES (ms)", "ES Insert (ms)", "Total (ms)");
+    printf("%-15s%-15s%-15s\n", "ES", "ES Insert", "Total (ms)");
     printf(
         "%-15i%-15i%-15i\n", elapsedTimes[EDGE_SUBDIVISION], elapsedTimes[EDGE_SUBDIVISION_INSERT],
         esSum

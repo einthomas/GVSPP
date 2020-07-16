@@ -72,6 +72,13 @@ void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 nor
     viewCells.push_back(ViewCell(pos, size, normal));
 }
 
+/*
+    This is the incremental version to generate the halton squence of
+    quasi-random numbers of a given base. It has been taken from:
+    A. Keller: Instant Radiosity,
+    In Computer Graphics (SIGGRAPH 97 Conference Proceedings),
+    pp. 49--56, August 1997.
+*/
 void VisibilityManager::generateHaltonPoints2d(int n, int threadId, int offset) {
     int bases[4] = { 2, 3, 5, 7 };
 
@@ -317,7 +324,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RAYS_PER_ITERATION;
     VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES;
     //VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1);
-    VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1);
+    VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 4;
     for (int i = 0; i < numThreads; i++) {
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -525,8 +532,6 @@ void VisibilityManager::createDescriptorSets(
         0,
         VK_NULL_HANDLE
     );
-
-
 }
 
 void VisibilityManager::initRayTracing(
@@ -560,7 +565,7 @@ void VisibilityManager::initRayTracing(
     geometry.geometry.triangles.vertexOffset = 0;
     geometry.geometry.triangles.vertexCount = vertices.size();
     geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-    geometry.geometry.triangles.vertexFormat =VK_FORMAT_R32G32B32_SFLOAT;
+    geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometry.geometry.triangles.indexData = indexBuffer;
     geometry.geometry.triangles.indexOffset = 0;
     geometry.geometry.triangles.indexCount = indices.size();
@@ -1816,6 +1821,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         end = std::chrono::steady_clock::now();
         haltonTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
+
+    std::cout << pvs.getSet().size() << std::endl;
 
     auto endTotal = std::chrono::steady_clock::now();
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;

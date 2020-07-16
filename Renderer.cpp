@@ -59,7 +59,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 }
 
 void VulkanRenderer::initResources() {
-    loadSceneFile("CANYON", 0);
+    loadSceneFile("CANYON", 4);
 
     std::cout << "model: " << modelPath << std::endl;
     std::cout << "view cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
@@ -601,7 +601,7 @@ void VulkanRenderer::createDescriptorSetLayout() {
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.pImmutableSamplers = nullptr;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
     // "Combined image sampler" descriptor. Allows shaders to access an image resource through a
     // sampler object
@@ -612,17 +612,9 @@ void VulkanRenderer::createDescriptorSetLayout() {
     samplerLayoutBinding.pImmutableSamplers = nullptr;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
-    // View cell uniform binding
-    VkDescriptorSetLayoutBinding pvsBinding = {};
-    pvsBinding.binding = 7;
-    pvsBinding.descriptorCount = 1;
-    pvsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pvsBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    std::array<VkDescriptorSetLayoutBinding, 3> bindings = {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
         uboLayoutBinding,
-        samplerLayoutBinding,
-        pvsBinding
+        samplerLayoutBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

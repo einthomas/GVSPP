@@ -1,5 +1,10 @@
 #version 460
 
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} ubo;
 layout(binding = 1) uniform sampler2D tex;
 
 layout(location = 0) flat in vec3 fragColor;
@@ -14,7 +19,9 @@ layout(push_constant) uniform PushConstants {
 
 void main() {
     if (pushConstants.shadedRendering) {
-        color = vec4(fragColor * max(0.0f, dot(fragNormal, vec3(-1.0f, 0.0f, 0.0f))), 1.0f);
+        mat4 m = inverse(ubo.view);
+        vec3 cameraWorldPos = vec3(m[3][0], m[3][1], m[3][2]);
+        color = vec4(fragColor * max(0.0f, dot(fragNormal, normalize(cameraWorldPos - worldPos))), 1.0f);
     } else {
         color = vec4(fragColor, 1.0f);
     }
