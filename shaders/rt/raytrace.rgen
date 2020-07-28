@@ -35,6 +35,23 @@ layout(push_constant) uniform PushConstants {
 	int faceIndices[7];  // faceIndices[0] stores the number of faces
 } pushConstants;
 
+
+layout(binding = 9, set = 0) buffer testBuffer {        // PVS
+    int test[];
+};
+
+layout(binding = 10, set = 0) writeonly buffer randomSamplingOutputIDbuffer {
+    int triangleIDOutput[];
+};
+
+
+layout(binding = 1, set = 0) uniform cameraProperties {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} camera;
+
+
 void main() {
     // Calculate 1D launch index
     uint launchIndex = gl_LaunchIDNV.x;
@@ -102,7 +119,19 @@ void main() {
         0               // payload (location = 0)
     );
 
+    
     if (int(hitInfo.w) != -1) {
-        randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+        uint index = atomicAdd(triangleCounter, 1);
+        triangleIDOutput[index] = int(hitInfo.w);
+        randomSamplingOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
     }
+    
+    //randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(2, camera.view[0].xyz, camera.view[1].xyz, camera.view[2].xyz);
+    //randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(testt[launchIndex], camera.view[0].xyz, camera.view[1].xyz, camera.view[2].xyz);
+
+    /*
+    if (test[0] != 123) {
+        test[int(launchIndex % 10)] = int(launchIndex);
+    }
+    */
 }

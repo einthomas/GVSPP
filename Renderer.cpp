@@ -8,7 +8,7 @@
 //#include <QKeyEvent>
 #include <chrono>
 
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+//#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
@@ -21,10 +21,12 @@
 #include "Renderer.h"
 #include "sample.h"
 
+#include "viewcell.h"
+
 struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 projection;
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
 };
 
 /*
@@ -48,6 +50,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 {
     initResources();
 
+
     cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
     glm::vec3 cameraTarget = glm::vec3(0.0f);
     cameraForward = glm::normalize(cameraTarget - cameraPos);
@@ -56,6 +59,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 
     nextCorner();
     alignCameraWithViewCellNormal();
+
+    initVisibilityManager();
 }
 
 void VulkanRenderer::initResources() {
@@ -75,12 +80,14 @@ void VulkanRenderer::initResources() {
     //createTextureSampler();
 
     // Create vertex buffer using GPU memory
+    /*
     VulkanUtil::createBuffer(
         window->physicalDevice,
         window->device, sizeof(vertices[0]) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
-    createVertexBuffer();
+    */
+    createVertexBuffer(vertices, vertexBuffer, vertexBufferMemory);
 
     // Create index buffer using GPU memory
     VulkanUtil::createBuffer(
@@ -92,8 +99,6 @@ void VulkanRenderer::initResources() {
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
-
-    initVisibilityManager();
 }
 
 void VulkanRenderer::initSwapChainResources() {
@@ -260,8 +265,9 @@ void VulkanRenderer::createGraphicsPipeline() {
     vkDestroyShaderModule(window->device, fragShaderModule, nullptr);
 }
 
-void VulkanRenderer::createVertexBuffer() {
+void VulkanRenderer::createVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory) {
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+    //VkDeviceSize bufferSize = sizeof(glm::vec3) * 4 * vertices.size();
 
     // Create staging buffer using host-visible memory
     VkBuffer stagingBuffer;
@@ -278,14 +284,12 @@ void VulkanRenderer::createVertexBuffer() {
     memcpy(data, vertices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
     vkUnmapMemory(window->device, stagingBufferMemory);
 
-    /*
     // Create vertex buffer using GPU memory
     VulkanUtil::createBuffer(
         window->physicalDevice,
         window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
-    */
 
     // Copy vertex data from the staging buffer to the vertex buffer
     VulkanUtil::copyBuffer(window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer, vertexBuffer, bufferSize);
@@ -601,7 +605,7 @@ void VulkanRenderer::createDescriptorSetLayout() {
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.pImmutableSamplers = nullptr;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
     // "Combined image sampler" descriptor. Allows shaders to access an image resource through a
     // sampler object
@@ -741,7 +745,8 @@ void VulkanRenderer::createUniformBuffers() {
 }
 
 void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
-    UniformBufferObject ubo = {};
+    UniformBufferObject ubo;
+
     /*
     ubo.model = glm::rotate(
         glm::mat4(1.0f),
@@ -825,11 +830,11 @@ void VulkanRenderer::startNextFrame(
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Bind vertex buffer
-    VkBuffer vertexBuffers[] = { vertexBuffer };
+    VkBuffer vertexBuffers[] = { shadedVertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    //vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdBindDescriptorSets(
         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
@@ -842,7 +847,8 @@ void VulkanRenderer::startNextFrame(
         p.data()
     );
 
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    //vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    vkCmdDraw(commandBuffer, static_cast<uint32_t>(shadedVertices.size()), 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -888,7 +894,7 @@ void VulkanRenderer::initVisibilityManager() {
 
     visibilityManager.init(
         window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers, NUM_THREADS
+        uniformBuffers, NUM_THREADS, window->deviceUUID
     );
 }
 
@@ -948,18 +954,21 @@ void VulkanRenderer::startVisibilityThread() {
     }
     std::cout << "done" << std::endl;
 
-    for (int i = 0; i < int(indices.size() / 3.0f); i++) {
-        glm::vec3 color = glm::vec3(1.0f, 0.0f, 0.0f);
-        vertices[indices[3 * i]].color = color;
-        vertices[indices[3 * i + 1]].color = color;
-        vertices[indices[3 * i + 2]].color = color;
+    visibilityManager.fetchPVS();
+
+    for (int i = 0; i < indices.size(); i++) {
+        vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
+        shadedVertices.push_back(vertices[indices[i]]);
     }
-    for (auto triangleID : visibilityManager.pvs.getSet()) {
+    for (auto triangleID : visibilityManager.pvs.pvsVector) {
+        if (triangleID == -1) {
+            std::cout << "-1" << std::endl;
+        }
         glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);
-        vertices[indices[3 * triangleID]].color = color;
-        vertices[indices[3 * triangleID + 1]].color = color;
-        vertices[indices[3 * triangleID + 2]].color = color;
+        shadedVertices[3 * triangleID].color = color;
+        shadedVertices[3 * triangleID + 1].color = color;
+        shadedVertices[3 * triangleID + 2].color = color;
     }
 
-    createVertexBuffer();
+    createVertexBuffer(shadedVertices, shadedVertexBuffer, shadedVertexBufferMemory);
 }

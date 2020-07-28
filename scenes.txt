@@ -1,3 +1,8 @@
+AAA models/quad/quad.obj
+0 0 20
+1 1 0
+0 0 -1
+
 CITY_MODEL models/citymodel/citymodel.obj
 6004.71 20 5611.6
 100 80 0

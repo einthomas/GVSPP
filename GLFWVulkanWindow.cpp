@@ -253,6 +253,25 @@ void GLFWVulkanWindow::createLogicalDevice() {
     // Get queue handles
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+
+
+    VkPhysicalDeviceIDProperties vkPhysicalDeviceIDProperties = {};
+    vkPhysicalDeviceIDProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+    vkPhysicalDeviceIDProperties.pNext = NULL;
+
+    VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2 = {};
+    vkPhysicalDeviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    vkPhysicalDeviceProperties2.pNext = &vkPhysicalDeviceIDProperties;
+
+    PFN_vkGetPhysicalDeviceProperties2 fpGetPhysicalDeviceProperties2;
+    fpGetPhysicalDeviceProperties2 = (PFN_vkGetPhysicalDeviceProperties2)vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties2");
+    if (fpGetPhysicalDeviceProperties2 == NULL) {
+        throw std::runtime_error("Vulkan: Proc address for \"vkGetPhysicalDeviceProperties2KHR\" not found.\n");
+    }
+
+    fpGetPhysicalDeviceProperties2(physicalDevice, &vkPhysicalDeviceProperties2);
+
+    memcpy(deviceUUID.data(), vkPhysicalDeviceIDProperties.deviceUUID,  VK_UUID_SIZE);
 }
 
 void GLFWVulkanWindow::createSwapChain() {

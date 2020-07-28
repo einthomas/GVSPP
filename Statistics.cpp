@@ -37,7 +37,7 @@ void Statistics::print() {
     }
     for (int i = 0; i < entries.size(); i++) {
         printf(
-            "%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i%'-15i\n",
+            "%-15i%-15i%-15i%-15i%-15i%-15i%-15i%-15i%-15i%-15i%-15i%-15i\n",
             entries[i].numShaderExecutions,
             entries[i].rnsRays,
             entries[i].absRays,
@@ -65,7 +65,7 @@ void Statistics::print() {
     }
     printf("===\n");
     for (int i = 0; i < sums.size(); i++) {
-        printf("%'-15i%", sums[i]);
+        printf("%-15i%", sums[i]);
     }
     printf("\n\n");
 
@@ -100,6 +100,7 @@ void Statistics::print() {
     printf("\n\n");
 
     setlocale(LC_NUMERIC, "en_US");
+
 }
 
 void Statistics::startOperation(OPERATION_TYPE operationType) {

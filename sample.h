@@ -3,14 +3,26 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
-#include <glm/gtx/hash.hpp>
-#include <glm/gtx/string_cast.hpp>
+//#include <glm/gtx/hash.hpp>
+//#include <glm/gtx/string_cast.hpp>
 
 #include <iostream>
 
+struct Sample {
+    alignas(4) int triangleID;
+    alignas(16) glm::vec3 rayOrigin;        // Origin of the ray that hit the triangle
+    alignas(16) glm::vec3 hitPos;       // Position where the triangle was hit
+    alignas(16) glm::vec3 pos;       // Position of the sample itself
+
+    bool operator<(const Sample &s) const {
+        return triangleID < s.triangleID;
+    }
+};
+
+/*
 class Sample {
 public:
-    int triangleID;
+    alignas(4) int triangleID;
     alignas(16) glm::vec3 rayOrigin;        // Origin of the ray that hit the triangle
     alignas(16) glm::vec3 hitPos;       // Position where the triangle was hit
     alignas(16) glm::vec3 pos;       // Position of the sample itself
@@ -36,5 +48,6 @@ namespace std {
         }
     };
 }
+*/
 
 #endif // SAMPLE_H

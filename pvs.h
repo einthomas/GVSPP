@@ -7,8 +7,11 @@
 template<class T>
 class PVS {
 public:
+    std::vector<T> pvsVector;
+
     PVS() {
     }
+
 
     std::unordered_set<T> &getSet() {
         return set;
@@ -24,6 +27,7 @@ public:
         }
         return result;
     }
+
 
 private:
     std::unordered_set<T> set;

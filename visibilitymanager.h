@@ -1,5 +1,4 @@
-#ifndef VISIBILITYMANAGER_H
-#define VISIBILITYMANAGER_H
+#pragma once
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -12,13 +11,16 @@
 #include <random>
 #include <map>
 
-#include <glm/glm.hpp>
+#include <glm/vec3.hpp>
 
-#include "viewcell.h"
+//#include "viewcell.h"
 #include "Vertex.h"
 #include "sample.h"
 #include "pvs.h"
 #include "Statistics.h"
+#include "CUDAUtil.h"
+
+class ViewCell;
 
 struct AccelerationStructure {
     VkDeviceMemory deviceMemory;
@@ -51,7 +53,7 @@ public:
         VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
         VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
         const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-        int numThreads
+        int numThreads, std::array<uint8_t, VK_UUID_SIZE> deviceUUID
     );
     void addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
     void generateHaltonPoints2d(int n, int threadId, int offset = 0);
@@ -61,8 +63,11 @@ public:
         const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue,
         bool inverted
     );
+    void fetchPVS();
 
 private:
+    int pvsSize = 0;
+
     int numThreads;
 
     const bool USE_TERMINATION_CRITERION = true;
@@ -123,6 +128,7 @@ private:
 
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
+    std::array<uint8_t, VK_UUID_SIZE> deviceUUID;
     //VkCommandPool graphicsCommandPool;
     //VkCommandPool commandPool;
     VkQueue computeQueue;
@@ -162,8 +168,12 @@ private:
     std::vector<VkDeviceMemory> viewCellBufferMemory;
     std::vector<VkBuffer> randomSamplingOutputBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputBufferMemory;
+    std::vector<VkBuffer> randomSamplingOutputIDBuffer;
+    std::vector<VkDeviceMemory> randomSamplingOutputIDBufferMemory;
     std::vector<VkBuffer> absOutputBuffer;
     std::vector<VkDeviceMemory> absOutputBufferMemory;
+    std::vector<VkBuffer> absIDOutputBuffer;
+    std::vector<VkDeviceMemory> absIDOutputBufferMemory;
     std::vector<VkBuffer> absWorkingBuffer;
     std::vector<VkDeviceMemory> absWorkingBufferMemory;
     std::vector<VkBuffer> absOutputHostBuffer;
@@ -171,16 +181,43 @@ private:
     std::vector<void*> absOutputPointer;
     std::vector<VkBuffer> edgeSubdivOutputBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputBufferMemory;
+    std::vector<VkBuffer> edgeSubdivIDOutputBuffer;
+    std::vector<VkDeviceMemory> edgeSubdivIDOutputBufferMemory;
     std::vector<VkBuffer> edgeSubdivOutputHostBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputHostBufferMemory;
     std::vector<void*> edgeSubdivOutputPointer;
-    std::vector<VkBuffer> edgeSubdivWorkingBuffer;
-    std::vector<VkDeviceMemory> edgeSubdivWorkingBufferMemory;
     std::vector<VkBuffer> triangleCounterBuffer;
     std::vector<VkDeviceMemory> triangleCounterBufferMemory;
     std::vector<VkBuffer> randomSamplingOutputHostBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputHostBufferMemory;
     std::vector<void*> randomSamplingOutputPointer;
+    std::vector<VkBuffer> triangleIDTempBuffer;
+    std::vector<VkDeviceMemory> triangleIDTempBufferMemory;
+
+    std::vector<VkBuffer> testBuffer;
+    std::vector<VkDeviceMemory> testBufferMemory;
+    std::vector<VkBuffer> testHostBuffer;
+    std::vector<VkDeviceMemory> testHostBufferMemory;
+    std::vector<void*> testPointer;
+    int *pvsCuda;
+    cudaExternalMemory_t pvsCudaMemory = {};
+
+    Sample *randomSamplingOutputCuda;
+    cudaExternalMemory_t randomSamplingOutputCudaMemory = {};
+    Sample *absOutputCuda;
+    cudaExternalMemory_t absOutputCudaMemory = {};
+    Sample *edgeSubdivOutputCuda;
+    cudaExternalMemory_t edgeSubdivOutputCudaMemory = {};
+
+    int *randomSamplingIDOutputCuda;
+    cudaExternalMemory_t randomSamplingIDOutputCudaMemory = {};
+    int *absIDOutputCuda;
+    cudaExternalMemory_t absIDOutputCudaMemory = {};
+    int *edgeSubdivIDOutputCuda;
+    cudaExternalMemory_t edgeSubdivIDOutputCudaMemory = {};
+
+    int *triangleIDTempCuda;        // TODO: Remove
+    cudaExternalMemory_t triangleIDTempCudaMemory = {};
 
     VkBuffer pvsVisualizationBuffer;
     VkDeviceMemory pvsVisualizationBufferMemory;
@@ -247,4 +284,3 @@ private:
     ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId);
 };
 
-#endif // VISIBILITYMANAGER_H

@@ -14,6 +14,16 @@
 #include <vector>
 #include <cstring>
 #include <fstream>
+#include <array>
+
+#ifdef _WIN64
+#define NOMINMAX
+#include <windows.h>
+#include <vulkan/vulkan_win32.h>
+#include <VersionHelpers.h>
+#include <dxgi1_2.h>
+#include <aclapi.h>
+#endif
 
 //#include "Renderer.h"
 
@@ -30,7 +40,16 @@ const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_NV_RAY_TRACING_EXTENSION_NAME,
     VK_KHR_MAINTENANCE3_EXTENSION_NAME,
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
+    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+#ifdef _WIN64
+    VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+#else
+    VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME
+#endif /* _WIN64 */
 };
 
 struct SwapChainSupportDetails {
@@ -55,6 +74,7 @@ class GLFWVulkanWindow {
 public:
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
+    std::array<uint8_t, VK_UUID_SIZE> deviceUUID;
     uint32_t imageCount;
     VkRenderPass renderPass;
     VkQueue graphicsQueue;

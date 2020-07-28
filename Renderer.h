@@ -50,8 +50,11 @@ private:
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    std::vector<Vertex> shadedVertices;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer shadedVertexBuffer;
+    VkDeviceMemory shadedVertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
 
@@ -65,7 +68,8 @@ private:
     int currentViewCellCornerView = 0;
 
     void createGraphicsPipeline();
-    void createVertexBuffer();
+    void createVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
+    void createShadedVertexBuffer();
     void createIndexBuffer();
 
     void loadModel();

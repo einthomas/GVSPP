@@ -1,4 +1,5 @@
 models
+out
 *.user*
 .vs
 screenshot.png

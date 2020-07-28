@@ -10,8 +10,16 @@
 
 #include <sstream>
 #include <string>
+#include "CUDAUtil.h"
+
+#include <stdio.h>      /* printf, scanf, puts, NULL */
+#include <stdlib.h>     /* srand, rand */
+#include <time.h>       /* time */
+
 
 int main(int argc, char *argv[]) {
+    CUDAUtil::test();
+
     /*
     QGuiApplication app(argc, argv);
 
