@@ -14,8 +14,18 @@ struct Sample {
     alignas(16) glm::vec3 hitPos;       // Position where the triangle was hit
     alignas(16) glm::vec3 pos;       // Position of the sample itself
 
+    /*
     bool operator<(const Sample &s) const {
         return triangleID < s.triangleID;
+    }
+    */
+
+    friend std::ostream &operator<<(std::ostream &stream, const Sample &sample) {
+        return stream
+            << "triangleID: " << sample.triangleID
+            << " rayOrigin: (" << sample.rayOrigin.x << ", " << sample.rayOrigin.y << ", " << sample.rayOrigin.z << ") "
+            << "hitPos: (" << sample.hitPos.x << ", " << sample.hitPos.y << ", " << sample.hitPos.z << ") "
+            << "pos: (" << sample.pos.x << ", " << sample.pos.y << ", " << sample.pos.z << ") ";
     }
 };
 
@@ -32,10 +42,6 @@ public:
     bool operator==(const Sample &other) const;
     friend std::ostream &operator<<(std::ostream &ostream, const Sample &sample);
 };
-
-inline std::ostream &operator<<(std::ostream &stream, const Sample &sample) {
-    return stream << "triangleID: " << sample.triangleID << " rayOrigin: " << glm::to_string(sample.rayOrigin) << " hitPos: " << glm::to_string(sample.hitPos) << " pos: " << glm::to_string(sample.pos);
-}
 
 
 // See https://en.cppreference.com/w/cpp/utility/hash

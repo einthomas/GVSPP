@@ -68,8 +68,6 @@ void VisibilityManager::init(
     cudaStream_t cudaStream;
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
 
-    //CUDAUtil::test();
-
     createBuffers(indices);
 
     haltonPoints.resize(numThreads);
@@ -1784,31 +1782,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
     }
 
-    /*
-    {
-        //VkDeviceSize bufferSize = sizeof(Sample) * triangles.size() * 9 * 2;
-        VkDeviceSize bufferSize = sizeof(Sample) * numTriangles;
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
-            absOutputHostBuffer[threadId], bufferSize, queueSubmitMutex
-        );
-        //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << std::endl;
-    }
-    */
-
-    /*
-    {
-        auto s = std::chrono::steady_clock::now();
-        numTriangles = CUDAUtil::uniqueByKey(absIDOutputCuda, absOutputCuda, numTriangles);
-        CUDAUtil::sortByKey(absIDOutputCuda, absOutputCuda, numTriangles);
-        CUDAUtil::setUnion(pvsCuda, absIDOutputCuda, pvsSize, numTriangles);
-        auto e = std::chrono::steady_clock::now();
-        std::cout << std::chrono::duration_cast<std::chrono::microseconds>(e - s).count() << "microseconds" << std::endl;
-    }
-    */
-
     return { numTriangles, numRays };
     //return triangles.size() * 9 * 2;
 }
@@ -2069,7 +2042,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             statistics.entries.back().pvsSize = pvsSize;
             statistics.update();
-
         }
 
         statistics.print();

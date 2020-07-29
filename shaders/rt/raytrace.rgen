@@ -118,20 +118,10 @@ void main() {
         tmax,           // ray max range
         0               // payload (location = 0)
     );
-
     
     if (int(hitInfo.w) != -1) {
         uint index = atomicAdd(triangleCounter, 1);
         triangleIDOutput[index] = int(hitInfo.w);
         randomSamplingOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
     }
-    
-    //randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(2, camera.view[0].xyz, camera.view[1].xyz, camera.view[2].xyz);
-    //randomSamplingOutput[atomicAdd(triangleCounter, 1)] = Sample(testt[launchIndex], camera.view[0].xyz, camera.view[1].xyz, camera.view[2].xyz);
-
-    /*
-    if (test[0] != 123) {
-        test[int(launchIndex % 10)] = int(launchIndex);
-    }
-    */
 }
