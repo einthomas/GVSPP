@@ -119,6 +119,30 @@ void findNewTriangles(
     }
 }
 
+__global__ void haltonKernel(int n, float *sequence) {
+    int offset = blockIdx.x * blockDim.x + threadIdx.x;
+    int bases[4] = { 2, 3, 5, 7 };
+
+    for (int i = 0; i < 4; i++) {
+        float f = 1.0f;
+        float r = 0.0f;
+        int k = offset + 1;
+        while (k > 0) {
+            f /= bases[i];
+            r = r + f * (k % bases[i]);
+            k = int(k / bases[i]);
+        }
+        sequence[offset * 4 + i] = r;
+    }
+}
+
+void CUDAUtil::generateHaltonSequence(int n, float *sequence) {
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    haltonKernel<<<numBlocks, blockSize>>>(blockSize, sequence);
+    cudaDeviceSynchronize();
+}
+
 int CUDAUtil::initCuda(uint8_t *vkDeviceUUID, size_t UUID_SIZE) {
     int current_device = 0;
     int device_count = 0;

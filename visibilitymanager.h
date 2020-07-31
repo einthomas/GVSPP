@@ -120,7 +120,7 @@ private:
     };
 
     Statistics statistics;
-    std::vector<std::vector<glm::vec4>> haltonPoints;
+    std::vector<std::vector<float>> haltonPoints;
     std::random_device rd;
     std::mt19937 gen;
     std::mutex *queueSubmitMutex;
@@ -129,8 +129,6 @@ private:
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
     std::array<uint8_t, VK_UUID_SIZE> deviceUUID;
-    //VkCommandPool graphicsCommandPool;
-    //VkCommandPool commandPool;
     VkQueue computeQueue;
 
     std::vector<VkCommandPool> commandPool;
@@ -201,6 +199,8 @@ private:
     std::vector<void*> testPointer;
     int *pvsCuda;
     cudaExternalMemory_t pvsCudaMemory = {};
+    float *haltonCuda;
+    cudaExternalMemory_t haltonCudaMemory = {};
 
     Sample *randomSamplingOutputCuda;
     cudaExternalMemory_t randomSamplingOutputCudaMemory = {};

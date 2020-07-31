@@ -37,7 +37,7 @@ layout(binding = 3, set = 0) buffer Indices {
     uint i[];
 } indices;
 layout(binding = 4, set = 0) readonly buffer haltonPoints {
-    vec4 points[];
+    float points[];
 };
 layout(binding = 5, set = 0) uniform viewCellProperties {
     vec3 pos;
@@ -308,23 +308,6 @@ void main() {
                         samplePos
                     );
                 }
-
-                /*
-                Sample reverseSamplingSample = ;
-                if (int(hitInfo.w) != -1) {
-                    uint index = gl_LaunchSizeNV.x + atomicAdd(triangleCounter, 1);
-                    if (length(reverseSamplingSample.rayHitPos - samplePos) < 0.01) {
-                        triangleIDOutput[index] = absOutput[launchIndex].triangleID;
-                        absOutput[index] = absOutput[launchIndex];
-
-                        triangleIDOutput[launchIndex] = reverseSamplingSample.triangleID;
-                        absOutput[launchIndex] = reverseSamplingSample;
-                    } else {
-                        triangleIDOutput[index] = reverseSamplingSample.triangleID;
-                        absOutput[index] = reverseSamplingSample;
-                    }
-                }
-                */
             }
         }
     #elif REVERSE_SAMPLING_METHOD == 1
@@ -426,30 +409,6 @@ void main() {
                                     samplePos
                                 );
                             }
-
-                            /*
-                            reverseSamplingSample.triangleID = int(hitInfo.w);
-                            reverseSamplingSample.rayOrigin = rayOrigin;
-                            reverseSamplingSample.rayHitPos = hitInfo.xyz;
-                            reverseSamplingSample.pos = samplePos;
-
-                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-                            tracedRays++;
-
-                            if (reverseSamplingSample.triangleID != -1) {
-                                uint index = gl_LaunchSizeNV.x + atomicAdd(triangleCounter, 1);
-                                if (length(reverseSamplingSample.rayHitPos - samplePos) < 0.01) {
-                                    triangleIDOutput[index] = absOutput[launchIndex].triangleID;
-                                    absOutput[index] = absOutput[launchIndex];
-
-                                    triangleIDOutput[launchIndex] = reverseSamplingSample.triangleID;
-                                    absOutput[launchIndex] = reverseSamplingSample;
-                                } else {
-                                    triangleIDOutput[index] = reverseSamplingSample.triangleID;
-                                    absOutput[index] = reverseSamplingSample;
-                                }
-                            }
-                            */
                         }
                     }
                 }
@@ -533,7 +492,7 @@ void main() {
                         if (i < 4) {
                             haltonPoint = corners[i];
                         } else {
-                            haltonPoint = points[i - 4].zw;
+                            haltonPoint = vec2(points[(i - 4) * 4 + 2], points[(i - 4) * 4 + 3]);
                         }
                         vec2 offset = (haltonPoint - vec2(0.5)) * viewCellSize.xy;
                         vec3 viewCellSamplePoint = viewCellPos + offset.x * viewCellRight + offset.y * viewCellUp;
@@ -607,43 +566,6 @@ void main() {
                                 }
                             }
                         }
-
-                        /*
-                        if (pointFound) {
-                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-                            count++;
-                            tracedRays++;
-
-                            storeReverseSample(
-                                launchIndex,
-                                Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos),
-                                samplePos
-                            );
-
-                            count++;
-                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-                            tracedRays++;
-
-                            reverseSamplingSample.triangleID = int(hitInfo.w);
-                            reverseSamplingSample.rayOrigin = rayOrigin;
-                            reverseSamplingSample.rayHitPos = hitInfo.xyz;
-                            reverseSamplingSample.pos = samplePos;
-
-                            if (reverseSamplingSample.triangleID != -1) {
-                                uint index = gl_LaunchSizeNV.x + atomicAdd(triangleCounter, 1);
-                                if (length(reverseSamplingSample.rayHitPos - samplePos) < 0.01) {
-                                    triangleIDOutput[index] = absOutput[launchIndex].triangleID;
-                                    absOutput[index] = absOutput[launchIndex];
-
-                                    triangleIDOutput[launchIndex] = reverseSamplingSample.triangleID;
-                                    absOutput[launchIndex] = reverseSamplingSample;
-                                } else {
-                                    triangleIDOutput[index] = reverseSamplingSample.triangleID;
-                                    absOutput[index] = reverseSamplingSample;
-                                }
-                            }
-                        }
-                        */
                     }
                 }
             }

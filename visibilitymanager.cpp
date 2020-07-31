@@ -69,16 +69,16 @@ void VisibilityManager::init(
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
 
     createBuffers(indices);
-
-    haltonPoints.resize(numThreads);
-    for (int i = 0; i < numThreads; i++) {
-        generateHaltonPoints2d(RAYS_PER_ITERATION, i, 0);
-        copyHaltonPointsToBuffer(i);
-    }
-
+    CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
     createViewCellBuffer();
-
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
+
+    /*
+    auto start = std::chrono::steady_clock::now();
+    generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
+    auto end = std::chrono::steady_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "microseconds" << std::endl;
+    */
 }
 
 void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal) {
@@ -97,10 +97,12 @@ void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 nor
     pp. 49--56, August 1997.
 */
 void VisibilityManager::generateHaltonPoints2d(int n, int threadId, int offset) {
+    std::vector<glm::vec4> haltonPoints;
+
     int bases[4] = { 2, 3, 5, 7 };
 
-    haltonPoints[threadId].clear();
-    haltonPoints[threadId].resize(n);
+    haltonPoints.clear();
+    haltonPoints.resize(n);
 
     for (int k = 0; k < 4; k++) {
         double inverseBase = 1.0 / bases[k];
@@ -121,79 +123,9 @@ void VisibilityManager::generateHaltonPoints2d(int n, int threadId, int offset) 
                 value += hh + h - 1.0;
             }
 
-            haltonPoints[threadId][i][k] = value;
+            haltonPoints[i][k] = value;
         }
     }
-
-    /*
-    haltonPoints[threadId].clear();
-    haltonPoints[threadId].resize(n);
-
-    auto start = std::chrono::steady_clock::now();
-    float p, u, v, ip;
-    int k, kk, pos, a;
-    for (k = offset + threadId * n, pos = 0; k < n + offset + threadId * n; k++) {
-        u = 0;
-        for (p = 0.5, kk = k; kk; p *= 0.5, kk >>= 1) {
-            if (kk & 1) {
-                u += p;
-            }
-        }
-
-        v = 0;
-        ip = 1.0 / p2;
-        for (p = ip, kk = k; kk; p *= ip, kk /= p2) {
-            if ((a = kk % p2)) {
-                v += a * p;
-            }
-        }
-
-        haltonPoints[threadId][pos].x = u;
-        haltonPoints[threadId][pos].y = v;
-
-        pos++;
-    }
-    auto end = std::chrono::steady_clock::now();
-    /*
-
-    //std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << std::endl;
-
-    //std::shuffle(haltonPoints[threadId].begin(), haltonPoints[threadId].end(), gen);      // TODO einkommentieren
-
-    /*
-    if (haltonPoints.size() == 0) {
-        haltonPoints.resize(numThreads);
-    }
-    for (int i = 0; i < numThreads; i++) {
-        haltonPoints[i].clear();
-        haltonPoints[i].resize(n);
-
-        float p, u, v, ip;
-        int k, kk, pos, a;
-        for (k = offset + i * n, pos = 0; k < n + offset + i * n; k++) {
-            u = 0;
-            for (p = 0.5, kk = k; kk; p *= 0.5, kk >>= 1) {
-                if (kk & 1) {
-                    u += p;
-                }
-            }
-
-            v = 0;
-            ip = 1.0 / p2;
-            for (p = ip, kk = k; kk; p *= ip, kk /= p2) {
-                if ((a = kk % p2)) {
-                    v += a * p;
-                }
-            }
-
-            haltonPoints[i][pos].x = u;
-            haltonPoints[i][pos].y = v;
-            pos++;
-        }
-
-        std::shuffle(haltonPoints[i].begin(), haltonPoints[i].end(), gen);
-    }
-    */
 }
 
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
@@ -302,7 +234,6 @@ ViewCell VisibilityManager::getViewCellTile(int numThreads, int viewCellIndex, i
 }
 
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
-    std::cout << "a0" << std::endl;
     randomSamplingOutputBuffer.resize(numThreads);
     randomSamplingOutputBufferMemory.resize(numThreads);
     randomSamplingOutputIDBuffer.resize(numThreads);
@@ -353,6 +284,8 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     //VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * (std::max(RAYS_PER_ITERATION, MAX_ABS_TRIANGLES_PER_ITERATION) * 9 * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 2 + 1);
     const int MAX_TRIANGLE_COUNT = 12000000;
     VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
+
+    VkDeviceSize haltonSize = sizeof(float) * RAYS_PER_ITERATION * 4;
 
     VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RAYS_PER_ITERATION;
     VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * RAYS_PER_ITERATION;
@@ -472,10 +405,18 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         */
 
         // Create halton points buffer using GPU memory
+        /*
         VulkanUtil::createBuffer(
             physicalDevice, logicalDevice, sizeof(haltonPoints[0][0]) * RAYS_PER_ITERATION,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        */
+        CUDAUtil::createExternalBuffer(
+            haltonSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, haltonPointsBuffer[i],
+            haltonPointsBufferMemory[i], logicalDevice, physicalDevice
         );
 
         // TODO: Rename to PVS buffer
@@ -520,12 +461,14 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
         }
 
+        /*
         CUDAUtil::createExternalBuffer(
             pvsSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, triangleIDTempBuffer[i],
             triangleIDTempBufferMemory[i], logicalDevice, physicalDevice
         );
+        */
     }
 
     VulkanUtil::createBuffer(
@@ -547,9 +490,15 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         (void**)&pvsCuda, pvsCudaMemory,
         testBufferMemory[0], pvsSize, logicalDevice
     );
+    /*
     CUDAUtil::importCudaExternalMemory(
         (void**)&triangleIDTempCuda, triangleIDTempCudaMemory,
         triangleIDTempBufferMemory[0], pvsSize, logicalDevice
+    );
+    */
+    CUDAUtil::importCudaExternalMemory(
+        (void**)&haltonCuda, haltonCudaMemory,
+        haltonPointsBufferMemory[0], haltonSize, logicalDevice
     );
 
     CUDAUtil::importCudaExternalMemory(
@@ -1647,7 +1596,9 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
         );
         //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << "mb " << RAYS_PER_ITERATION << " " << numTriangles << std::endl;
     }
+    */
 
+    /*
     {
         VkDeviceSize bufferSize = sizeof(int) * 10;
         // Copy the intersected triangles GPU buffer to the host buffer
@@ -2050,7 +2001,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         start = std::chrono::steady_clock::now();
         generateHaltonPoints2d(RAYS_PER_ITERATION, threadId, RAYS_PER_ITERATION * i);
-        copyHaltonPointsToBuffer(threadId);
         end = std::chrono::steady_clock::now();
         haltonTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
