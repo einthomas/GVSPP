@@ -67,10 +67,12 @@ int CUDAUtil::work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vec
 
 void sortByKey(thrust::device_ptr<int> triangleIDs, int size, thrust::device_ptr<int> sampleIndices) {
     thrust::sort_by_key(triangleIDs, triangleIDs + size, sampleIndices);
+    cudaDeviceSynchronize();
 }
 
 int uniqueByKey(thrust::device_ptr<int> triangleIDs, int size, thrust::device_ptr<int> sampleIndices) {
     auto newEnd = thrust::unique_by_key(triangleIDs, triangleIDs + size, sampleIndices);
+    cudaDeviceSynchronize();
     return newEnd.first - triangleIDs;
 }
 
@@ -80,9 +82,11 @@ int setUnion(thrust::device_ptr<int> devicePointerPVS, thrust::device_ptr<int> t
         devicePointerPVS, devicePointerPVS + sizeA, triangleIDs, triangleIDs + sizeB,
         result.begin(), thrust::less<int>()
     );
+    cudaDeviceSynchronize();
 
     int resultSize = newEnd - result.begin();
     thrust::copy(result.begin(), result.begin() + resultSize, devicePointerPVS);
+    cudaDeviceSynchronize();
 
     return resultSize;
 }
@@ -98,13 +102,16 @@ void findNewTriangles(
         triangleIDs, triangleIDs + trianglesSize,
         stencil.begin()
     );
+    cudaDeviceSynchronize();
 
     // Count the number of triangles that are not in the PVS
     int numNewTriangles = thrust::count(stencil.begin(), stencil.end(), 0);
+    cudaDeviceSynchronize();
 
     if (numNewTriangles > 0) {
         // Remove the indices referring to samples that are already in the PVS
         thrust::remove_if(devicePointerSampleValueIndices, devicePointerSampleValueIndices + trianglesSize, stencil.begin(), thrust::identity<int>());
+        cudaDeviceSynchronize();
 
         // Store the new samples in a result vector
         thrust::device_vector<Sample> r(numNewTriangles);
@@ -113,20 +120,22 @@ void findNewTriangles(
             samples,
             r.begin()
         );
+        cudaDeviceSynchronize();
 
         result.resize(numNewTriangles);
         thrust::copy(r.begin(), r.end(), result.begin());
+        cudaDeviceSynchronize();
     }
 }
 
-__global__ void haltonKernel(int n, float *sequence) {
+__global__ void haltonKernel(int n, float *sequence, int startIndex) {
     int offset = blockIdx.x * blockDim.x + threadIdx.x;
     int bases[4] = { 2, 3, 5, 7 };
 
     for (int i = 0; i < 4; i++) {
         float f = 1.0f;
         float r = 0.0f;
-        int k = offset + 1;
+        int k = startIndex + offset + 1;
         while (k > 0) {
             f /= bases[i];
             r = r + f * (k % bases[i]);
@@ -136,10 +145,10 @@ __global__ void haltonKernel(int n, float *sequence) {
     }
 }
 
-void CUDAUtil::generateHaltonSequence(int n, float *sequence) {
+void CUDAUtil::generateHaltonSequence(int n, float *sequence, int startIndex) {
     int blockSize = 256;
     int numBlocks = (n + blockSize - 1) / blockSize;
-    haltonKernel<<<numBlocks, blockSize>>>(blockSize, sequence);
+    haltonKernel<<<numBlocks, blockSize>>>(blockSize, sequence, startIndex);
     cudaDeviceSynchronize();
 }
 

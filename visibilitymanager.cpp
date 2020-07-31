@@ -24,7 +24,7 @@ struct UniformBufferObject {
 };
 
 VisibilityManager::VisibilityManager()
-    : statistics(RAY_COUNT_TERMINATION_THRESHOLD)
+    : statistics(1000000)
 {
 }
 
@@ -1877,20 +1877,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     std::vector<Sample> absSampleQueue;
     size_t newTriangles;
     for (int i = 0; true; i++) {
-        // if USE_TERMINATION_CRITERION is set to true, terminate if less than
-        // NEW_TRIANGLE_TERMINATION_THRESHOLD new triangles have been found for
-        // RAY_COUNT_TERMINATION_THRESHOLD rays
-
-        if (tracedRays >= RAY_COUNT_TERMINATION_THRESHOLD) {
-            //numRays = 0;
-            if (USE_TERMINATION_CRITERION && pvsSize - newTriangles < NEW_TRIANGLE_TERMINATION_THRESHOLD) {
-                break;
-            } else {
-                tracedRays = 0;
-            }
-        }
-
-        //newTriangles = pvs.getSet().size();
         newTriangles = pvsSize;
 
         // Execute random sampling
@@ -1917,6 +1903,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_RAYS rays at a time as
         // long as there are a number of MIN_ABS_RAYS unprocessed triangles left
+        std::cout << "absSampleQueue.size() " << absSampleQueue.size() << std::endl;
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
             // Get a maximum of MAX_ABS_RAYS triangles for which ABS will be run at a time
             int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
@@ -1973,21 +1960,30 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.update();
         }
 
-        statistics.print();
-
-        break;
+        if (USE_TERMINATION_CRITERION) {
+            if (
+                statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
+                pvsSize - newTriangles < NEW_TRIANGLE_TERMINATION_THRESHOLD
+            ) {
+                statistics.print();
+                break;
+            }
+        } else {
+            break;
+        }
 
         start = std::chrono::steady_clock::now();
-        generateHaltonPoints2d(RAYS_PER_ITERATION, threadId, RAYS_PER_ITERATION * i);
+        //generateHaltonPoints2d(RAYS_PER_ITERATION, threadId, RAYS_PER_ITERATION * i);
+        CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * i);
         end = std::chrono::steady_clock::now();
-        haltonTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     }
 
     std::cout << pvsSize << std::endl;
 
     auto endTotal = std::chrono::steady_clock::now();
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
-    std::cout << "Halton time: " << haltonTime << "ms" << std::endl;
+    std::cout << "Halton time: " << haltonTime << "microseconds" << std::endl;
 }
 
 void VisibilityManager::releaseResources() {

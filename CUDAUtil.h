@@ -97,7 +97,7 @@ class CUDAUtil {
 public:
     static int work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize);
     static int initCuda(uint8_t *vkDeviceUUID, size_t UUID_SIZE);
-    static void generateHaltonSequence(int n, float *sequence);
+    static void generateHaltonSequence(int n, float *sequence, int startIndex = 0);
 
     static void importCudaExternalMemory(
         void **cudaPtr, cudaExternalMemory_t &cudaMem, VkDeviceMemory &vkMem, VkDeviceSize size,

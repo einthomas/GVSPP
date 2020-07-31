@@ -25,6 +25,7 @@ public:
     void print();
     void startOperation(OPERATION_TYPE operationType);
     void endOperation(OPERATION_TYPE operationType);
+    int getTotalTracedRays();
 
 private:
     int samplesPerLine;

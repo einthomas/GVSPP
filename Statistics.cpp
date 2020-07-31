@@ -111,3 +111,11 @@ void Statistics::endOperation(OPERATION_TYPE operationType) {
     auto end = std::chrono::steady_clock::now();
     elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTimes[operationType]).count();
 }
+
+int Statistics::getTotalTracedRays() {
+    int sum = 0;
+    for (auto e : entries) {
+        sum += e.totalRays();
+    }
+    return sum;
+}
