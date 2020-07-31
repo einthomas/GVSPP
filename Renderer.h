@@ -11,6 +11,11 @@
 #include "Vertex.h"
 #include "visibilitymanager.h"
 
+struct Settings {
+    std::string modelName;
+    int viewCellIndex;
+};
+
 class VulkanRenderer { // : public QVulkanWindowRenderer {
 public:
     glm::vec3 cameraPos;
@@ -72,7 +77,7 @@ private:
     void createShadedVertexBuffer();
     void createIndexBuffer();
 
-    void loadModel();
+    void loadModel(std::string modelPath);
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
@@ -93,7 +98,6 @@ private:
     // Visibility
     bool shadedRendering = true;
     bool renderWholeModel = false;
-    std::string modelPath;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
 
@@ -101,7 +105,8 @@ private:
     VkDescriptorSet rtDescriptorSetsABS;
     VkDescriptorSetLayout rtDescriptorSetLayoutABS;
     void initVisibilityManager();
-    void loadSceneFile(std::string scene, int viewCell);
+    void loadSceneFile(Settings settings);
+    Settings loadSettingsFile();
 };
 
 #endif // RENDERER_H

@@ -83,10 +83,6 @@ void VisibilityManager::init(
 
 void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal) {
     viewCells.push_back(ViewCell(pos, size, normal));
-
-    std::cout << glm::to_string(viewCells[0].pos) << std::endl;
-    std::cout << glm::to_string(viewCells[0].size) << std::endl;
-    std::cout << glm::to_string(viewCells[0].normal) << std::endl;
 }
 
 /*
@@ -261,9 +257,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     edgeSubdivOutputHostBuffer.resize(numThreads);
     edgeSubdivOutputHostBufferMemory.resize(numThreads);
 
-    //edgeSubdivWorkingBuffer.resize(numThreads);
-    //edgeSubdivWorkingBufferMemory.resize(numThreads);
-
     haltonPointsBuffer.resize(numThreads);
     haltonPointsBufferMemory.resize(numThreads);
 
@@ -281,8 +274,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     triangleIDTempBufferMemory.resize(numThreads);
 
     // Random sampling buffers
-    //VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * (std::max(RAYS_PER_ITERATION, MAX_ABS_TRIANGLES_PER_ITERATION) * 9 * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 2 + 1);
-    const int MAX_TRIANGLE_COUNT = 12000000;
+    const int MAX_TRIANGLE_COUNT = indices.size();
     VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
 
     VkDeviceSize haltonSize = sizeof(float) * RAYS_PER_ITERATION * 4;
@@ -393,16 +385,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
         vkMapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], 0, edgeSubdivOutputBufferSize, 0, &edgeSubdivOutputPointer[i]);
-
-        /*
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1),
-            //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            edgeSubdivWorkingBuffer[i], edgeSubdivWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-        */
 
         // Create halton points buffer using GPU memory
         /*
@@ -1269,11 +1251,7 @@ void VisibilityManager::createEdgeSubdivPipeline() {
     VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = {};
     rayGenShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     rayGenShaderStageInfo.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    if (USE_EDGE_SUBDIV_CPU) {
-        rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv_cpu_calc.rgen.spv");
-    } else {
-        rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv.rgen.spv");
-    }
+    rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv.rgen.spv");
     rayGenShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo rayClosestHitShaderStageInfo = {};

@@ -13,7 +13,6 @@
 
 #include <glm/vec3.hpp>
 
-//#include "viewcell.h"
 #include "Vertex.h"
 #include "sample.h"
 #include "pvs.h"
@@ -80,7 +79,6 @@ private:
     const size_t RAYS_PER_ITERATION = 500000;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 2;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
-    const size_t MAX_EDGE_SUBDIV_RAYS = 90000;       // Has to be a multiple of 9
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;

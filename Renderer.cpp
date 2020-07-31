@@ -64,14 +64,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 }
 
 void VulkanRenderer::initResources() {
-    loadSceneFile("CANYON", 4);
-
-    std::cout << "model: " << modelPath << std::endl;
-    std::cout << "view cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
-    std::cout << "view cell size: " << glm::to_string(visibilityManager.viewCells[0].size) << std::endl;
-    std::cout << "view cell normal: " << glm::to_string(visibilityManager.viewCells[0].normal) << std::endl;
-
-    loadModel();
+    Settings settings = loadSettingsFile();
+    loadSceneFile(settings);
 
     createDescriptorSetLayout();
     createGraphicsPipeline();
@@ -328,7 +322,7 @@ void VulkanRenderer::createIndexBuffer() {
     vkFreeMemory(window->device, stagingBufferMemory, nullptr);
 }
 
-void VulkanRenderer::loadModel() {
+void VulkanRenderer::loadModel(std::string modelPath) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -346,7 +340,6 @@ void VulkanRenderer::loadModel() {
         throw std::runtime_error((warn + err).c_str());
     }
 
-    //float scale = 0.001f;
     float scale = 1.0f;
 
     uint32_t i = 0;
@@ -872,7 +865,7 @@ void VulkanRenderer::nextCorner() {
     glm::vec3 halfSize = visibilityManager.viewCells[0].size * 0.5f;
     offset *= halfSize;
     cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;// + visibilityManager.viewCells[0].normal * offset.z;
-    std::cout << glm::to_string(cameraPos) << glm::to_string(offset) << std::endl;
+    std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
 
@@ -881,14 +874,6 @@ void VulkanRenderer::alignCameraWithViewCellNormal() {
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    //glm::vec3 pos = glm::vec3(0.3, -0.2, 0.6); glm::vec3 normal = glm::vec3(0.0f, 0.0f, -1.0);
-    //glm::vec3 pos = glm::vec3(6.243304, 2.284803, 3.346602); glm::vec3 normal = glm::normalize(glm::vec3(-0.614086, -0.071497, -0.785994));
-    //glm::vec3 pos = glm::vec3(8.620145, 1.316530, 4.709888);glm::vec3 normal = glm::vec3(-0.796941, 0.040132, -0.602722);
-    //glm::vec3 pos = glm::vec3(-69.745071, 63.389126, 101.105545); glm::vec3 normal = glm::normalize(glm::vec3(0.655396, -0.235142, -0.717750));
-    //glm::vec3 pos = glm::vec3(9.888268, 68.691742, 18.343826); glm::vec3 normal = glm::normalize(glm::vec3(-0.682671, -0.113203, 0.721904));
-
-    //glm::vec3 pos = glm::vec3(-1.545267, 8.353479, 0.420563); glm::vec3 normal = glm::normalize(glm::vec3(-0.041313, -0.163326, -0.985707));
-
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
@@ -898,7 +883,10 @@ void VulkanRenderer::initVisibilityManager() {
     );
 }
 
-void VulkanRenderer::loadSceneFile(std::string scene, int viewCell) {
+void VulkanRenderer::loadSceneFile(Settings settings) {
+    std::string scene = settings.modelName;
+    int viewCellIndex = settings.viewCellIndex;
+
     int i = 0;
     int currentViewCell = 0;
     bool found = false;
@@ -906,6 +894,7 @@ void VulkanRenderer::loadSceneFile(std::string scene, int viewCell) {
     float x, y, z;
     glm::vec3 v[3];
 
+    std::string modelPath;
     std::ifstream file("scenes.txt");
     std::string line;
     while (std::getline(file, line)) {
@@ -921,7 +910,7 @@ void VulkanRenderer::loadSceneFile(std::string scene, int viewCell) {
         } else if (found) {
             if (line.length() == 0) {
                 currentViewCell++;
-            } else if (currentViewCell == viewCell) {
+            } else if (currentViewCell == viewCellIndex) {
                 std::istringstream iss(line);
                 iss >> x >> y >> z;
                 v[i] = { x, y, z };
@@ -942,6 +931,30 @@ void VulkanRenderer::loadSceneFile(std::string scene, int viewCell) {
     pos += up * size.y * 0.5f;
 
     visibilityManager.addViewCell(pos, size, normal);
+
+    loadModel(modelPath);
+
+    std::cout << "==========" << std::endl;
+    std::cout << "Model: " << modelPath << " (" << int(indices.size() / 3.0f) << " triangles)" << std::endl;
+    std::cout << "View cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
+    std::cout << "View cell size: " << glm::to_string(visibilityManager.viewCells[0].size) << std::endl;
+    std::cout << "View cell normal: " << glm::to_string(visibilityManager.viewCells[0].normal) << std::endl;
+    std::cout << "==========" << std::endl;
+}
+
+Settings VulkanRenderer::loadSettingsFile() {
+    Settings settings;
+
+    std::ifstream file("settings.txt");
+    std::string line;
+
+    std::getline(file, line);
+    settings.modelName = line;
+
+    std::getline(file, line);
+    settings.viewCellIndex = std::stoi(line);
+
+    return settings;
 }
 
 void VulkanRenderer::startVisibilityThread() {
@@ -961,9 +974,6 @@ void VulkanRenderer::startVisibilityThread() {
         shadedVertices.push_back(vertices[indices[i]]);
     }
     for (auto triangleID : visibilityManager.pvs.pvsVector) {
-        if (triangleID == -1) {
-            std::cout << "-1" << std::endl;
-        }
         glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);
         shadedVertices[3 * triangleID].color = color;
         shadedVertices[3 * triangleID + 1].color = color;
