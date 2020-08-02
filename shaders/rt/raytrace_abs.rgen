@@ -48,7 +48,9 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
 } viewCell;
 layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint triangleCounter;
+    uint rsTriangleCounter;
     uint rayCounter;
+    uint rsRayCounter;
 };
 
 layout(binding = 0, set = 1) buffer absOutputBuffer {
@@ -125,7 +127,7 @@ vec3 offsetVector(vec3 v) {
 }
 
 void storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
-    uint index = gl_LaunchSizeNV.x + atomicAdd(triangleCounter, 1);
+    uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
     if (length(s.rayHitPos - targetSamplePos) < 0.01) {
         triangleIDOutput[index] = absOutput[launchIndex].triangleID;
         absOutput[index] = absOutput[launchIndex];
@@ -208,9 +210,11 @@ void main() {
     bool pointBehindViewCell = false;
     int originalABSSampleIndex = -1;
     #ifdef USE_3D_VIEW_CELL
-        uint index = atomicAdd(triangleCounter, 1);
-        triangleIDOutput[index] = triangleID;
-        absOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+        triangleIDOutput[launchIndex] = triangleID;
+        absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+        if (triangleID != -1) {
+            atomicAdd(triangleCounter, 1);
+        }
     #else
         if (dot(viewCell.normal, v[0].worldPos - viewCell.pos) > 0
             || dot(viewCell.normal, v[1].worldPos - viewCell.pos) > 0
@@ -218,6 +222,9 @@ void main() {
         {
             triangleIDOutput[launchIndex] = triangleID;
             absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+            if (triangleID != -1) {
+                atomicAdd(triangleCounter, 1);
+            }
         } else {
             pointBehindViewCell = true;
             triangleID = -1;
@@ -573,5 +580,5 @@ void main() {
     #endif
     }
 
-    atomicAdd(rayCounter, tracedRays);
+    atomicAdd(rsRayCounter, tracedRays);
 }

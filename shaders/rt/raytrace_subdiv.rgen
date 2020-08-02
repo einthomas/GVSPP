@@ -41,7 +41,9 @@ layout(binding = 5, set = 0) uniform viewCellProperties {
 } viewCell;
 layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint triangleCounter;
+    uint rsTriangleCounter;
     uint rayCounter;
+    uint rsRayCounter;
 };
 
 layout(binding = 0, set = 1) readonly buffer absOutputBuffer {
@@ -224,7 +226,7 @@ bool checkDiscontinuity(vec3 rayOrigin, vec3 rayDir, Sample s, out vec3 mutatedR
                 if (pointFound) {
                     count++;
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
-                    //tracedRays++;
+                    atomicAdd(rsRayCounter, 1);
 
                     reverseSamplingSample.triangleID = int(hitInfo.w);
                     reverseSamplingSample.rayOrigin = rayOrigin;
@@ -232,6 +234,7 @@ bool checkDiscontinuity(vec3 rayOrigin, vec3 rayDir, Sample s, out vec3 mutatedR
                     reverseSamplingSample.pos = s.pos;
 
                     if (reverseSamplingSample.triangleID != -1) {
+                        atomicAdd(rsTriangleCounter, 1);
                         uint index = atomicAdd(triangleCounter, 1);
                         triangleIDOutput[index] = reverseSamplingSample.triangleID;
                         edgeSubdivOutput[index] = reverseSamplingSample;
@@ -314,6 +317,7 @@ void main() {
                     vec3 samplePos = currentSample.pos + offset;
                     vec3 rayDir = normalize(samplePos - rayOrigin);
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                    tracedRays++;
                     Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
                     if (newSample.triangleID != -1) {
                         vec3 mutatedRayOrigin;
@@ -321,7 +325,6 @@ void main() {
                             newSample.rayOrigin = mutatedRayOrigin;
                         }
                     }
-                    tracedRays++;
                     samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                 }
 
@@ -337,6 +340,7 @@ void main() {
                     vec3 samplePos = currentSample.pos - offset;
                     vec3 rayDir = normalize(samplePos - rayOrigin);
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                    tracedRays++;
                     Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
                     if (newSample.triangleID != -1) {
                         vec3 mutatedRayOrigin;
@@ -344,7 +348,6 @@ void main() {
                             newSample.rayOrigin = mutatedRayOrigin;
                         }
                     }
-                    tracedRays++;
                     samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                 }
             }

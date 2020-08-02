@@ -39,7 +39,9 @@ struct GeometryInstance {
 
 struct ShaderExecutionInfo {
     unsigned int numTriangles;
+    unsigned int numRsTriangles;
     unsigned int numRays;
+    unsigned int numRsRays;
 };
 
 class VisibilityManager {

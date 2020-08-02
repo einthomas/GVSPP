@@ -318,7 +318,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, sizeof(unsigned int) * 2,
+            logicalDevice, sizeof(unsigned int) * 4,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             triangleCounterBuffer[i], triangleCounterBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
@@ -1446,7 +1446,7 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer, int threa
 ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
     // Reset atomic triangle counter
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         // Create staging buffer using host-visible memory
         VkBuffer stagingBuffer;
@@ -1458,7 +1458,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
         );
 
         // Copy triangles data to the staging buffer
-        unsigned int numTriangles[2] = { 0, 0 };
+        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
         memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
@@ -1513,7 +1513,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
     // Get number of intersected triangles from the GPU
     unsigned int numTriangles = 0;
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         VkBuffer hostBuffer;
         VkDeviceMemory hostBufferMemory;
@@ -1532,7 +1532,6 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
         numTriangles += n[0];
-        unsigned int x = n[1];
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
@@ -1589,7 +1588,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
     */
 
 
-    return { numTriangles, (unsigned int) numRays };
+    return { numTriangles, 0, (unsigned int) numRays, 0 };
 }
 
 ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sample> &triangles, int threadId) {
@@ -1624,7 +1623,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
     // Reset atomic triangle counter
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         // Create staging buffer using host-visible memory
         VkBuffer stagingBuffer;
@@ -1636,7 +1635,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         );
 
         // Copy triangles data to the staging buffer
-        unsigned int numTriangles[2] = { 0, 0 };
+        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
         memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
@@ -1682,10 +1681,12 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     );
 
     // Get number of intersected triangles from the GPU
-    unsigned int numTriangles = triangles.size() * NUM_ABS_SAMPLES;
-    unsigned int numRays;
+    unsigned int numTriangles;
+    unsigned int numRsTriangles;
+    unsigned int numRays = triangles.size() * NUM_ABS_SAMPLES;
+    unsigned int numRsRays;
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         VkBuffer hostBuffer;
         VkDeviceMemory hostBufferMemory;
@@ -1703,22 +1704,23 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         void *data;
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
-        numTriangles += n[0];
-        numRays = n[1];
+        numTriangles = n[0];
+        numRsTriangles = n[1];
+        numRsRays = n[3];
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
         vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
     }
 
-    return { numTriangles, numRays };
+    return { numTriangles, numRsTriangles, numRays, numRsRays};
     //return triangles.size() * 9 * 2;
 }
 
 ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadId) {
     // Reset atomic triangle counter
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         // Create staging buffer using host-visible memory
         VkBuffer stagingBuffer;
@@ -1730,7 +1732,7 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
         );
 
         // Copy triangles data to the staging buffer
-        unsigned int numTriangles[2] = { 0, 0 };
+        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
         memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
@@ -1781,9 +1783,11 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
 
     // Get number of intersected triangles from the GPU
     unsigned int numTriangles;
+    unsigned int numRsTriangles;
     unsigned int numRays;
+    unsigned int numRsRays;
     {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 2;
+        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
 
         VkBuffer hostBuffer;
         VkDeviceMemory hostBufferMemory;
@@ -1801,8 +1805,10 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
         void *data;
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
-        numTriangles = n[0];
-        numRays = n[1];
+        numRsTriangles = n[1];
+        numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of all triangles (rs and non-rs)
+        numRays = n[2];
+        numRsRays = n[3];
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
@@ -1823,7 +1829,7 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
     }
     */
 
-    return { numTriangles, numRays };
+    return { numTriangles, numRsTriangles, numRays, numRsRays };
     //return numSamples * int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
 }
 
@@ -1885,10 +1891,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         statistics.endOperation(RANDOM_SAMPLING);
 
         statistics.entries.back().numShaderExecutions += RAYS_PER_ITERATION;
+        statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
         statistics.entries.back().rnsRays += randomSampleInfo.numRays;
 
         statistics.startOperation(RANDOM_SAMPLING_INSERT);
-
         {
             std::vector<Sample> newSamples;
             pvsSize = CUDAUtil::work(pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize, randomSampleInfo.numTriangles);
@@ -1896,16 +1902,15 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
             }
         }
-
         statistics.endOperation(RANDOM_SAMPLING_INSERT);
+
         statistics.entries.back().pvsSize = pvsSize;
         statistics.update();
 
-        // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_RAYS rays at a time as
-        // long as there are a number of MIN_ABS_RAYS unprocessed triangles left
+        // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
+        // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
         std::cout << "absSampleQueue.size() " << absSampleQueue.size() << std::endl;
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
-            // Get a maximum of MAX_ABS_RAYS triangles for which ABS will be run at a time
             int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
             absWorkingVector.reserve(numAbsRays);
@@ -1921,8 +1926,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
             statistics.entries.back().absRays += absWorkingVector.size() * NUM_ABS_SAMPLES;
-            //statistics.entries.back().rsRays += absInfo.numRays - absWorkingVector.size() * NUM_ABS_SAMPLES;
-            statistics.entries.back().rsRays += absInfo.numRays;
+            statistics.entries.back().absRsRays += absInfo.numRsRays;
+            statistics.entries.back().absTris += absInfo.numTriangles;
+            statistics.entries.back().absRsTris += absInfo.numRsTriangles;
 
             statistics.startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             {
@@ -1945,6 +1951,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
             statistics.entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
+            statistics.entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
+            statistics.entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
+            statistics.entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
 
             statistics.startOperation(EDGE_SUBDIVISION_INSERT);
             {
@@ -1978,8 +1987,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         end = std::chrono::steady_clock::now();
         haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     }
-
-    std::cout << pvsSize << std::endl;
 
     auto endTotal = std::chrono::steady_clock::now();
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
