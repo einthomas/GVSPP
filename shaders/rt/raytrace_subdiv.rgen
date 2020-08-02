@@ -1,7 +1,7 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
-//#define USE_3D_VIEW_CELL
+#define USE_3D_VIEW_CELL
 
 struct Vertex {
     vec3 pos;

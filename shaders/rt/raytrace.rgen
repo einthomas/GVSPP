@@ -66,7 +66,8 @@ void main() {
     vec3 viewCellSize = viewCell.tileSize;
 
     #ifdef USE_3D_VIEW_CELL
-        int index = int(launchIndex / int(gl_LaunchSizeNV.x / float(pushConstants.faceIndices[0])));
+        //int index = int(launchIndex / int(gl_LaunchSizeNV.x / float(pushConstants.faceIndices[0])));
+        int index = int(launchIndex / int(gl_LaunchSizeNV.x / 6.0f));
         index = index > pushConstants.faceIndices[0] - 1 ? index - 1 : index;
         index += 1;
         const int faceIndex = pushConstants.faceIndices[index];
@@ -79,7 +80,7 @@ void main() {
         viewCellRight = faceRights[faceIndex];
         viewCellUp = faceUps[faceIndex];
         viewCellPos = viewCell.pos + viewCellNormal * viewCell.size * 0.5;
-        viewCellSize = size;
+        viewCellSize = viewCell.size;
     #endif
 
     vec3 rayOrigin;

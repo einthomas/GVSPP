@@ -1943,6 +1943,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.entries.back().pvsSize = pvsSize;
             statistics.update();
 
+            break;
+
 
             // Execute edge subdivision
             statistics.startOperation(EDGE_SUBDIVISION);
@@ -1969,6 +1971,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.update();
         }
 
+        break;
+
         if (USE_TERMINATION_CRITERION) {
             if (
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
@@ -1989,8 +1993,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     }
 
     auto endTotal = std::chrono::steady_clock::now();
-    std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
     std::cout << "Halton time: " << haltonTime << "microseconds" << std::endl;
+    std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
 }
 
 void VisibilityManager::releaseResources() {
