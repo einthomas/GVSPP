@@ -1,7 +1,7 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
-//#define USE_3D_VIEW_CELL
+#include "defines.glsl"
 
 struct Sample {
     int triangleID;
@@ -51,7 +51,6 @@ layout(binding = 1, set = 0) uniform cameraProperties {
     mat4 view;
     mat4 projection;
 } camera;
-
 
 void main() {
     // Calculate 1D launch index

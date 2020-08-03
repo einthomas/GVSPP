@@ -4,6 +4,7 @@
 
 struct Vertex {
     vec3 pos;
+    vec3 worldPos;
     vec3 normal;
     vec3 color;
     vec2 uv;
@@ -25,19 +26,7 @@ layout(binding = 3, set = 0) buffer Indices {
 
 hitAttributeNV vec3 attribs;
 
-Vertex unpackVertexData(int index) {
-    vec4 d0 = vertices.v[3 * index + 0];
-    vec4 d1 = vertices.v[3 * index + 1];
-    vec4 d2 = vertices.v[3 * index + 2];
-
-    Vertex vertex;
-    vertex.pos = d0.xyz;
-    vertex.normal = vec3(d0.w, d1.xy);
-    vertex.color = vec3(d1.zw, d2.x);
-    vertex.uv = d2.yz;
-
-    return vertex;
-}
+#include "util.glsl"
 
 void main() {
     ivec3 index = ivec3(

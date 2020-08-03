@@ -1,0 +1,112 @@
+int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint) {
+    int foundSampleIndex = -1;
+    if (occludingTriangleID == -1 || length(samplePos - rayOrigin) - length(hitPoint - rayOrigin) > 0.985) {
+        #ifdef USE_3D_VIEW_CELL
+            vec3 up = vec3(0.0, 1.0, 0.0);
+            vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+            vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+            const vec3 faceNormals[6] = { viewCell.normal, viewCellRight, -viewCell.normal, -viewCellRight, viewCellUp, -viewCellUp };
+            const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCell.normal, viewCell.normal };
+            const vec3 faceRights[6] = { viewCellRight, -viewCell.normal, -viewCellRight, viewCell.normal, viewCellRight, viewCellRight };
+        #endif
+        
+        int a1 = 2;
+        int a2 = 10;
+        int a3 = 50;
+        int a4 = 100;
+
+        #ifdef USE_3D_VIEW_CELL
+            for (int m = 0; m < 6; m++) {
+                if (dot(rayDir, faceNormals[m]) > 0) {
+                    continue;
+                }
+
+                vec3 viewCellNormal = faceNormals[m];
+                vec3 viewCellRight = faceRights[m];
+                vec3 viewCellUp = faceUps[m];
+                vec3 viewCellPos = viewCell.pos + viewCellNormal * viewCell.size * 0.5;
+                vec3 viewCellSize = viewCell.size;
+        #else
+            vec3 up = vec3(0.0, 1.0, 0.0);
+            vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
+            vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
+            vec3 viewCellPos = viewCell.tilePos;
+            vec3 viewCellNormal = viewCell.normal;
+            vec3 viewCellSize = viewCell.tileSize;
+        #endif
+
+        vec3 m_x = viewCellRight * viewCellSize;
+        vec3 m_y = viewCellUp * viewCellSize;
+        float l1 = length(m_x);
+        l1 = l1 * l1;
+        float l2 = length(m_y);
+        l2 = l2 * l2;
+        vec3 frameProjectX = m_x / l1;
+        vec3 frameProjectY = m_y / l2;
+
+        vec3 viewCellCorner = viewCellPos - viewCellRight * viewCellSize * 0.5 - viewCellUp * viewCellSize * 0.5;
+        vec3 t1 = rayOrigin - viewCellCorner;
+        vec2 uv = vec2(
+            dot(t1, frameProjectX),
+            dot(t1, frameProjectY)
+        );
+        if (uv.x < 0) {
+            uv.x = 0;
+        } else if (uv.x > 1.0f) {
+            uv.x = 1.0f;
+        }
+        if (uv.y < 0) {
+            uv.y = 0;
+        } else if (uv.y > 1.0f) {
+            uv.y = 1.0f;
+        }
+
+        vec2 uv_comp = vec2(1.0f - uv.x, 1.0f - uv.y);
+
+        uv = uv * 0.01;
+        uv_comp = uv_comp * 0.01;
+
+        vec3 rayOrigins[16];
+        rayOrigins[15] = rayOrigin - a1 * uv.x * m_x;
+        rayOrigins[14] = rayOrigin - a2 * uv.x * m_x;
+        rayOrigins[13] = rayOrigin - a3 * uv.x * m_x;
+        rayOrigins[12] = rayOrigin - a4 * uv.x * m_x;
+
+        rayOrigins[11] = rayOrigin + a1 * uv_comp.x * m_x;
+        rayOrigins[10] = rayOrigin + a2 * uv_comp.x * m_x;
+        rayOrigins[9] =  rayOrigin + a3 * uv_comp.x * m_x;
+        rayOrigins[8] =  rayOrigin + a4 * uv_comp.x * m_x;
+
+        rayOrigins[7] =  rayOrigin - a1 * uv.y * m_y;
+        rayOrigins[6] =  rayOrigin - a2 * uv.y * m_y;
+        rayOrigins[5] =  rayOrigin - a3 * uv.y * m_y;
+        rayOrigins[4] =  rayOrigin - a4 * uv.y * m_y;
+
+        rayOrigins[3] =  rayOrigin + a1 * uv_comp.y * m_y;
+        rayOrigins[2] =  rayOrigin + a2 * uv_comp.y * m_y;
+        rayOrigins[1] =  rayOrigin + a3 * uv_comp.y * m_y;
+        rayOrigins[0] =  rayOrigin + a4 * uv_comp.y * m_y;
+
+        for (int i = 0; i < 16; i++) {
+            vec3 rayDirNew = normalize((rayOrigin + (samplePos - rayOrigin)) - rayOrigins[i]);
+            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigins[i], 0.001, rayDirNew, 100000.0, 0);
+            tracedRsRays++;
+
+            if (int(hitInfo.w) != -1) {
+                uint index = storeReverseSample(
+                    launchIndex,
+                    Sample(int(hitInfo.w), rayOrigins[i], hitInfo.xyz, samplePos),
+                    samplePos
+                );
+                if (length(hitInfo.xyz - samplePos) < 0.01) {
+                    foundSampleIndex = int(index);
+                }
+            }
+        }
+        #ifdef USE_3D_VIEW_CELL
+            }
+        #endif
+    }
+
+    return foundSampleIndex;
+}

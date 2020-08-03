@@ -1933,7 +1933,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             {
                 std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize, absInfo.numTriangles);
+                pvsSize = CUDAUtil::work(
+                    pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
+                    absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
+                );
                 if (newSamples.size() > 0) {
                     absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
                 }
@@ -1943,11 +1946,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.entries.back().pvsSize = pvsSize;
             statistics.update();
 
-            break;
-
-
             // Execute edge subdivision
             statistics.startOperation(EDGE_SUBDIVISION);
+            //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
             ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
             statistics.endOperation(EDGE_SUBDIVISION);
 
@@ -1960,7 +1961,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.startOperation(EDGE_SUBDIVISION_INSERT);
             {
                 std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize, edgeSubdivideInfo.numTriangles);
+                pvsSize = CUDAUtil::work(
+                    pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
+                    edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
+                );
                 if (newSamples.size() > 0) {
                     absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
                 }
@@ -1971,8 +1975,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.update();
         }
 
-        break;
-
         if (USE_TERMINATION_CRITERION) {
             if (
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
@@ -1982,6 +1984,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 break;
             }
         } else {
+            statistics.print();
             break;
         }
 

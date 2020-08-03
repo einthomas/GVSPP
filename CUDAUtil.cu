@@ -152,6 +152,7 @@ void CUDAUtil::generateHaltonSequence(int n, float *sequence, int startIndex) {
     cudaDeviceSynchronize();
 }
 
+// Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 int CUDAUtil::initCuda(uint8_t *vkDeviceUUID, size_t UUID_SIZE) {
     int current_device = 0;
     int device_count = 0;

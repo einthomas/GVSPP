@@ -78,7 +78,7 @@ private:
     const int NUM_ABS_SAMPLES = 16;
     const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
 
-    const size_t RAYS_PER_ITERATION = 50;
+    const size_t RAYS_PER_ITERATION = 500000;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 2;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen

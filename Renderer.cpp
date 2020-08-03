@@ -860,11 +860,11 @@ void VulkanRenderer::nextCorner() {
     glm::vec3 offset;
     offset.x = currentViewCellCornerView % 2 == 0 ? -1.0f : 1.0f;
     offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
-    //offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
+    offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
     glm::vec3 halfSize = visibilityManager.viewCells[0].size * 0.5f;
     offset *= halfSize;
-    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y;// + visibilityManager.viewCells[0].normal * offset.z;
+    cameraPos = visibilityManager.viewCells[0].pos + viewCellRight * offset.x + viewCellUp * offset.y + visibilityManager.viewCells[0].normal * offset.z;
     std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }

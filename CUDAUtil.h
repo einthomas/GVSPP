@@ -23,17 +23,8 @@
 #include "vulkanutil.h"
 #include "sample.h"
 
-/*
-struct Samp {
-    alignas(4) int triangleID;
-    alignas(16) glm::vec3 rayOrigin;
-    alignas(16) glm::vec3 hitPos;
-    alignas(16) glm::vec3 pos;
-};
-*/
-
 #ifdef _WIN64
-class WindowsSecurityAttributes
+class WindowsSecurityAttributes     // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 {
 protected:
     SECURITY_ATTRIBUTES m_winSecurityAttributes;
@@ -77,6 +68,7 @@ public:
     {
         return &m_winSecurityAttributes;
     }
+
     ~WindowsSecurityAttributes()
     {
         PSID *ppSID = (PSID *)((PBYTE)m_winPSecurityDescriptor + SECURITY_DESCRIPTOR_MIN_LENGTH);
@@ -99,6 +91,7 @@ public:
     static int initCuda(uint8_t *vkDeviceUUID, size_t UUID_SIZE);
     static void generateHaltonSequence(int n, float *sequence, int startIndex = 0);
 
+    // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
     static void importCudaExternalMemory(
         void **cudaPtr, cudaExternalMemory_t &cudaMem, VkDeviceMemory &vkMem, VkDeviceSize size,
         VkDevice device
@@ -135,6 +128,7 @@ public:
         cudaExternalMemoryGetMappedBuffer(cudaPtr, cudaMem, &externalMemBufferDesc);
     }
 
+    // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
     static void createExternalBuffer(
         VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
         VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDevice m_device,
@@ -188,6 +182,7 @@ public:
     }
 
 private:
+    // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
     static VkExternalMemoryHandleTypeFlagBits getDefaultMemHandleType() {
     #ifdef _WIN64
         return IsWindows8Point1OrGreater() ?
@@ -198,6 +193,7 @@ private:
     #endif
     }
 
+    // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
     static void* getMemHandle(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits handleType, VkDevice m_device) {
     #ifdef _WIN64
         HANDLE handle = 0;
