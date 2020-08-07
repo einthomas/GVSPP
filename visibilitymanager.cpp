@@ -16,7 +16,6 @@
 #include "sample.h"
 #include "Vertex.h"
 
-
 struct UniformBufferObject {
     alignas(64) glm::mat4 model;
     alignas(64) glm::mat4 view;
@@ -38,6 +37,7 @@ void VisibilityManager::init(
     this->physicalDevice = physicalDevice;
     this->numThreads = numThreads;
     this->deviceUUID = deviceUUID;
+    this->MAX_TRIANGLE_COUNT = indices.size();
 
     tracedRays = 0;
     if (numThreads > 1) {
@@ -70,7 +70,6 @@ void VisibilityManager::init(
 
     createBuffers(indices);
     CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
-    createViewCellBuffer();
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
 
     /*
@@ -152,11 +151,8 @@ void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
     vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
 }
 
-void VisibilityManager::createViewCellBuffer() {
-    viewCellBuffer.resize(numThreads);
-    viewCellBufferMemory.resize(numThreads);
-
-    VkDeviceSize bufferSize = sizeof(viewCells[0]) * viewCells.size();
+void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
+    VkDeviceSize viewCellBufferSize = sizeof(viewCells[viewCellIndex]) * viewCells.size();
 
     for (int i = 0; i < numThreads; i++) {
         // Create staging buffer using host-visible memory
@@ -164,31 +160,22 @@ void VisibilityManager::createViewCellBuffer() {
         VkDeviceMemory stagingBufferMemory;
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            logicalDevice, viewCellBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
         ViewCell viewCellTile = getViewCellTile(numThreads, 0, i);
-        viewCells[0].tilePos = viewCellTile.tilePos;
-        viewCells[0].tileSize = viewCellTile.tileSize;
+        viewCells[viewCellIndex].tilePos = viewCellTile.tilePos;
+        viewCells[viewCellIndex].tileSize = viewCellTile.tileSize;
 
-        // Copy view cell to the staging buffer
         void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        memcpy(data, viewCells.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        //memcpy(data, &viewCell, (size_t) bufferSize);
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, viewCellBufferSize, 0, &data);
+        //memcpy(data, viewCells.data(), (size_t) viewCellBufferSize);
+        memcpy(data, &viewCells[viewCellIndex], (size_t) viewCellBufferSize);
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
-        // Create view cell buffer using GPU memory
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            viewCellBuffer[i], viewCellBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
-        // Copy halton points from the staging buffer to the view cell buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[i], computeQueue, stagingBuffer, viewCellBuffer[i], bufferSize,
+            logicalDevice, commandPool[i], computeQueue, stagingBuffer, viewCellBuffer[i], viewCellBufferSize,
             queueSubmitMutex
         );
 
@@ -227,6 +214,38 @@ ViewCell VisibilityManager::getViewCellTile(int numThreads, int viewCellIndex, i
     }
 
     return viewCell;
+}
+
+void VisibilityManager::resetPVSGPUBuffer() {
+    VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
+
+    VkDeviceSize bufferSize = pvsSize;
+
+    // Create staging buffer using host-visible memory
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    VulkanUtil::createBuffer(
+        physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        stagingBuffer, stagingBufferMemory,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+    );
+
+    std::vector<int> vec(MAX_TRIANGLE_COUNT);
+    std::fill(vec.begin(), vec.end(), -1);
+    void *data;
+    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    memcpy(data, vec.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+    vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    VulkanUtil::copyBuffer(
+        logicalDevice, commandPool[0], computeQueue, stagingBuffer,
+        testBuffer[0], bufferSize, queueSubmitMutex
+    );
+
+    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+
+    this->pvsSize = 0;
 }
 
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
@@ -273,6 +292,9 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     triangleIDTempBuffer.resize(numThreads);
     triangleIDTempBufferMemory.resize(numThreads);
 
+    viewCellBuffer.resize(numThreads);
+    viewCellBufferMemory.resize(numThreads);
+
     // Random sampling buffers
     const int MAX_TRIANGLE_COUNT = indices.size();
     VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
@@ -288,6 +310,8 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     //VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1);
     VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 4;
     VkDeviceSize edgeSubdivIDOutputBufferSize = sizeof(int) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 4;
+
+    VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
         /*
         VulkanUtil::createBuffer(
@@ -414,34 +438,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
         vkMapMemory(logicalDevice, testHostBufferMemory[i], 0, pvsSize, 0, &testPointer[i]);
-        // Reset atomic triangle counter
-        {
-            VkDeviceSize bufferSize = pvsSize;
-
-            // Create staging buffer using host-visible memory
-            VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            VulkanUtil::createBuffer(
-                physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                stagingBuffer, stagingBufferMemory,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-            );
-
-            std::vector<int> vec(MAX_TRIANGLE_COUNT);
-            std::fill(vec.begin(), vec.end(), -1);
-            void *data;
-            vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-            memcpy(data, vec.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-            vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-            VulkanUtil::copyBuffer(
-                logicalDevice, commandPool[i], computeQueue, stagingBuffer,
-                testBuffer[i], bufferSize, queueSubmitMutex
-            );
-
-            vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-            vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-        }
+        resetPVSGPUBuffer();
 
         /*
         CUDAUtil::createExternalBuffer(
@@ -451,6 +448,12 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             triangleIDTempBufferMemory[i], logicalDevice, physicalDevice
         );
         */
+
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, viewCellBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            viewCellBuffer[i], viewCellBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
     }
 
     VulkanUtil::createBuffer(
@@ -1572,6 +1575,9 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
             randomSamplingOutputHostBuffer[threadId], bufferSize, queueSubmitMutex
         );
         //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << "mb " << RAYS_PER_ITERATION << " " << numTriangles << std::endl;
+
+        Sample *s = (Sample*)randomSamplingOutputPointer[0];
+        std::cout << s[0] << std::endl;
     }
     */
 
@@ -1874,7 +1880,11 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
     return shaderGroupHandleSize;
 }
 
-void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId) {
+void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex) {
+    updateViewCellBuffer(viewCellIndex);
+    resetPVSGPUBuffer();
+    statistics.reset();
+
     auto startTotal = std::chrono::steady_clock::now();
     auto start = std::chrono::steady_clock::now();
     auto end = std::chrono::steady_clock::now();
@@ -1997,7 +2007,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
     auto endTotal = std::chrono::steady_clock::now();
     std::cout << "Halton time: " << haltonTime << "microseconds" << std::endl;
-    std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
+    //std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
 }
 
 void VisibilityManager::releaseResources() {
@@ -2030,7 +2040,6 @@ void VisibilityManager::releaseResources() {
         vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
         vkDestroyBuffer(logicalDevice, edgeSubdivIDOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, edgeSubdivIDOutputBufferMemory[i], nullptr);
-
         vkUnmapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i]);
         vkDestroyBuffer(logicalDevice, edgeSubdivOutputHostBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], nullptr);
@@ -2059,6 +2068,16 @@ void VisibilityManager::releaseResources() {
         vkDestroyCommandPool(logicalDevice, commandPool[i], nullptr);
     }
 
+    cudaDestroyExternalMemory(pvsCudaMemory);
+    cudaDestroyExternalMemory(haltonCudaMemory);
+    cudaDestroyExternalMemory(randomSamplingOutputCudaMemory);
+    cudaDestroyExternalMemory(absOutputCudaMemory);
+    cudaDestroyExternalMemory(edgeSubdivOutputCudaMemory);
+    cudaDestroyExternalMemory(randomSamplingIDOutputCudaMemory);
+    cudaDestroyExternalMemory(absIDOutputCudaMemory);
+    cudaDestroyExternalMemory(edgeSubdivIDOutputCudaMemory);
+    cudaDestroyExternalMemory(triangleIDTempCudaMemory);
+
     vkDestroyBuffer(logicalDevice, pvsVisualizationBuffer, nullptr);
     vkFreeMemory(logicalDevice, pvsVisualizationBufferMemory, nullptr);
 
@@ -2086,8 +2105,6 @@ void VisibilityManager::releaseResources() {
     vkFreeMemory(logicalDevice, topLevelAS.deviceMemory, nullptr);
     vkDestroyAccelerationStructureNV(logicalDevice, bottomLevelAS.as, nullptr);
     vkFreeMemory(logicalDevice, bottomLevelAS.deviceMemory, nullptr);
-
-    // TODO: Free CUDA resources
 }
 
 VkBuffer VisibilityManager::getPVSIndexBuffer(

@@ -58,7 +58,7 @@ public:
     );
     void addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
     void generateHaltonPoints2d(int n, int threadId, int offset = 0);
-    void rayTrace(const std::vector<uint32_t> &indices, int threadId);
+    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
     VkBuffer getPVSIndexBuffer(
         const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue,
@@ -77,6 +77,7 @@ private:
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
     const int NUM_ABS_SAMPLES = 16;
     const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
+    int MAX_TRIANGLE_COUNT;
 
     const size_t RAYS_PER_ITERATION = 500000;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 2;
@@ -267,7 +268,7 @@ private:
     );
     void createCommandBuffers();
     void copyHaltonPointsToBuffer(int threadId);
-    void createViewCellBuffer();
+    void updateViewCellBuffer(int viewCellIndex);
     void createBuffers(const std::vector<uint32_t> &indices);
     void createDescriptorSets();
     void createRandomSamplingPipeline();
@@ -278,6 +279,7 @@ private:
     void createEdgeSubdivDescriptorSetLayout();
     void createEdgeSubdivDescriptorSets(int threadId);
     ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
+    void resetPVSGPUBuffer();
 
     ShaderExecutionInfo randomSample(int numRays, int threadId);
     ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);

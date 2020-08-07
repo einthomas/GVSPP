@@ -50,7 +50,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 {
     initResources();
 
-
     cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
     glm::vec3 cameraTarget = glm::vec3(0.0f);
     cameraForward = glm::normalize(cameraTarget - cameraPos);
@@ -329,14 +328,6 @@ void VulkanRenderer::loadModel(std::string modelPath) {
     std::string warn, err;
 
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/hairball/hairball.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/powerplant/powerplant.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/rstest/rstest.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/citymodel/citymodel.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/sponza/sponza_2m_triangles.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/test/test.obj")) {
-    //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "models/canyon/canyon_normals.obj")) {
         throw std::runtime_error((warn + err).c_str());
     }
 
@@ -345,7 +336,6 @@ void VulkanRenderer::loadModel(std::string modelPath) {
     uint32_t i = 0;
     for (const auto &shape : shapes) {
         for (const auto &index : shape.mesh.indices) {
-
             Vertex vertex = {};
 
             vertex.pos = {
@@ -899,7 +889,26 @@ void VulkanRenderer::loadSceneFile(Settings settings) {
     std::string line;
     while (std::getline(file, line)) {
         if (i == 3) {
-            break;
+            glm::vec3 pos = v[0];
+            glm::vec3 size = v[1];
+            glm::vec3 normal = glm::normalize(v[2]);
+
+            glm::vec3 right = glm::normalize(glm::cross(normal, { 0.0f, 1.0f, 0.0f }));
+            glm::vec3 up = -glm::normalize(glm::cross(normal, right));
+
+            pos += right * size * 0.5f;
+            pos += up * size * 0.5f;
+            pos += normal * size * 0.5f;
+
+            visibilityManager.addViewCell(pos, size, normal);
+
+            if (line.length() == 0) {
+                break;
+            } else {
+                currentViewCell++;
+                viewCellIndex++;
+                i = 0;
+            }
         }
 
         if (line.find(scene) != std::string::npos) {
@@ -920,26 +929,17 @@ void VulkanRenderer::loadSceneFile(Settings settings) {
         }
     }
 
-    glm::vec3 pos = v[0];
-    glm::vec3 size = v[1];
-    glm::vec3 normal = glm::normalize(v[2]);
-
-    glm::vec3 right = glm::normalize(glm::cross(normal, { 0.0f, 1.0f, 0.0f }));
-    glm::vec3 up = -glm::normalize(glm::cross(normal, right));
-
-    pos += right * size.x * 0.5f;
-    pos += up * size.y * 0.5f;
-
-    visibilityManager.addViewCell(pos, size, normal);
-
     loadModel(modelPath);
 
-    std::cout << "==========" << std::endl;
+    std::cout << "========================================" << std::endl;
     std::cout << "Model: " << modelPath << " (" << int(indices.size() / 3.0f) << " triangles)" << std::endl;
-    std::cout << "View cell position: " << glm::to_string(visibilityManager.viewCells[0].pos) << std::endl;
-    std::cout << "View cell size: " << glm::to_string(visibilityManager.viewCells[0].size) << std::endl;
-    std::cout << "View cell normal: " << glm::to_string(visibilityManager.viewCells[0].normal) << std::endl;
-    std::cout << "==========" << std::endl;
+    std::cout << visibilityManager.viewCells.size() << " view cell(s):" << std::endl;
+    for (int i = 0; i < visibilityManager.viewCells.size(); i++) {
+        std::cout << "    View cell " << i << " position: " << glm::to_string(visibilityManager.viewCells[i].pos) << std::endl;
+        std::cout << "    View cell " << i << " size: " << glm::to_string(visibilityManager.viewCells[i].size) << std::endl;
+        std::cout << "    View cell " << i << " normal: " << glm::to_string(visibilityManager.viewCells[i].normal) << std::endl;
+    }
+    std::cout << "========================================" << std::endl;
 }
 
 Settings VulkanRenderer::loadSettingsFile() {
@@ -958,14 +958,19 @@ Settings VulkanRenderer::loadSettingsFile() {
 }
 
 void VulkanRenderer::startVisibilityThread() {
-    std::cout << "start" << std::endl;
-    for (int i = 0; i < NUM_THREADS; i++) {
-        visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i));
+    for (int k = 0; k < visibilityManager.viewCells.size(); k++) {
+        std::cout << "start " << k << std::endl;
+        visibilityManager.rayTrace(indices, 0, k);
+        /*
+        for (int i = 0; i < NUM_THREADS; i++) {
+            visibilityThreads.push_back(std::thread(&VisibilityManager::rayTrace, &visibilityManager, indices, i, k));
+        }
+        for (int i = 0; i < NUM_THREADS; i++) {
+            visibilityThreads[i].join();
+        }
+        */
+        std::cout << "done " << k << std::endl;
     }
-    for (int i = 0; i < NUM_THREADS; i++) {
-        visibilityThreads[i].join();
-    }
-    std::cout << "done" << std::endl;
 
     visibilityManager.fetchPVS();
 
@@ -978,6 +983,42 @@ void VulkanRenderer::startVisibilityThread() {
         shadedVertices[3 * triangleID].color = color;
         shadedVertices[3 * triangleID + 1].color = color;
         shadedVertices[3 * triangleID + 2].color = color;
+    }
+
+    {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        std::string viewCellModelPath = "models/box/box.obj";
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
+            throw std::runtime_error((warn + err).c_str());
+        }
+
+        for (auto viewCell : visibilityManager.viewCells) {
+            for (const auto &shape : shapes) {
+                for (const auto &index : shape.mesh.indices) {
+                    Vertex vertex = {};
+
+                    vertex.pos = {
+                        attrib.vertices[3 * index.vertex_index + 0] * viewCell.size.x * 0.5 + viewCell.pos.x,
+                        attrib.vertices[3 * index.vertex_index + 1] * viewCell.size.y * 0.5 + viewCell.pos.y,
+                        attrib.vertices[3 * index.vertex_index + 2] * viewCell.size.z * 0.5 + viewCell.pos.z
+                    };
+
+                    vertex.normal = {
+                        attrib.normals[3 * index.normal_index + 0],
+                        attrib.normals[3 * index.normal_index + 1],
+                        attrib.normals[3 * index.normal_index + 2]
+                    };
+
+                    vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                    shadedVertices.push_back(vertex);
+                }
+            }
+        }
     }
 
     createVertexBuffer(shadedVertices, shadedVertexBuffer, shadedVertexBufferMemory);

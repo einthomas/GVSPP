@@ -7,6 +7,29 @@ BBB models/quad/cube.obj
 0 0 0
 1 1 1
 0 0 -1
+0 0 0
+1 1 1
+0 0 -1
+
+CITY_NEW models/citynew/citynew.obj
+30 2 150
+40 50 150
+0 0 -1
+30 2 300
+40 50 150
+0 0 -1
+30 2 40
+165 50 40
+-1 0 0
+-135 2 40
+165 50 40
+-1 0 0
+-120 2 0
+40 50 150
+0 0 -1
+-120 2 -150
+40 50 150
+0 0 -1
 
 CITY_MODEL models/citymodel/citymodel.obj
 6004.71 20 5611.6
@@ -47,7 +70,14 @@ CANYON models/canyon/canyon_normals.obj
 0 0 -1
 
 2499.39 2045.44 2747.72
-200 100 0
+100 100 0
+0 0 -1
+
+4948.79 2345.44 3745.9
+100 30 10
+0 0 -1
+2499.39 2045.44 2747.72
+100 100 200
 0 0 -1
 
 POWERPLANT models/powerplant/powerplant.obj

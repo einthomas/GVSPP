@@ -148,3 +148,11 @@ int Statistics::getTotalTracedRays() {
     }
     return sum;
 }
+
+void Statistics::reset() {
+    entries.clear();
+    entries.push_back(StatisticsEntry());
+    for (int i = 0; i < elapsedTimes.size(); i++) {
+        elapsedTimes[i] = 0;
+    }
+}

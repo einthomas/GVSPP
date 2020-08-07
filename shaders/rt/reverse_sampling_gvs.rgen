@@ -96,7 +96,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                         vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
                         vec3 viewCellPos = viewCell.tilePos;
                         vec3 viewCellNormal = viewCell.normal;
-                        vec3 viewCellSize = viewCell.tileSize;
+                        vec3 viewCellSize = viewCell.size;
                     #endif
 
                     // Check if the ray through the point right outside of the triangle and the predicted hit point
@@ -105,9 +105,9 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                         continue;
                     }
 
-                    vec3 s0 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
-                    vec3 s1 = viewCellPos + viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
-                    vec3 s2 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;
+                    vec3 s0 = viewCellPos - viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
+                    vec3 s1 = viewCellPos + viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
+                    vec3 s2 = viewCellPos - viewCellRight * viewCellSize * 0.5 - viewCellUp * viewCellSize * 0.5;
 
                     // Check if the ray-plane hit point lies within the bounds of the view cell
                     // Project ray-plane hit point on local basis of the view cell

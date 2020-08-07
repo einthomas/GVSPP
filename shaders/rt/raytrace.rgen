@@ -62,7 +62,7 @@ void main() {
     vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
     vec3 viewCellPos = viewCell.tilePos;
     vec3 viewCellNormal = viewCell.normal;
-    vec3 viewCellSize = viewCell.tileSize;
+    vec3 viewCellSize = viewCell.size;
 
     #ifdef USE_3D_VIEW_CELL
         //int index = int(launchIndex / int(gl_LaunchSizeNV.x / float(pushConstants.faceIndices[0])));
@@ -87,8 +87,8 @@ void main() {
 
     // Map Halton point to point on view cell
     vec2 haltonPoint = vec2(points[launchIndex * 4], points[launchIndex * 4 + 1]);
-    vec2 offset = (haltonPoint - vec2(0.5)) * viewCellSize.xy;
-    rayOrigin = viewCellPos + offset.x * viewCellRight + offset.y * viewCellUp;
+    vec2 offset = haltonPoint - vec2(0.5);
+    rayOrigin = viewCellPos + offset.x * viewCellSize * viewCellRight + offset.y * viewCellSize * viewCellUp;
 
     // Use a different Halton point to calculate the ray direction
     haltonPoint = vec2(points[launchIndex * 4 + 2], points[launchIndex * 4 + 3]);

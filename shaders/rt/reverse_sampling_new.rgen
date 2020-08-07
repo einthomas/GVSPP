@@ -34,7 +34,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                 vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
                 vec3 viewCellPos = viewCell.tilePos;
                 vec3 viewCellNormal = viewCell.normal;
-                vec3 viewCellSize = viewCell.tileSize;
+                vec3 viewCellSize = viewCell.size;
             #endif
 
             bool invalidRayPlayIntersection = false;
@@ -76,8 +76,8 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                     } else {
                         haltonPoint = vec2(points[(i - 4) * 4 + 2], points[(i - 4) * 4 + 3]);
                     }
-                    vec2 offset = (haltonPoint - vec2(0.5)) * viewCellSize.xy;
-                    vec3 viewCellSamplePoint = viewCellPos + offset.x * viewCellRight + offset.y * viewCellUp;
+                    vec2 offset = haltonPoint - vec2(0.5);
+                    vec3 viewCellSamplePoint = viewCellPos + offset.x * viewCellSize * viewCellRight + offset.y * viewCellSize * viewCellUp;
 
                     // Check if viewCellSamplePoint is within the occluding triangle projected onto the view cell
                     // Ericson, Christer. Real-time collision detection. CRC Press, 2004.
@@ -119,9 +119,9 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                         c[2] = rayViewCellHitPoints[0] * (u * f) + rayViewCellHitPoints[1] * (v * f) + rayViewCellHitPoints[2] * -offset;
 
                         // Compute corners of the current view face
-                        vec3 s0 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
-                        vec3 s1 = viewCellPos + viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
-                        vec3 s2 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;
+                        vec3 s0 = viewCellPos - viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
+                        vec3 s1 = viewCellPos + viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
+                        vec3 s2 = viewCellPos - viewCellRight * viewCellSize * 0.5 - viewCellUp * viewCellSize * 0.5;
 
                         for (int i = 0; i < 3; i++) {
                             // Check if the ray-plane hit point lies within the bounds of the view cell
