@@ -33,11 +33,7 @@ layout(binding = 4, set = 0) readonly buffer haltonPoints {
     float points[];
 };
 layout(binding = 5, set = 0) uniform viewCellProperties {
-    vec3 pos;
-    vec3 size;
-    vec3 normal;
-    vec3 tilePos;
-    vec3 tileSize;
+    mat4 model;
 } viewCell;
 layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint triangleCounter;
@@ -67,15 +63,6 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
 const int MAX_SUBDIVISION_STEPS = 3;
 uint tracedRays = 0;
-
-bool isTriangleFrontFacing(vec3 viewCellNormal, vec3 viewCellPos,  int triangleID) {
-    Vertex v0 = unpackVertexData(indices.i[3 * triangleID]);
-    Vertex v1 = unpackVertexData(indices.i[3 * triangleID + 1]);
-    Vertex v2 = unpackVertexData(indices.i[3 * triangleID + 2]);
-    return (dot(viewCellNormal, v0.worldPos - viewCellPos) > 0
-        || dot(viewCellNormal, v1.worldPos - viewCellPos) > 0
-        || dot(viewCellNormal, v2.worldPos - viewCellPos) > 0);
-}
 
 uint storeReverseSample(uint launchIndex, Sample originalSample, vec3 targetSamplePos) {
     atomicAdd(rsTriangleCounter, 1);
@@ -108,8 +95,6 @@ void main() {
         v[1] = unpackVertexData(indices.i[3 * originalSample.triangleID + 1]);
         v[2] = unpackVertexData(indices.i[3 * originalSample.triangleID + 2]);
     #endif
-
-    vec3 viewCellPos = viewCell.pos;
 
     // Get two adjacent samples
     uint i = launchIndex;
@@ -224,6 +209,25 @@ void main() {
             index = int(index / 2.0f);
         }
 
+        // Get view cell coordinate system
+        vec3 viewCellSize = vec3(
+            length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+            length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+            length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+        ) * 2.0f;
+        vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+        vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+        vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+        if (viewCellSize.x == 0.0f) {
+            viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+        } else if (viewCellSize.y == 0.0f) {
+            viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+        } else if (viewCellSize.z == 0.0f) {
+            //viewCellRight = -viewCellRight;
+            viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+        }
+        vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+
         // Count the number of triangles that have been found
         const int numSubdivSamples = numSamplesPerEdge - 2;
         uint foundTriangles = 0;
@@ -234,7 +238,7 @@ void main() {
                 }
             #else
                 // In case of a 2d view cell, also check if the found triangle is front-facing
-                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCell.normal, viewCellPos, samplesOutput[k + 1].triangleID)) {
+                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCellNormal, viewCellPos, samplesOutput[k + 1].triangleID)) {
                     foundTriangles++;
                 } else {
                     samplesOutput[k + 1].triangleID = -1;

@@ -18,6 +18,7 @@ set(GLSLC_PATH E:/VulkanSDK/1.2.135.0/Bin/glslc)
 set(SHADERS_PATH C:/Users/thoma/Documents/dev/Master/Vulkan_RTX_Master_Qt_CMake/shaders/)
 
 string(APPEND CMAKE_CUDA_FLAGS " -gencode arch=compute_75,code=sm_75")
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; " -gencode arch=compute_75,code=sm_75")
 
 #find_package(Qt5Core REQUIRED)
 #find_package(Qt5Gui REQUIRED)

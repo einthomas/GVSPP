@@ -33,6 +33,9 @@ void Statistics::print() {
         entries[0].newTriangles = entries[0].pvsSize;
     } else {
         entries.back().newTriangles = entries.back().pvsSize - entries[entries.size() - 2].pvsSize;
+        if (entries.back().numShaderExecutions == 0) {
+            entries.pop_back();
+        }
     }
 
     setlocale(LC_NUMERIC, "");

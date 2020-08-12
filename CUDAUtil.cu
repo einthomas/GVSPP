@@ -39,11 +39,10 @@ int CUDAUtil::work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vec
     thrust::device_vector<int> deviceSampleValueIndices(triangleIDKeysSize);
     thrust::sequence(deviceSampleValueIndices.begin(), deviceSampleValueIndices.end());
     thrust::device_ptr<int> sampleIndices = deviceSampleValueIndices.data();
+    thrust::device_ptr<int> devicePointerPVS(pvs);
 
     thrust::device_ptr<int> triangleIDs(triangleIDKeys);
     thrust::device_ptr<Sample> samples(sampleValues);
-
-    thrust::device_ptr<int> devicePointerPVS(pvs);
 
     sortByKey(triangleIDs, triangleIDKeysSize, sampleIndices);
 

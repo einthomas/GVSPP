@@ -70,6 +70,7 @@ void VisibilityManager::init(
 
     createBuffers(indices);
     CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
+    //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION - 2);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
 
     /*
@@ -80,8 +81,8 @@ void VisibilityManager::init(
     */
 }
 
-void VisibilityManager::addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal) {
-    viewCells.push_back(ViewCell(pos, size, normal));
+void VisibilityManager::addViewCell(glm::mat4 model) {
+    viewCells.push_back(ViewCell(model));
 }
 
 /*
@@ -164,10 +165,6 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
-        ViewCell viewCellTile = getViewCellTile(numThreads, 0, i);
-        viewCells[viewCellIndex].tilePos = viewCellTile.tilePos;
-        viewCells[viewCellIndex].tileSize = viewCellTile.tileSize;
-
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, viewCellBufferSize, 0, &data);
         //memcpy(data, viewCells.data(), (size_t) viewCellBufferSize);
@@ -182,38 +179,6 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
-}
-
-/*
- * Possible number of thread counts (numThreads): 1, 2, 4, 6, 8, 9
- */
-ViewCell VisibilityManager::getViewCellTile(int numThreads, int viewCellIndex, int threadId) {
-    glm::vec3 up = glm::vec3(0.0, 1.0, 0.0);
-    glm::vec3 viewCellRight = glm::normalize(glm::cross(viewCells[viewCellIndex].normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-    glm::vec3 viewCellUp = glm::normalize(glm::cross(viewCellRight, viewCells[viewCellIndex].normal));
-
-    ViewCell viewCell;
-    viewCell.normal = viewCells[viewCellIndex].normal;
-    if (numThreads == 1) {
-        viewCell.tilePos = viewCells[viewCellIndex].pos;
-        viewCell.tileSize = viewCells[viewCellIndex].size;
-    } else if (numThreads % 2 == 0) {
-        glm::vec2 split(
-            -0.5 + 1.0f / numThreads + 1.0f / (numThreads * 0.5f) * (threadId % int(numThreads * 0.5f)),
-            0.25f * (int(threadId / (numThreads * 0.5f)) == 0 ? 1.0f : -1.0f)
-        );
-        viewCell.tilePos = viewCells[viewCellIndex].pos + viewCellRight * split.x + viewCellUp * split.y;
-        viewCell.tileSize = glm::vec3(1.0f / (numThreads * 0.5f), 0.5f, 1.0f) * viewCells[viewCellIndex].size;
-    } else if (numThreads == 9) {
-        glm::vec2 split(
-            -0.5 + 1.0f / 6.0f + (1.0f / 3.0f) * (threadId % int(numThreads / 3.0f)),
-            (1.0f / 3.0f) * (int(threadId / (numThreads / 3.0f)) - 1.0f)
-        );
-        viewCell.tilePos = viewCells[viewCellIndex].pos + viewCellRight * split.x + viewCellUp * split.y;
-        viewCell.tileSize = glm::vec3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f) * viewCells[viewCellIndex].size;
-    }
-
-    return viewCell;
 }
 
 void VisibilityManager::resetPVSGPUBuffer() {
@@ -1488,16 +1453,6 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
         &descriptorSet[threadId], 0, nullptr
     );
 
-    if (faceIndices.count(numThreads)) {
-        vkCmdPushConstants(
-            commandBuffer[threadId],
-            pipelineLayout,
-            VK_SHADER_STAGE_RAYGEN_BIT_NV,
-            0,
-            sizeof(int) * faceIndices[numThreads][threadId].size(),
-            faceIndices[numThreads][threadId].data()
-        );
-    }
     vkCmdTraceRaysNV(
         commandBuffer[threadId],
         shaderBindingTable, bindingOffsetRayGenShader,
@@ -1564,9 +1519,8 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
     }
     */
 
-    /*
-    // Copy intersected triangles from VRAM to CPU accessible buffer
-    {
+    if (rayVisualization) {
+        // Copy intersected triangles from VRAM to CPU accessible buffer
         VkDeviceSize bufferSize = sizeof(Sample) * numTriangles;
 
         // Copy the intersected triangles GPU buffer to the host buffer
@@ -1574,12 +1528,13 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
             logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
             randomSamplingOutputHostBuffer[threadId], bufferSize, queueSubmitMutex
         );
-        //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << "mb " << RAYS_PER_ITERATION << " " << numTriangles << std::endl;
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
-        std::cout << s[0] << std::endl;
+        for (int i = 0; i < numTriangles; i++) {
+            rayVertices.push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
+            rayVertices.push_back({s[i].hitPos, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
+        }
     }
-    */
 
     /*
     {
@@ -1592,7 +1547,6 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
         //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << "mb " << RAYS_PER_ITERATION << " " << numTriangles << std::endl;
     }
     */
-
 
     return { numTriangles, 0, (unsigned int) numRays, 0 };
 }
@@ -1891,9 +1845,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     auto haltonTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     std::vector<Sample> absSampleQueue;
-    size_t newTriangles;
+    size_t previousPVSSize;
     for (int i = 0; true; i++) {
-        newTriangles = pvsSize;
+        previousPVSSize = pvsSize;
 
         // Execute random sampling
         statistics.startOperation(RANDOM_SAMPLING);
@@ -1919,7 +1873,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
-        std::cout << "absSampleQueue.size() " << absSampleQueue.size() << std::endl;
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
             int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
@@ -1942,6 +1895,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             statistics.startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             {
+                //std::cout <<absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles << std::endl;
                 std::vector<Sample> newSamples;
                 pvsSize = CUDAUtil::work(
                     pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
@@ -1956,7 +1910,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.entries.back().pvsSize = pvsSize;
             statistics.update();
 
-            // Execute edge subdivision
+            // Execute edge subdivisio
             statistics.startOperation(EDGE_SUBDIVISION);
             //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
             ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
@@ -1988,21 +1942,21 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         if (USE_TERMINATION_CRITERION) {
             if (
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
-                pvsSize - newTriangles < NEW_TRIANGLE_TERMINATION_THRESHOLD
+                pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
                 statistics.print();
                 break;
             }
+
+            // Generate new Halton points
+            start = std::chrono::steady_clock::now();
+            CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
+            end = std::chrono::steady_clock::now();
+            haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         } else {
             statistics.print();
             break;
         }
-
-        start = std::chrono::steady_clock::now();
-        //generateHaltonPoints2d(RAYS_PER_ITERATION, threadId, RAYS_PER_ITERATION * i);
-        CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * i);
-        end = std::chrono::steady_clock::now();
-        haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     }
 
     auto endTotal = std::chrono::steady_clock::now();

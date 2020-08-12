@@ -9,13 +9,30 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
             intersectRayPlane(v[0].worldPos, planeNormal, rayOrigin, rayDir, predictedHitPoint) &&
             length(predictedHitPoint - rayOrigin) - length(hitPoint - rayOrigin) > 0.985
         ) {
+            // Get view cell coordinate system
+            vec3 viewCellSize = vec3(
+                length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+                length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+                length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+            ) * 2.0f;
+            vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+            vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+            vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+            if (viewCellSize.x == 0.0f) {
+                viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+            } else if (viewCellSize.y == 0.0f) {
+                viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+            } else if (viewCellSize.z == 0.0f) {
+                //viewCellRight = -viewCellRight;
+                viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+            }
+            vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+
             #ifdef USE_3D_VIEW_CELL
-                vec3 up = vec3(0.0, 1.0, 0.0);
-                vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-                vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
-                const vec3 faceNormals[6] = { viewCell.normal, viewCellRight, -viewCell.normal, -viewCellRight, viewCellUp, -viewCellUp };
-                const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCell.normal, viewCell.normal };
-                const vec3 faceRights[6] = { viewCellRight, -viewCell.normal, -viewCellRight, viewCell.normal, viewCellRight, viewCellRight };
+                const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
+                const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
+                const vec3 faceNormals[6] = { viewCellNormal, viewCellRight, -viewCellNormal, -viewCellRight, viewCellUp, -viewCellUp };
+                const vec3 faceSizes[6] = { viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xzy, viewCellSize.xzy };
             #endif
 
             // Construct plane though the ray origin, the hit point of the original triangle and the
@@ -85,18 +102,11 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                                 continue;
                             }
 
-                            vec3 viewCellNormal = faceNormals[m];
-                            vec3 viewCellRight = faceRights[m];
-                            vec3 viewCellUp = faceUps[m];
-                            vec3 viewCellPos = viewCell.pos + viewCellNormal * viewCell.size * 0.5;
-                            vec3 viewCellSize = viewCell.size;
-                    #else
-                        vec3 up = vec3(0.0, 1.0, 0.0);
-                        vec3 viewCellRight = normalize(cross(viewCell.normal, up));     // TODO: Doesn't work if the viewcell normal is also (0, 1, 0)!
-                        vec3 viewCellUp = normalize(cross(viewCellRight, viewCell.normal));
-                        vec3 viewCellPos = viewCell.tilePos;
-                        vec3 viewCellNormal = viewCell.normal;
-                        vec3 viewCellSize = viewCell.size;
+                            viewCellNormal = faceNormals[m];
+                            viewCellRight = faceRights[m];
+                            viewCellUp = faceUps[m];
+                            viewCellSize = faceSizes[m];
+                            viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5;
                     #endif
 
                     // Check if the ray through the point right outside of the triangle and the predicted hit point
@@ -105,9 +115,9 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                         continue;
                     }
 
-                    vec3 s0 = viewCellPos - viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
-                    vec3 s1 = viewCellPos + viewCellRight * viewCellSize * 0.5 + viewCellUp * viewCellSize * 0.5;
-                    vec3 s2 = viewCellPos - viewCellRight * viewCellSize * 0.5 - viewCellUp * viewCellSize * 0.5;
+                    vec3 s0 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
+                    vec3 s1 = viewCellPos + viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;
+                    vec3 s2 = viewCellPos - viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;
 
                     // Check if the ray-plane hit point lies within the bounds of the view cell
                     // Project ray-plane hit point on local basis of the view cell
@@ -122,10 +132,11 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                         traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                         tracedRsRays++;
 
-                        if (int(hitInfo.w) != -1) {
+                        int triangleID = int(hitInfo.w);
+                        if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
                             uint index = storeReverseSample(
                                 launchIndex,
-                                Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos),
+                                Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
                                 samplePos
                             );
                             if (length(hitInfo.xyz - samplePos) < 0.01) {

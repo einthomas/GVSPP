@@ -48,6 +48,8 @@ class VisibilityManager {
 public:
     std::vector<ViewCell> viewCells;
     PVS<int> pvs;
+    std::vector<Vertex> rayVertices;
+    bool rayVisualization = true;
 
     VisibilityManager();
     void init(
@@ -56,7 +58,7 @@ public:
         const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
         int numThreads, std::array<uint8_t, VK_UUID_SIZE> deviceUUID
     );
-    void addViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
+    void addViewCell(glm::mat4 model);
     void generateHaltonPoints2d(int n, int threadId, int offset = 0);
     void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
@@ -68,57 +70,23 @@ public:
 
 private:
     int pvsSize = 0;
-
     int numThreads;
 
-    const bool USE_TERMINATION_CRITERION = true;
+    const bool USE_TERMINATION_CRITERION = false;
     const bool USE_EDGE_SUBDIV_CPU = false;
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 10000000;
-    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
+    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
     const int NUM_ABS_SAMPLES = 16;
     const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
     int MAX_TRIANGLE_COUNT;
 
     const size_t RAYS_PER_ITERATION = 500000;
-    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 2;
+    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 10;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
-
-    std::map<int, std::vector<std::vector<int>>> faceIndices = {
-        {
-            1,
-            { { 6, 0, 1, 2, 3, 4, 5 } }
-        },
-        {
-            2,
-            {
-                { 3, 0, 1, 4 },
-                { 3, 2, 3, 5 }
-            }
-        },
-        {
-            3,
-            {
-                { 2, 0, 4 },
-                { 2, 1, 5 },
-                { 2, 2, 3}
-            },
-        },
-        {
-            6,
-            {
-                { 1, 0 },
-                { 1, 1 },
-                { 1, 2 },
-                { 1, 3 },
-                { 1, 4 },
-                { 1, 5 }
-            }
-        }
-    };
 
     Statistics statistics;
     std::vector<std::vector<float>> haltonPoints;

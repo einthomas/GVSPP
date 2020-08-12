@@ -3,17 +3,26 @@
 
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/geometric.hpp>
+#include <array>
 
 class ViewCell {
 public:
-    alignas(16) glm::vec3 pos;
-    alignas(16) glm::vec3 size;
-    alignas(16) glm::vec3 normal;
-    alignas(16) glm::vec3 tilePos;
-    alignas(16) glm::vec3 tileSize;
+    glm::mat4 model;
 
     ViewCell();
-    ViewCell(glm::vec3 pos, glm::vec3 size, glm::vec3 normal);
+    ViewCell(glm::mat4 model);
+
+    bool operator() (const ViewCell& lhs, const ViewCell& rhs) const
+    {
+        return glm::length(lhs.model[3]) < glm::length(lhs.model[3]);
+    }
+
+    bool operator <(const ViewCell& rhs) const
+    {
+        return glm::length(rhs.model[3]) < glm::length(model[3]);
+    }
 };
 
 #endif // VIEWCELL_H

@@ -840,6 +840,12 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
         if (key == GLFW_KEY_V) {
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleShadedRendering();
         }
+        if (key == GLFW_KEY_G) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleViewCellRendering();
+        }
+        if (key == GLFW_KEY_R) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleRayVisualization();
+        }
 
         if (key == GLFW_KEY_ESCAPE) {
             if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL) {
@@ -851,6 +857,9 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
             }
         }
 
+        if (key == GLFW_KEY_C) {
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->nextViewCell();
+        }
         if (key == GLFW_KEY_F) {
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->nextCorner();
         }

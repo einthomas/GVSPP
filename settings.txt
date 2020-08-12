@@ -1,2 +1,3 @@
-CANYON
-5
+CALCPVS pvs.txt
+CITY_NEW
+0

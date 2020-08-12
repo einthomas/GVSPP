@@ -10,10 +10,21 @@
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "visibilitymanager.h"
+#include "viewcell.h"
 
 struct Settings {
     std::string modelName;
     int viewCellIndex;
+};
+
+struct ViewCellGeometry {
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
+
+    ViewCellGeometry(VkBuffer vertexBuffer, VkDeviceMemory vertexBufferMemory)
+        : vertexBuffer(vertexBuffer), vertexBufferMemory(vertexBufferMemory)
+    {
+    }
 };
 
 class VulkanRenderer { // : public QVulkanWindowRenderer {
@@ -33,7 +44,10 @@ public:
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
     );
     void toggleShadedRendering();
+    void toggleViewCellRendering();
+    void toggleRayVisualization();
     void nextCorner();
+    void nextViewCell();
     void alignCameraWithViewCellNormal();
     void startVisibilityThread();
 
@@ -48,20 +62,24 @@ private:
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
-    VkShaderModule fragShaderModule;
-    VkShaderModule vertShaderModule;
-    VkPushConstantRange pushConstantRange;
+    VkPipeline rayVisualizationPipeline;
+    VkPipelineLayout rayVisualizationPipelineLayout;
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
     std::vector<Vertex> shadedVertices;
+    std::vector<std::vector<int>> pvsTriangleIDs;
+    std::vector<std::vector<Vertex>> shadedPVS;
+    std::vector<ViewCellGeometry> viewCellGeometry;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
     VkBuffer shadedVertexBuffer;
     VkDeviceMemory shadedVertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    VkBuffer rayVertexBuffer;
+    VkDeviceMemory rayVertexBufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -72,8 +90,15 @@ private:
     VkSampler textureSampler;
     int currentViewCellCornerView = 0;
 
-    void createGraphicsPipeline();
+    int currentViewCellIndex = 0;
+
+    void createGraphicsPipeline(
+        VkPipeline &pipeline, VkPipelineLayout &pipelineLayout, std::string vertShaderPath,
+        std::string fragShaderPath,
+        VkPrimitiveTopology primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+    );
     void createVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
+    void updateVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
     void createShadedVertexBuffer();
     void createIndexBuffer();
 
@@ -97,7 +122,10 @@ private:
 
     // Visibility
     bool shadedRendering = true;
+    bool viewCellRendering = true;
     bool renderWholeModel = false;
+    std::string pvsStorageFile;
+    bool loadPVS;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
 

@@ -6,6 +6,11 @@ layout(binding = 0, set = 0) uniform UniformBufferObject {
     mat4 projection;
 } ubo;
 
+layout(push_constant) uniform PushConstants {
+	mat4 model;
+} pushConstants;
+
+
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec3 inColor;
@@ -16,8 +21,8 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 worldPos;
 
 void main() {
-    gl_Position = ubo.projection * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    gl_Position = ubo.projection * ubo.view * pushConstants.model * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragNormal = inNormal;
-    worldPos = vec3(ubo.model * vec4(inPosition, 1.0));
+    worldPos = vec3(pushConstants.model * vec4(inPosition, 1.0));
 }
