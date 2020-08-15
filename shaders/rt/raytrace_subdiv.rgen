@@ -158,20 +158,30 @@ void main() {
                     tracedRays++;
 
                     Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+
                     if (newSample.triangleID != -1) {
-                        #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                            int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
-                        #elif REVERSE_SAMPLING_METHOD == 1
-                            int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
-                        #endif
-                        if (foundReverseSampleIndex != -1) {
-                            Sample temp = newSample;
-                            newSample = edgeSubdivOutput[foundReverseSampleIndex];
-                            triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
-                            edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                        vec3 faceNormal = vec3(
+                            unpackVertexData(indices.i[3 * newSample.triangleID]).normal
+                            + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
+                            + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
+                        ) / 3.0f;
+                        if (dot(rayDir, faceNormal) < 0.0f) {
+                            if (newSample.triangleID != -1) {
+                                #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                                    int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                #elif REVERSE_SAMPLING_METHOD == 1
+                                    int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                #endif
+                                if (foundReverseSampleIndex != -1) {
+                                    Sample temp = newSample;
+                                    newSample = edgeSubdivOutput[foundReverseSampleIndex];
+                                    triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
+                                    edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                                }
+                            }
+                            samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                         }
                     }
-                    samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                 }
 
                 if (currentSample.triangleID != samplesOutput[int(currentIndex - index)].triangleID) {
@@ -190,19 +200,28 @@ void main() {
 
                     Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
                     if (newSample.triangleID != -1) {
-                        #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                            int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
-                        #elif REVERSE_SAMPLING_METHOD == 1
-                            int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
-                        #endif
-                        if (foundReverseSampleIndex != -1) {
-                            Sample temp = newSample;
-                            newSample = edgeSubdivOutput[foundReverseSampleIndex];
-                            triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
-                            edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                        vec3 faceNormal = vec3(
+                            unpackVertexData(indices.i[3 * newSample.triangleID]).normal
+                            + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
+                            + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
+                        ) / 3.0f;
+                        if (dot(rayDir, faceNormal) < 0.0f) {
+                            if (newSample.triangleID != -1) {
+                                #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                                    int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                #elif REVERSE_SAMPLING_METHOD == 1
+                                    int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                #endif
+                                if (foundReverseSampleIndex != -1) {
+                                    Sample temp = newSample;
+                                    newSample = edgeSubdivOutput[foundReverseSampleIndex];
+                                    triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
+                                    edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                                }
+                            }
+                            samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                         }
                     }
-                    samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                 }
             }
 
@@ -228,7 +247,7 @@ void main() {
         }
         vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
-        // Count the number of triangles that have been found
+        // Count then umber of triangles that have been found
         const int numSubdivSamples = numSamplesPerEdge - 2;
         uint foundTriangles = 0;
         for (int k = 0; k < numSubdivSamples; k++) {
@@ -248,7 +267,7 @@ void main() {
 
         if (foundTriangles > 0) {
             // Add the samples to the output buffer
-            uint insertionIndex = atomicAdd(triangleCounter, foundTriangles - 1);
+            uint insertionIndex = atomicAdd(triangleCounter, foundTriangles);
             for (int k = 0, m = 0; k < numSubdivSamples; k++) {
                 if (samplesOutput[k + 1].triangleID >= 0) {
                     triangleIDOutput[insertionIndex + m] = samplesOutput[k + 1].triangleID;

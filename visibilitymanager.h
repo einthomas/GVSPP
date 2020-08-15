@@ -49,7 +49,9 @@ public:
     std::vector<ViewCell> viewCells;
     PVS<int> pvs;
     std::vector<Vertex> rayVertices;
-    bool rayVisualization = true;
+    bool visualizeRandomRays = false;
+    bool visualizeABSRays = false;
+    bool visualizeEdgeSubdivRays = false;
 
     VisibilityManager();
     void init(
@@ -72,7 +74,7 @@ private:
     int pvsSize = 0;
     int numThreads;
 
-    const bool USE_TERMINATION_CRITERION = false;
+    const bool USE_TERMINATION_CRITERION = true;
     const bool USE_EDGE_SUBDIV_CPU = false;
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 10000000;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
@@ -81,7 +83,7 @@ private:
     int MAX_TRIANGLE_COUNT;
 
     const size_t RAYS_PER_ITERATION = 500000;
-    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 10;
+    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;

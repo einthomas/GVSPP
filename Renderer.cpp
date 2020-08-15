@@ -863,7 +863,10 @@ void VulkanRenderer::startNextFrame(
     }
 
     // Draw ray visualizations
-    if (visibilityManager.rayVisualization) {
+    if (
+        visibilityManager.visualizeRandomRays || visibilityManager.visualizeABSRays
+        || visibilityManager.visualizeEdgeSubdivRays
+    ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
             commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipelineLayout, 0, 1,
@@ -893,7 +896,7 @@ void VulkanRenderer::toggleViewCellRendering() {
 }
 
 void VulkanRenderer::toggleRayVisualization() {
-    visibilityManager.rayVisualization = !visibilityManager.rayVisualization;
+    visibilityManager.visualizeRandomRays = !visibilityManager.visualizeRandomRays;
 }
 
 void VulkanRenderer::nextCorner() {
@@ -1134,7 +1137,7 @@ void VulkanRenderer::startVisibilityThread() {
                         attrib.normals[3 * index.normal_index + 1],
                         attrib.normals[3 * index.normal_index + 2]
                     };
-                    vertex.color = { 0.0f, 0.0f, 0.0f };
+                    vertex.color = { 1.0f, 1.0f, 1.0f };
 
                     viewCellGeomtryVertices.push_back(vertex);
                 }
@@ -1156,7 +1159,10 @@ void VulkanRenderer::startVisibilityThread() {
     createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
-    if (visibilityManager.rayVisualization) {
+    if (
+        visibilityManager.visualizeRandomRays || visibilityManager.visualizeABSRays
+        || visibilityManager.visualizeEdgeSubdivRays
+    ) {
         createVertexBuffer(visibilityManager.rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
         updateVertexBuffer(visibilityManager.rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
     }

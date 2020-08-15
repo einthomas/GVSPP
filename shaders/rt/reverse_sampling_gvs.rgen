@@ -98,7 +98,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
 
                     #ifdef USE_3D_VIEW_CELL
                         for (int m = 0; m < 6; m++) {
-                            if (dot(rayDir, faceNormals[m]) > 0) {
+                            if (dot(rayDir, faceNormals[m]) < 0) {
                                 continue;
                             }
 
@@ -106,7 +106,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                             viewCellRight = faceRights[m];
                             viewCellUp = faceUps[m];
                             viewCellSize = faceSizes[m];
-                            viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5;
+                            viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]) + viewCellNormal * viewCellSize.z * 0.5;
                     #endif
 
                     // Check if the ray through the point right outside of the triangle and the predicted hit point
@@ -133,7 +133,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                         tracedRsRays++;
 
                         int triangleID = int(hitInfo.w);
-                        if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
+                        if (triangleID != -1) { // && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
                             uint index = storeReverseSample(
                                 launchIndex,
                                 Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),

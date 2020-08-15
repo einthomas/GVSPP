@@ -27,7 +27,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
             const vec3 faceSizes[6] = { viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xzy, viewCellSize.xzy };
 
             for (int m = 0; m < 6; m++) {
-                if (dot(rayDir, faceNormals[m]) > 0) {
+                if (dot(rayDir, faceNormals[m]) < 0) {
                     continue;
                 }
 
@@ -35,7 +35,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                 viewCellRight = faceRights[m];
                 viewCellUp = faceUps[m];
                 viewCellSize = faceSizes[m];
-                viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5;
+                viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]) + viewCellNormal * viewCellSize.z * 0.5;
         #endif
 
         vec3 m_x = viewCellRight * viewCellSize.x;
@@ -101,14 +101,21 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
             tracedRsRays++;
 
             int triangleID = int(hitInfo.w);
-            if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
-                uint index = storeReverseSample(
-                    launchIndex,
-                    Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos),
-                    samplePos
-                );
-                if (length(hitInfo.xyz - samplePos) < 0.01) {
-                    foundSampleIndex = int(index);
+            if (triangleID != -1) { //&& isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
+                vec3 faceNormal = (
+                    unpackVertexData(indices.i[3 * triangleID]).normal
+                    + unpackVertexData(indices.i[3 * triangleID + 1]).normal
+                    + unpackVertexData(indices.i[3 * triangleID + 2]).normal
+                ) / 3.0f;
+                if (dot(rayDirNew, faceNormal) < 0.0f) {
+                    uint index = storeReverseSample(
+                        launchIndex,
+                        Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos),
+                        samplePos
+                    );
+                    if (length(hitInfo.xyz - samplePos) < 0.01) {
+                        foundSampleIndex = int(index);
+                    }
                 }
             }
         }

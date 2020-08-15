@@ -1,3 +1,12 @@
+TRNGL models/trngl/trngl2.obj
+0 0 0
+2 2 0
+0 180 0
+
+0 0 0
+2 2 2
+0 0 0
+
 RSTEST models/reverse_sampling_test/reverse_sampling_test.obj
 15 -1.5 10
 30 0.5 0
@@ -35,6 +44,14 @@ CITY_NEW models/citynew/citynew.obj
 0 90 0
 
 30 3 150
+0.1 50 150
+0 0 0
+
+-120 3 -150
+40 50 150
+0 0 0
+
+30 3 0
 40 50 150
 0 0 0
 
@@ -152,9 +169,9 @@ CANYON models/canyon/canyon_normals.obj
 200 100 0.1
 0 180 0
 
-2499.39 2045.44 2747.72
+2699.39 2045.44 2747.72
 200 100 0
-0 0 0
+0 180 0
 
 2499.39 2045.44 2747.72
 100 100 0

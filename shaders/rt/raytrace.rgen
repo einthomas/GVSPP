@@ -11,6 +11,11 @@ struct Sample {
 };
 
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 1, set = 0) uniform cameraProperties {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} camera;
 layout(binding = 4, set = 0) readonly buffer haltonPoints {
     float points[];
 };
@@ -27,26 +32,15 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint rsRayCounter;
 };
 
+layout(binding = 10, set = 0) writeonly buffer randomSamplingOutputIDbuffer {
+    int triangleIDOutput[];
+};
+
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 layout(push_constant) uniform PushConstants {
 	int faceIndices[7];  // faceIndices[0] stores the number of faces
 } pushConstants;
-
-
-layout(binding = 9, set = 0) buffer testBuffer {        // PVS
-    int test[];
-};
-
-layout(binding = 10, set = 0) writeonly buffer randomSamplingOutputIDbuffer {
-    int triangleIDOutput[];
-};
-
-layout(binding = 1, set = 0) uniform cameraProperties {
-    mat4 model;
-    mat4 view;
-    mat4 projection;
-} camera;
 
 void main() {
     // Calculate 1D launch index
@@ -72,14 +66,7 @@ void main() {
     vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
     #ifdef USE_3D_VIEW_CELL
-        //int index = int(launchIndex / int(gl_LaunchSizeNV.x / float(pushConstants.faceIndices[0])));
         const int faceIndex = int(launchIndex / int(gl_LaunchSizeNV.x / 6.0f));
-
-        /*
-        index = index > pushConstants.faceIndices[0] - 1 ? index - 1 : index;
-        index += 1;
-        const int faceIndex = pushConstants.faceIndices[index];
-        */
         
         const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
         const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };

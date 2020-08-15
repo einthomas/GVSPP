@@ -31,10 +31,17 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                 const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
                 const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
                 const vec3 faceNormals[6] = { viewCellNormal, viewCellRight, -viewCellNormal, -viewCellRight, viewCellUp, -viewCellUp };
-                const vec3 faceSizes[6] = { viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xyz, viewCellSize.zyx, viewCellSize.xzy, viewCellSize.xzy };
+                const vec3 faceSizes[6] = { 
+                    viewCellSize.xyz,
+                    viewCellSize.zyx,
+                    viewCellSize.xyz,
+                    viewCellSize.zyx,
+                    viewCellSize.xzy,
+                    viewCellSize.xzy
+                };
 
                 for (int m = 0; m < 6; m++) {
-                    if (dot(rayDir, faceNormals[m]) > 0) {
+                    if (dot(rayDir, faceNormals[m]) < 0) {
                         continue;
                     }
 
@@ -42,10 +49,10 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                     viewCellRight = faceRights[m];
                     viewCellUp = faceUps[m];
                     viewCellSize = faceSizes[m];
-                    viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5;
+                    viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]) + viewCellNormal * viewCellSize.z * 0.5;
             #endif
 
-            bool invalidRayPlayIntersection = false;
+            bool invalidRayPlaneIntersection = false;
             vec3 rayViewCellHitPoints[3];
             for (int i = 0; i < 3; i++) {
                 if (!intersectRayPlane(
@@ -53,12 +60,12 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                         rayViewCellHitPoints[i]
                     )
                 ) {
-                    invalidRayPlayIntersection = true;
+                    invalidRayPlaneIntersection = true;
                     break;
                 }
             }
 
-            if (!invalidRayPlayIntersection) {
+            if (!invalidRayPlaneIntersection) {
                 const vec3 v0 = rayViewCellHitPoints[1] - rayViewCellHitPoints[0];
                 const vec3 v1 = rayViewCellHitPoints[2] - rayViewCellHitPoints[0];
 
@@ -82,7 +89,10 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                     if (i < 4) {
                         haltonPoint = corners[i];
                     } else {
-                        haltonPoint = vec2(points[(i - 4) * 4 + 2], points[(i - 4) * 4 + 3]);
+                        haltonPoint = vec2(
+                            points[int(mod(launchIndex * 4 + 2, points.length()))],
+                            points[int(mod(launchIndex * 4 + 3, points.length()))]
+                        );
                     }
                     vec2 offset = haltonPoint - vec2(0.5);
                     vec3 viewCellSamplePoint = viewCellPos + offset.x * viewCellSize.x * viewCellRight + offset.y * viewCellSize.y * viewCellUp;
@@ -95,7 +105,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                     float v = (dot11 * dot20 - dot01 * dot21) / denom;
                     float w = (dot00 * dot21 - dot01 * dot20) / denom;
                     if (any(bvec3(w < 0.0f || w > 1.0f, v < 0.0f || v > 1.0f, w + v > 1.0f))) {
-                        rayOrigin = viewCellSamplePoint;
+                        vec3 rayOrigin = viewCellSamplePoint;
                         rayDir = normalize(samplePos - viewCellSamplePoint);
 
                         traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
@@ -103,14 +113,25 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                         tracedRsRays++;
 
     	                int triangleID = int(hitInfo.w);
-                        if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
-                            uint index = storeReverseSample(
-                                launchIndex,
-                                Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
-                                samplePos
-                            );
-                            if (length(hitInfo.xyz - samplePos) < 0.01) {
-                                foundSampleIndex = int(index);
+                        if (triangleID != -1) { // && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
+                            vec3 faceNormal = (
+                                unpackVertexData(indices.i[3 * triangleID]).normal
+                                + unpackVertexData(indices.i[3 * triangleID + 1]).normal
+                                + unpackVertexData(indices.i[3 * triangleID + 2]).normal
+                            ) / 3.0f;
+                            faceNormal = cross(
+                                unpackVertexData(indices.i[3 * triangleID + 1]).worldPos - unpackVertexData(indices.i[3 * triangleID]).worldPos,
+                                unpackVertexData(indices.i[3 * triangleID + 2]).worldPos - unpackVertexData(indices.i[3 * triangleID]).worldPos
+                            );    
+                            if (dot(rayDir, faceNormal) < 0.0f) {
+                                uint index = storeReverseSample(
+                                    launchIndex,
+                                    Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
+                                    samplePos
+                                );
+                                if (length(hitInfo.xyz - samplePos) < 0.01) {
+                                    foundSampleIndex = int(index);
+                                }
                             }
                         }
                     } else {
@@ -140,7 +161,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
 
                             // Check if the u & v coordinates are within the view cell
                             if (uu >= 0.0 && vv >= 0.0 && uu <= dot(s1 - s0, s1 - s0) && vv <= dot(s2 - s0, s2 - s0)) {
-                                rayOrigin = c[i];
+                                vec3 rayOrigin = c[i];
                                 rayDir = normalize(samplePos - c[i]);
 
                                 traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
@@ -148,14 +169,25 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                                 tracedRsRays++;
 
                                 int triangleID = int(hitInfo.w);
-                                if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
-                                    uint index = storeReverseSample(
-                                        launchIndex,
-                                        Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
-                                        samplePos
-                                    );
-                                    if (length(hitInfo.xyz - samplePos) < 0.01) {
-                                        foundSampleIndex = int(index);
+                                if (triangleID != -1) { // && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
+                                    vec3 faceNormal = vec3(
+                                        unpackVertexData(indices.i[3 * triangleID]).normal
+                                        + unpackVertexData(indices.i[3 * triangleID + 1]).normal
+                                        + unpackVertexData(indices.i[3 * triangleID + 2]).normal
+                                    ) / 3.0f;
+                                    faceNormal = cross(
+                                        unpackVertexData(indices.i[3 * triangleID + 1]).worldPos - unpackVertexData(indices.i[3 * triangleID]).worldPos,
+                                        unpackVertexData(indices.i[3 * triangleID + 2]).worldPos - unpackVertexData(indices.i[3 * triangleID]).worldPos
+                                    );    
+                                    if (dot(rayDir, faceNormal) < 0.0f) {
+                                        uint index = storeReverseSample(
+                                            launchIndex,
+                                            Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
+                                            samplePos
+                                        );
+                                        if (length(hitInfo.xyz - samplePos) < 0.01) {
+                                            foundSampleIndex = int(index);
+                                        }
                                     }
                                 }
                             }
@@ -164,6 +196,9 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                 }
             }
             #ifdef USE_3D_VIEW_CELL
+                    if (!invalidRayPlaneIntersection) {
+                        //break;
+                    }
                 }
             #endif
         }
