@@ -38,6 +38,7 @@ file(GLOB SRC_FILES
     "*.hpp"
     "*.cpp"
     "*.cu"
+    "gpuHashTable/*"
 )
 add_executable(Vulkan_RTX_Master_Qt_CMake ${SRC_FILES})
 

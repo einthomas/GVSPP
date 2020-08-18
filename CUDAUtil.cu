@@ -15,7 +15,6 @@
 #include <thrust/gather.h>
 #include <thrust/scatter.h>
 #include <thrust/remove.h>
-
 #include <thrust/tuple.h>
 #include <thrust/iterator/zip_iterator.h>
 
@@ -26,6 +25,7 @@
 #include <vector>
 
 #include "sample.h"
+#include "gpuHashTable/linearprobing.h"
 
 void sortByKey(thrust::device_ptr<int> triangleIDs, int size, thrust::device_ptr<int> sampleIndices);
 int uniqueByKey(thrust::device_ptr<int> triangleIDs, int size, thrust::device_ptr<int> sampleIndices);
@@ -35,7 +35,104 @@ void findNewTriangles(
 );
 int setUnion(thrust::device_ptr<int> devicePointerPVS, thrust::device_ptr<int> triangleIDs, int sizeA, int sizeB);
 
-int CUDAUtil::work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize) {
+struct is_even
+{
+  __host__ __device__
+  bool operator()(const char x)
+  {
+    //return (x % 2) == 0;
+      return x == 0;
+  }
+};
+
+int CUDAUtil::work2(
+    int *hashTable,
+    int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
+    const int triangleIDKeysSize
+) {
+    /*
+    std::vector<int> sampleIndices = std::make_index_sequence<triangleIDKeysSize>{};
+    uint32_t* deviceSampleIndices;
+    cudaMalloc(&deviceSampleIndices, sizeof(uint32_t) * sampleIndices.size());
+    cudaMemcpy(deviceSampleIndices, sampleIndices, sizeof(uint32_t) * sampleIndices.size(), cudaMemcpyHostToDevice);
+    */
+
+    std::vector<char> inserted(triangleIDKeysSize);
+    //std::cout << "insert a" << std::endl;
+    insert_hashtable(hashTable, triangleIDKeys, triangleIDKeysSize, inserted.data());
+    //std::cout << "insert b" << std::endl;
+
+    thrust::device_vector<char> deviceInserted(inserted);
+
+    int numNewTriangles = thrust::count(deviceInserted.begin(), deviceInserted.end(), 1);
+    if (numNewTriangles > 0) {
+        result.resize(numNewTriangles);
+
+        thrust::device_ptr<Sample> devicePointerSampleValues(sampleValues);
+
+        /*
+        thrust::device_vector<Sample> r(numNewTriangles);
+        thrust::copy_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted.begin(), r.begin(), is_even());
+        thrust::copy(r.begin(), r.end(), result.begin());
+        */
+
+        auto newEnd = thrust::remove_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted.begin(), is_even()); //thrust::identity<char>());
+        thrust::copy(devicePointerSampleValues, newEnd, result.begin());
+
+        pvsSize += (newEnd - devicePointerSampleValues);
+
+        /*
+        std::cout << numNewTriangles << " " << (newEnd - devicePointerSampleValues) << " " << pvsSize << std::endl;
+
+        std::cout << "pvssize " << pvsSize << std::endl;
+        std::vector<int> aa(16);
+        //int *pvsArray = new int[pvsSize];
+        cudaMemcpy(aa.data(), hashTable, sizeof(int) * 16, cudaMemcpyDeviceToHost);
+        for (int i = 0; i < 16; i++) {
+            std::cout << "pvs " << aa[i] << std::endl;
+        }
+        for (int i = 0; i < result.size(); i++) {
+            std::cout << result[i] << std::endl;
+        }
+
+        std::cout << std::endl << std::endl;
+        */
+    }
+
+
+    /*
+    // Count the number of triangles that are not in the PVS
+    thrust::device_vector<char> deviceInserted(inserted);
+    int numNewTriangles = thrust::count(deviceInserted.begin(), deviceInserted.end(), 1);
+    cudaDeviceSynchronize();
+
+    if (numNewTriangles > 0) {
+        // Remove the indices referring to samples that are already in the PVS
+        thrust::remove_if(devicePointerSampleValueIndices, devicePointerSampleValueIndices + trianglesSize, stencil.begin(), thrust::identity<int>());
+        cudaDeviceSynchronize();
+
+        // Store the new samples in a result vector
+        thrust::device_vector<Sample> r(numNewTriangles);
+        auto newEnd = thrust::gather(
+            devicePointerSampleValueIndices, devicePointerSampleValueIndices + numNewTriangles,
+            samples,
+            r.begin()
+        );
+        cudaDeviceSynchronize();
+
+        result.resize(numNewTriangles);
+        thrust::copy(r.begin(), r.end(), result.begin());
+        cudaDeviceSynchronize();
+    }
+    */
+
+    return pvsSize;
+}
+
+int CUDAUtil::work(
+    int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
+    int triangleIDKeysSize
+) {
     thrust::device_vector<int> deviceSampleValueIndices(triangleIDKeysSize);
     thrust::sequence(deviceSampleValueIndices.begin(), deviceSampleValueIndices.end());
     thrust::device_ptr<int> sampleIndices = deviceSampleValueIndices.data();

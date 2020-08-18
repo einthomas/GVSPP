@@ -87,7 +87,13 @@ public:
 
 class CUDAUtil {
 public:
+    static void test();
     static int work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize);
+    static int work2(
+        int* pHashTable,
+        int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
+        const int triangleIDKeysSize
+    );
     static int initCuda(uint8_t *vkDeviceUUID, size_t UUID_SIZE);
     static void generateHaltonSequence(int n, float *sequence, int startIndex = 0);
 

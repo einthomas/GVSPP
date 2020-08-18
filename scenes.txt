@@ -22,7 +22,7 @@ AAA models/quad/quad.obj
 40 1 0
 0 0 -1
 
-BBB models/quad/cube.obj
+BBB models/quad/cube_small.obj
 0 0 0.1
 1 1 0
 0 0 0

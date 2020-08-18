@@ -15,6 +15,7 @@
 #include "viewcell.h"
 #include "sample.h"
 #include "Vertex.h"
+#include "gpuHashTable/linearprobing.h"
 
 struct UniformBufferObject {
     alignas(64) glm::mat4 model;
@@ -68,9 +69,13 @@ void VisibilityManager::init(
     cudaStream_t cudaStream;
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
 
+    hashTablePVS = create_hashtable(1024*1024*4);
+
     createBuffers(indices);
     CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
+
+
 
     /*
     auto start = std::chrono::steady_clock::now();
@@ -1932,8 +1937,14 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         statistics.startOperation(RANDOM_SAMPLING_INSERT);
         {
             std::vector<Sample> newSamples;
+            /*
             pvsSize = CUDAUtil::work(
                 pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                randomSampleInfo.numTriangles
+            );
+            */
+            pvsSize = CUDAUtil::work2(
+                hashTablePVS, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
                 randomSampleInfo.numTriangles
             );
             if (newSamples.size() > 0) {
@@ -1971,8 +1982,14 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             {
                 //std::cout <<absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles << std::endl;
                 std::vector<Sample> newSamples;
+                /*
                 pvsSize = CUDAUtil::work(
                     pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
+                    absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
+                );
+                */
+                pvsSize = CUDAUtil::work2(
+                    hashTablePVS, pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
                     absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
                 );
                 if (newSamples.size() > 0) {
@@ -1999,8 +2016,14 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.startOperation(EDGE_SUBDIVISION_INSERT);
             {
                 std::vector<Sample> newSamples;
+                /*
                 pvsSize = CUDAUtil::work(
                     pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
+                    edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
+                );
+                */
+                pvsSize = CUDAUtil::work2(
+                    hashTablePVS, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
                     edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
                 );
                 if (newSamples.size() > 0) {
@@ -2202,9 +2225,23 @@ void VisibilityManager::fetchPVS() {
         //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << "mb " << RAYS_PER_ITERATION << " " << numTriangles << std::endl;
 
         pvs.pvsVector.clear();
-        int* pvsArray = (int*)testPointer[0];
+        //int* pvsArray = (int*)testPointer[0];
 
-        pvs.pvsVector.insert(pvs.pvsVector.end(), pvsArray, pvsArray + pvsSize);
+        std::cout << pvsSize << std::endl;
+        int *pvsArray = new int[1024*1024*8];
+        cudaMemcpy(pvsArray, hashTablePVS, sizeof(int) * 1024*1024*8, cudaMemcpyDeviceToHost);
+        /*
+        for (int i = 0;  i < 1024*1024*8; i++) {
+            std::cout << pvsArray[i] << std::endl;
+        }
+        */
+        pvsSize = 0;
+        for (int i = 0; i < 1024*1024*8; i++) {
+            if (pvsArray[i] != -1) {
+                pvs.pvsVector.push_back(pvsArray[i]);
+                pvsSize++;
+            }
+        }
     }
 }
 

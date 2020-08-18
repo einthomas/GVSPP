@@ -90,6 +90,8 @@ private:
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
 
+    int* hashTablePVS;
+
     Statistics statistics;
     std::vector<std::vector<float>> haltonPoints;
     std::random_device rd;
