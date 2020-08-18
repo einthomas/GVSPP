@@ -14,8 +14,11 @@ const int kEmpty = 0xffffffff;
 
 int* create_hashtable(int capacity);
 
-//void insert_hashtable(KeyValue* hashtable, const KeyValue* kvs, uint32_t num_kvs, char* inserted);
-void insert_hashtable(int* hashTable, const int *keys, int num_kvs, char* inserted);
+char* create_inserted();
+
+void reset_hashtable(int* hashtable, char* device_inserted);
+
+void insert_hashtable(int* hashTable, const int *keys, int num_kvs, char *inserted);
 
 void lookup_hashtable(KeyValue* hashtable, KeyValue* kvs, uint32_t num_kvs);
 

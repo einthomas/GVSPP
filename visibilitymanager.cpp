@@ -69,7 +69,9 @@ void VisibilityManager::init(
     cudaStream_t cudaStream;
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
 
-    hashTablePVS = create_hashtable(1024*1024*4);
+    hashTableCapacity = 1024 * 1024 * 32;
+    hashTablePVS = create_hashtable(hashTableCapacity);
+    device_inserted = create_inserted();
 
     createBuffers(indices);
     CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
@@ -1913,6 +1915,7 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
 void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex) {
     updateViewCellBuffer(viewCellIndex);
     resetPVSGPUBuffer();
+    reset_hashtable(hashTablePVS, device_inserted);
     statistics.reset();
 
     auto startTotal = std::chrono::steady_clock::now();
@@ -1944,7 +1947,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             );
             */
             pvsSize = CUDAUtil::work2(
-                hashTablePVS, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                hashTablePVS, device_inserted, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
                 randomSampleInfo.numTriangles
             );
             if (newSamples.size() > 0) {
@@ -1989,7 +1992,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 );
                 */
                 pvsSize = CUDAUtil::work2(
-                    hashTablePVS, pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
+                    hashTablePVS, device_inserted, pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
                     absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
                 );
                 if (newSamples.size() > 0) {
@@ -2023,7 +2026,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 );
                 */
                 pvsSize = CUDAUtil::work2(
-                    hashTablePVS, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
+                    hashTablePVS, device_inserted, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
                     edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
                 );
                 if (newSamples.size() > 0) {
@@ -2227,16 +2230,10 @@ void VisibilityManager::fetchPVS() {
         pvs.pvsVector.clear();
         //int* pvsArray = (int*)testPointer[0];
 
-        std::cout << pvsSize << std::endl;
-        int *pvsArray = new int[1024*1024*8];
-        cudaMemcpy(pvsArray, hashTablePVS, sizeof(int) * 1024*1024*8, cudaMemcpyDeviceToHost);
-        /*
-        for (int i = 0;  i < 1024*1024*8; i++) {
-            std::cout << pvsArray[i] << std::endl;
-        }
-        */
+        int *pvsArray = new int[hashTableCapacity];
+        cudaMemcpy(pvsArray, hashTablePVS, sizeof(int) * hashTableCapacity, cudaMemcpyDeviceToHost);
         pvsSize = 0;
-        for (int i = 0; i < 1024*1024*8; i++) {
+        for (int i = 0; i < hashTableCapacity; i++) {
             if (pvsArray[i] != -1) {
                 pvs.pvsVector.push_back(pvsArray[i]);
                 pvsSize++;

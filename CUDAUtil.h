@@ -90,7 +90,7 @@ public:
     static void test();
     static int work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize);
     static int work2(
-        int* pHashTable,
+        int* pHashTable, char *device_inserted,
         int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
         const int triangleIDKeysSize
     );

@@ -35,96 +35,35 @@ void findNewTriangles(
 );
 int setUnion(thrust::device_ptr<int> devicePointerPVS, thrust::device_ptr<int> triangleIDs, int sizeA, int sizeB);
 
-struct is_even
+struct isZero
 {
   __host__ __device__
   bool operator()(const char x)
   {
-    //return (x % 2) == 0;
       return x == 0;
   }
 };
 
 int CUDAUtil::work2(
-    int *hashTable,
+    int *hashTable, char *device_inserted,
     int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
     const int triangleIDKeysSize
 ) {
-    /*
-    std::vector<int> sampleIndices = std::make_index_sequence<triangleIDKeysSize>{};
-    uint32_t* deviceSampleIndices;
-    cudaMalloc(&deviceSampleIndices, sizeof(uint32_t) * sampleIndices.size());
-    cudaMemcpy(deviceSampleIndices, sampleIndices, sizeof(uint32_t) * sampleIndices.size(), cudaMemcpyHostToDevice);
-    */
+    insert_hashtable(hashTable, triangleIDKeys, triangleIDKeysSize, device_inserted);
 
-    std::vector<char> inserted(triangleIDKeysSize);
-    //std::cout << "insert a" << std::endl;
-    insert_hashtable(hashTable, triangleIDKeys, triangleIDKeysSize, inserted.data());
-    //std::cout << "insert b" << std::endl;
+    thrust::device_ptr<char> deviceInserted(device_inserted);
 
-    thrust::device_vector<char> deviceInserted(inserted);
-
-    int numNewTriangles = thrust::count(deviceInserted.begin(), deviceInserted.end(), 1);
+    int numNewTriangles = thrust::count(deviceInserted, deviceInserted + triangleIDKeysSize, 1);
     if (numNewTriangles > 0) {
         result.resize(numNewTriangles);
 
         thrust::device_ptr<Sample> devicePointerSampleValues(sampleValues);
 
-        /*
-        thrust::device_vector<Sample> r(numNewTriangles);
-        thrust::copy_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted.begin(), r.begin(), is_even());
-        thrust::copy(r.begin(), r.end(), result.begin());
-        */
-
-        auto newEnd = thrust::remove_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted.begin(), is_even()); //thrust::identity<char>());
+        auto newEnd = thrust::remove_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted, isZero());
         thrust::copy(devicePointerSampleValues, newEnd, result.begin());
 
         pvsSize += (newEnd - devicePointerSampleValues);
-
-        /*
-        std::cout << numNewTriangles << " " << (newEnd - devicePointerSampleValues) << " " << pvsSize << std::endl;
-
-        std::cout << "pvssize " << pvsSize << std::endl;
-        std::vector<int> aa(16);
-        //int *pvsArray = new int[pvsSize];
-        cudaMemcpy(aa.data(), hashTable, sizeof(int) * 16, cudaMemcpyDeviceToHost);
-        for (int i = 0; i < 16; i++) {
-            std::cout << "pvs " << aa[i] << std::endl;
-        }
-        for (int i = 0; i < result.size(); i++) {
-            std::cout << result[i] << std::endl;
-        }
-
-        std::cout << std::endl << std::endl;
-        */
     }
-
-
-    /*
-    // Count the number of triangles that are not in the PVS
-    thrust::device_vector<char> deviceInserted(inserted);
-    int numNewTriangles = thrust::count(deviceInserted.begin(), deviceInserted.end(), 1);
-    cudaDeviceSynchronize();
-
-    if (numNewTriangles > 0) {
-        // Remove the indices referring to samples that are already in the PVS
-        thrust::remove_if(devicePointerSampleValueIndices, devicePointerSampleValueIndices + trianglesSize, stencil.begin(), thrust::identity<int>());
-        cudaDeviceSynchronize();
-
-        // Store the new samples in a result vector
-        thrust::device_vector<Sample> r(numNewTriangles);
-        auto newEnd = thrust::gather(
-            devicePointerSampleValueIndices, devicePointerSampleValueIndices + numNewTriangles,
-            samples,
-            r.begin()
-        );
-        cudaDeviceSynchronize();
-
-        result.resize(numNewTriangles);
-        thrust::copy(r.begin(), r.end(), result.begin());
-        cudaDeviceSynchronize();
-    }
-    */
 
     return pvsSize;
 }

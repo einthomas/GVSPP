@@ -32,6 +32,20 @@ int* create_hashtable(int capacity)
     return hashtable;
 }
 
+char* create_inserted() {
+    char* device_inserted;
+    cudaMalloc(&device_inserted, sizeof(char) * kHashTableCapacity);
+    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
+
+    return device_inserted;
+}
+
+void reset_hashtable(int* hashtable, char* device_inserted)
+{
+    cudaMemset(hashtable, 0xff, sizeof(int) * kHashTableCapacity);
+    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
+}
+
 __global__ void gpu_resize(int* hashTable, int* newHashTable, int size, int newSize)
 {
     unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
@@ -126,7 +140,7 @@ __global__ void gpu_hashtable_insert(int* hashtable, const int *keys, unsigned i
     }
 }
 
-void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char* inserted)
+void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char *device_inserted)
 {
     /*
     // Copy the keys to the GPU
@@ -135,9 +149,16 @@ void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char* inser
     cudaMemcpy(device_keys, keys, sizeof(int) * num_kvs, cudaMemcpyHostToDevice);
     */
 
+
+    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
+
+    /*
     char* device_inserted;
     cudaMalloc(&device_inserted, sizeof(char) * num_kvs);
     cudaMemcpy(device_inserted, inserted, sizeof(char) * num_kvs, cudaMemcpyHostToDevice);
+    */
+
+
 
     // Have CUDA calculate the thread block size
     int mingridsize;
@@ -172,9 +193,10 @@ void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char* inser
         num_kvs, milliseconds, num_kvs / (double)seconds / 1000000.0f);
     */
 
+    /*
     cudaMemcpy(inserted, device_inserted, sizeof(char) * num_kvs, cudaMemcpyDeviceToHost);
-
     cudaFree(device_inserted);
+    */
     //cudaFree(device_keys);
 }
 
