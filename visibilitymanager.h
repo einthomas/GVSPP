@@ -18,6 +18,7 @@
 #include "pvs.h"
 #include "Statistics.h"
 #include "CUDAUtil.h"
+#include "gpuHashTable/linearprobing.h"
 
 class ViewCell;
 
@@ -74,10 +75,10 @@ private:
     int pvsSize = 0;
     int numThreads;
 
-    const bool USE_TERMINATION_CRITERION = true;
+    const bool USE_TERMINATION_CRITERION = false;
     const bool USE_EDGE_SUBDIV_CPU = false;
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 10000000;
-    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
+    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 50;
     const int NUM_ABS_SAMPLES = 16;
     const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
     int MAX_TRIANGLE_COUNT;
@@ -90,9 +91,10 @@ private:
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
 
-    int* hashTablePVS;
+    GPUHashSet *gpuHashSet;
+    //int* hashTablePVS;
     //char *inserted;
-    char *device_inserted;
+    //char *device_inserted;
     int hashTableCapacity;
 
     Statistics statistics;

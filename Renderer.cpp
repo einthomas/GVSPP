@@ -1137,7 +1137,7 @@ void VulkanRenderer::startVisibilityThread() {
                         attrib.normals[3 * index.normal_index + 1],
                         attrib.normals[3 * index.normal_index + 2]
                     };
-                    vertex.color = { 1.0f, 1.0f, 1.0f };
+                    vertex.color = { 0.0f, 0.0f, 0.0f };
 
                     viewCellGeomtryVertices.push_back(vertex);
                 }

@@ -12,20 +12,15 @@ struct KeyValue
 
 const int kEmpty = 0xffffffff;
 
-int* create_hashtable(int capacity);
+class GPUHashSet {
+public:
+    int *hashSet;
+    char *deviceInserted;
+    int capacity;
 
-char* create_inserted();
-
-void reset_hashtable(int* hashtable, char* device_inserted);
-
-void insert_hashtable(int* hashTable, const int *keys, int num_kvs, char *inserted);
-
-void lookup_hashtable(KeyValue* hashtable, KeyValue* kvs, uint32_t num_kvs);
-
-void delete_hashtable(KeyValue* hashtable, const KeyValue* kvs, uint32_t num_kvs);
-
-std::vector<KeyValue> iterate_hashtable(KeyValue* hashtable);
-
-void destroy_hashtable(KeyValue* hashtable);
-
-int* resize(int* hashTable, int newSize);
+    GPUHashSet(int capacity);
+    ~GPUHashSet();
+    void reset();
+    void insert(const int *keys, int num_kvs);
+    int* resize(int newSize);
+};

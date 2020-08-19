@@ -45,13 +45,14 @@ struct isZero
 };
 
 int CUDAUtil::work2(
-    int *hashTable, char *device_inserted,
+    GPUHashSet *gpuHashSet,
     int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
     const int triangleIDKeysSize
 ) {
-    insert_hashtable(hashTable, triangleIDKeys, triangleIDKeysSize, device_inserted);
+    gpuHashSet->insert(triangleIDKeys, triangleIDKeysSize);
+    //insert_hashtable(hashTable, triangleIDKeys, triangleIDKeysSize, device_inserted);
 
-    thrust::device_ptr<char> deviceInserted(device_inserted);
+    thrust::device_ptr<char> deviceInserted(gpuHashSet->deviceInserted);
 
     int numNewTriangles = thrust::count(deviceInserted, deviceInserted + triangleIDKeysSize, 1);
     if (numNewTriangles > 0) {
@@ -59,7 +60,7 @@ int CUDAUtil::work2(
 
         thrust::device_ptr<Sample> devicePointerSampleValues(sampleValues);
 
-        auto newEnd = thrust::remove_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, deviceInserted, isZero());
+        auto newEnd = thrust::remove_if(devicePointerSampleValues, devicePointerSampleValues + triangleIDKeysSize, gpuHashSet->deviceInserted, isZero());
         thrust::copy(devicePointerSampleValues, newEnd, result.begin());
 
         pvsSize += (newEnd - devicePointerSampleValues);

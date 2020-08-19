@@ -3,61 +3,48 @@
 #include "vector"
 #include "linearprobing.h"
 
-int kHashTableCapacity;
+GPUHashSet::GPUHashSet(int capacity)
+    : capacity(capacity)
+{
+    // Allocate memory
+    cudaMalloc(&hashSet, sizeof(int) * capacity);
+
+    // Initialize hash table to empty
+    static_assert(kEmpty == 0xffffffff, "memset expected kEmpty=0xffffffff");
+    cudaMemset(hashSet, 0xff, sizeof(int) * capacity);
+
+    cudaMalloc(&deviceInserted, sizeof(char) * capacity);
+    cudaMemset(deviceInserted, 0x0, sizeof(char) * capacity);
+}
+
+GPUHashSet::~GPUHashSet() {
+    cudaFree(hashSet);
+    cudaFree(deviceInserted);
+}
 
 // 32 bit Murmur3 hash
-__device__ int hash(int k, int hashTableCapacity)
-{
+__device__ int hash(int k, int capacity) {
     k ^= k >> 16;
     k *= 0x85ebca6b;
     k ^= k >> 13;
     k *= 0xc2b2ae35;
     k ^= k >> 16;
-    return k & (hashTableCapacity-1);
+    return k & (capacity - 1);
 }
 
-// Create a hash table. For linear probing, this is just an array of KeyValues
-int* create_hashtable(int capacity)
-{
-    kHashTableCapacity = capacity;
-
-    // Allocate memory
-    int* hashtable;
-    cudaMalloc(&hashtable, sizeof(int) * kHashTableCapacity);
-
-    // Initialize hash table to empty
-    static_assert(kEmpty == 0xffffffff, "memset expected kEmpty=0xffffffff");
-    cudaMemset(hashtable, 0xff, sizeof(int) * kHashTableCapacity);
-
-    return hashtable;
+void GPUHashSet::reset() {
+    cudaMemset(hashSet, 0xff, sizeof(int) * capacity);
+    cudaMemset(deviceInserted, 0x0, sizeof(char) * capacity);
 }
 
-char* create_inserted() {
-    char* device_inserted;
-    cudaMalloc(&device_inserted, sizeof(char) * kHashTableCapacity);
-    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
-
-    return device_inserted;
-}
-
-void reset_hashtable(int* hashtable, char* device_inserted)
-{
-    cudaMemset(hashtable, 0xff, sizeof(int) * kHashTableCapacity);
-    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
-}
-
-__global__ void gpu_resize(int* hashTable, int* newHashTable, int size, int newSize)
-{
+__global__ void gpu_resize(int *hashSet, int *newHashSet, int size, int newSize) {
     unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
-    if (threadid < size)
-    {
-        int key = hashTable[threadid];
+    if (threadid < size) {
+        int key = hashSet[threadid];
         int slot = hash(key, newSize);
-        while (true)
-        {
-            int prev = atomicCAS(&newHashTable[slot], kEmpty, key);
-            if (prev == kEmpty || prev == key)
-            {
+        while (true) {
+            int prev = atomicCAS(&newHashSet[slot], kEmpty, key);
+            if (prev == kEmpty || prev == key) {
                 return;
             }
 
@@ -66,8 +53,9 @@ __global__ void gpu_resize(int* hashTable, int* newHashTable, int size, int newS
     }
 }
 
-int* resize(int* hashTable, int newSize)
-{
+int* GPUHashSet::resize(int newSize) {
+    int oldSize = capacity;
+
     // Create events for GPU timing
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -76,23 +64,23 @@ int* resize(int* hashTable, int newSize)
 
 
     // Allocate memory
-    int* newHashTable;
-    cudaMalloc(&newHashTable, sizeof(int) * newSize);
+    int* newHashSet;
+    cudaMalloc(&newHashSet, sizeof(int) * newSize);
 
     // Initialize hash table to empty
     static_assert(kEmpty == 0xffffffff, "memset expected kEmpty=0xffffffff");
-    cudaMemset(newHashTable, 0xff, sizeof(int) * newSize);
+    cudaMemset(newHashSet, 0xff, sizeof(int) * newSize);
 
     int mingridsize;
     int threadblocksize;
     cudaOccupancyMaxPotentialBlockSize(&mingridsize, &threadblocksize, gpu_resize, 0, 0);
-    int gridsize = (kHashTableCapacity + threadblocksize - 1) / threadblocksize;
-    //gpu_hashtable_insert<<<gridsize, threadblocksize>>>(pHashTable, device_keys, (int)num_kvs, device_inserted);
-    gpu_resize<<<gridsize, threadblocksize>>>(hashTable, newHashTable, kHashTableCapacity, newSize);
+    int gridsize = (capacity + threadblocksize - 1) / threadblocksize;
+    //gpu_hashtable_insert<<<gridsize, threadblocksize>>>(pHashTable, device_keys, (int)num_kvs, deviceInserted);
+    gpu_resize<<<gridsize, threadblocksize>>>(hashSet, newHashSet, capacity, newSize);
 
-    kHashTableCapacity = newSize;
+    capacity = newSize;
 
-    cudaFree(hashTable);
+    cudaFree(hashSet);
 
 
     cudaEventRecord(stop);
@@ -100,14 +88,15 @@ int* resize(int* hashTable, int newSize)
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     float seconds = milliseconds / 1000.0f;
-    printf("resize hash table %d -> %d: %f ms\n", newSize / 2, newSize, milliseconds);
+    printf("resize hash table %d -> %d: %f ms\n", oldSize, newSize, milliseconds);
 
-    return newHashTable;
+    return newHashSet;
 }
 
 // Insert the key/values in kvs into the hashtable
-__global__ void gpu_hashtable_insert(int* hashtable, const int *keys, unsigned int numkvs, char* inserted, int hashTableCapacity)
-{
+__global__ void gpu_hashtable_insert(
+    int *hashtable, const int *keys, unsigned int numkvs, char *inserted, int hashTableCapacity
+) {
     unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
     if (threadid < numkvs)
     {
@@ -138,27 +127,29 @@ __global__ void gpu_hashtable_insert(int* hashtable, const int *keys, unsigned i
             slot = (slot + 1) & (hashTableCapacity-1);
         }
     }
+
+    /*
+    // Set without hashing
+    unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
+    if (threadid < numkvs) {
+        int key = keys[threadid];
+        if (key == -1) {
+            inserted[threadid] = 0;
+            return;
+        }
+
+        int prev = atomicCAS(&hashtable[key], kEmpty, key);
+        if (prev == kEmpty) {
+            inserted[threadid] = 1;
+        } else if (prev == key) {
+            inserted[threadid] = 0;
+        }
+    }
+    */
 }
 
-void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char *device_inserted)
-{
-    /*
-    // Copy the keys to the GPU
-    int* device_keys;
-    cudaMalloc(&device_keys, sizeof(int) * num_kvs);
-    cudaMemcpy(device_keys, keys, sizeof(int) * num_kvs, cudaMemcpyHostToDevice);
-    */
-
-
-    cudaMemset(device_inserted, 0x0, sizeof(char) * kHashTableCapacity);
-
-    /*
-    char* device_inserted;
-    cudaMalloc(&device_inserted, sizeof(char) * num_kvs);
-    cudaMemcpy(device_inserted, inserted, sizeof(char) * num_kvs, cudaMemcpyHostToDevice);
-    */
-
-
+void GPUHashSet::insert(const int *keys, int num_kvs) {
+    cudaMemset(deviceInserted, 0x0, sizeof(char) * capacity);
 
     // Have CUDA calculate the thread block size
     int mingridsize;
@@ -170,38 +161,21 @@ void insert_hashtable(int* pHashTable, const int *keys, int num_kvs, char *devic
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
-
     cudaEventRecord(start);
     */
 
     // Insert all the keys into the hash table
     int gridsize = ((int)num_kvs + threadblocksize - 1) / threadblocksize;
-    //gpu_hashtable_insert<<<gridsize, threadblocksize>>>(pHashTable, device_keys, (int)num_kvs, device_inserted, kHashTableCapacity);
-    gpu_hashtable_insert<<<gridsize, threadblocksize>>>(pHashTable, keys, (int)num_kvs, device_inserted, kHashTableCapacity);
+    //gpu_hashtable_insert<<<gridsize, threadblocksize>>>(pHashTable, device_keys, (int)num_kvs, device_inserted, capacity);
+    gpu_hashtable_insert<<<gridsize, threadblocksize>>>(hashSet, keys, (int)num_kvs, deviceInserted, capacity);
 
     /*
     cudaEventRecord(stop);
-
     cudaEventSynchronize(stop);
-
-
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     float seconds = milliseconds / 1000.0f;
-
     printf("    GPU inserted %d items in %f ms (%f million keys/second)\n",
         num_kvs, milliseconds, num_kvs / (double)seconds / 1000000.0f);
     */
-
-    /*
-    cudaMemcpy(inserted, device_inserted, sizeof(char) * num_kvs, cudaMemcpyDeviceToHost);
-    cudaFree(device_inserted);
-    */
-    //cudaFree(device_keys);
-}
-
-// Free the memory of the hashtable
-void destroy_hashtable(KeyValue* pHashTable)
-{
-    cudaFree(pHashTable);
 }

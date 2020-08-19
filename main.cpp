@@ -15,21 +15,31 @@ int main(int argc, char *argv[]) {
     /*
     std::random_device dev;
     std::mt19937 rng(dev());
-    std::uniform_int_distribution<std::mt19937::result_type> dist6(1,2000000);
+    std::uniform_int_distribution<std::mt19937::result_type> dist6(1,80000000);
 
     std::vector<int> keys;
-    int tableSize = 1024 * 1024;
+    int tableSize = 1024 * 1024 * 256;
     for (int i = 0; i < tableSize; i++) {
         keys.push_back(dist6(rng));
     }
 
     std::vector<char> inserted(keys.size());
-    int* hashTable = create_hashtable(tableSize);
-    insert_hashtable(hashTable, keys.data(), keys.size(), inserted.data());
+    int *hashTable = create_hashtable(tableSize);
+    char *device_inserted = create_inserted();
+    insert_hashtable(hashTable, keys.data(), keys.size(), device_inserted);
 
-    hashTable = resize(hashTable, 1024 * 1024 * 4);
+    int *pvsArray = new int[tableSize];
+    cudaMemcpy(pvsArray, hashTable, sizeof(int) * tableSize, cudaMemcpyDeviceToHost);
+    int count = 0;
+    for (int i = 0; i < tableSize; i++) {
+        if (pvsArray[i] != -1) {
+            count++;
+        }
+    }
+    std::cout << "load factor: " << count / float(tableSize) << std::endl;
+
+    hashTable = resize(hashTable, 1024 * 1024 * 512);
     */
-
 
     /*
     std::random_device rd;

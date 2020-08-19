@@ -22,6 +22,7 @@
 
 #include "vulkanutil.h"
 #include "sample.h"
+#include "gpuHashTable/linearprobing.h"
 
 #ifdef _WIN64
 class WindowsSecurityAttributes     // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
@@ -90,7 +91,7 @@ public:
     static void test();
     static int work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize);
     static int work2(
-        int* pHashTable, char *device_inserted,
+        GPUHashSet *gpuHashSet,
         int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,
         const int triangleIDKeysSize
     );
