@@ -1,6 +1,7 @@
 int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint) {
     int foundSampleIndex = -1;
-    if (occludingTriangleID == -1 || length(samplePos - rayOrigin) - length(hitPoint - rayOrigin) > 0.985) {
+    const float samplePointDistance = length(samplePos - rayOrigin);
+    if (occludingTriangleID == -1 || samplePointDistance - length(hitPoint - rayOrigin) > 0.985) {
         // Get view cell coordinate system
         vec3 viewCellSize = vec3(
             length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
@@ -113,7 +114,8 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                         Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos),
                         samplePos
                     );
-                    if (length(hitInfo.xyz - samplePos) < 0.01) {
+                    //if (length(hitInfo.xyz - samplePos) < 0.01) {
+                    if (length(hitInfo.xyz - rayOrigin) - samplePointDistance > 0.0f) {
                         foundSampleIndex = int(index);
                     }
                 }

@@ -5,6 +5,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
         // Intersect ray with the plane of the original triangle
         vec3 planeNormal = normalize(cross(v[1].worldPos - v[0].worldPos, v[2].worldPos - v[0].worldPos));
         vec3 predictedHitPoint = vec3(0.0f);
+        const float samplePointDistance = length(predictedHitPoint - rayOrigin);
         if (
             intersectRayPlane(v[0].worldPos, planeNormal, rayOrigin, rayDir, predictedHitPoint) &&
             length(predictedHitPoint - rayOrigin) - length(hitPoint - rayOrigin) > 0.985
@@ -95,6 +96,9 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                 vec3 rayViewCellHitPoint;
                 for (int k = 0; k < numPointOutsideTriangle; k++) {
                     vec3 rayDir = normalize(pointOutsideTriangle[k] - predictedHitPoint);
+                    if (dot(-rayDir, viewCellNormal) < 0) {
+                        continue;
+                    }
 
                     #ifdef USE_3D_VIEW_CELL
                         for (int m = 0; m < 6; m++) {
@@ -139,7 +143,8 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
                                 Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
                                 samplePos
                             );
-                            if (length(hitInfo.xyz - samplePos) < 0.01) {
+                            //if (length(hitInfo.xyz - samplePos) < 0.01) {
+                            if (length(hitInfo.xyz - rayOrigin) - samplePointDistance > 0.0f) {
                                 foundSampleIndex = int(index);
                             }
                         }
