@@ -64,11 +64,11 @@ const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
 const int MAX_SUBDIVISION_STEPS = 3;
 uint tracedRays = 0;
 
-uint storeReverseSample(uint launchIndex, Sample originalSample, vec3 targetSamplePos) {
+uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
     atomicAdd(rsTriangleCounter, 1);
     uint index = atomicAdd(triangleCounter, 1);
-    triangleIDOutput[index] = originalSample.triangleID;
-    edgeSubdivOutput[index] = originalSample;
+    triangleIDOutput[index] = s.triangleID;
+    edgeSubdivOutput[index] = s;
 
     return index;
 }
@@ -85,7 +85,7 @@ uint tracedRsRays = 0;
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / 16.0));
+    const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));
     const int numSamplesPerEdge = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
 
     #if REVERSE_SAMPLING_METHOD == 1
@@ -118,12 +118,12 @@ void main() {
     // Get two adjacent samples
     uint i = launchIndex;
     Sample s0 = absOutput[i];
-    i = (int(mod(launchIndex + 1, 16) + 16 * currentTriangleIndex));
+    i = (int(mod(launchIndex + 1, 15) + 15 * currentTriangleIndex));
     Sample s1 = absOutput[i];
 
     // Only subdivide the edge between two adjacent samples if they correspond to
     // different triangles
-    if (s0.triangleID != s1.triangleID || s0.triangleID == -1) {
+    if (s0.triangleID != s1.triangleID) {
         int index = int(numSamplesPerEdge / 2.0f);
 
         // Initialize the array storing the generated samples
@@ -135,7 +135,12 @@ void main() {
         samplesOutput[0] = s0;
         samplesOutput[numSamplesPerEdge - 1] = s1;
 
-        vec3 rayOrigin = s0.rayOrigin;
+        vec3 rayOrigin;
+        if (s0.triangleID != -1) {
+            rayOrigin = s0.rayOrigin;
+        } else {
+            rayOrigin = s1.rayOrigin;
+        }
 
         // Calculate the first sample in the middle of the edge
         vec3 samplePos = (samplesOutput[numSamplesPerEdge - 1].pos + samplesOutput[0].pos) / 2.0f;
@@ -180,7 +185,6 @@ void main() {
                     tracedRays++;
 
                     Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-
                     if (newSample.triangleID != -1) {
                         vec3 faceNormal = vec3(
                             unpackVertexData(indices.i[3 * newSample.triangleID]).normal
@@ -188,6 +192,7 @@ void main() {
                             + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
                         ) / 3.0f;
                         if (dot(rayDir, faceNormal) < 0.0f) {
+                            
                             if (newSample.triangleID != -1) {
                                 #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
                                     int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
@@ -201,6 +206,7 @@ void main() {
                                     edgeSubdivOutput[foundReverseSampleIndex] = temp;
                                 }
                             }
+                            
                             samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                         }
                     }
@@ -234,6 +240,7 @@ void main() {
                             + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
                         ) / 3.0f;
                         if (dot(rayDir, faceNormal) < 0.0f) {
+                            
                             if (newSample.triangleID != -1) {
                                 #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
                                     int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
@@ -247,6 +254,7 @@ void main() {
                                     edgeSubdivOutput[foundReverseSampleIndex] = temp;
                                 }
                             }
+                            
                             samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                         }
                     }

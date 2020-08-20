@@ -56,42 +56,9 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 #include "util.glsl"
 
-vec3 offsetVector(vec3 v) {
-    float border = 0.0001;
-    vec3 temp = abs(v);
-    if (temp.x > temp.y) {
-        if (temp.x > temp.z) {
-            if (v.x > 0) {
-                return vec3(border, 0.0f, 0.0f);
-            } else {
-                return vec3(-border, 0.0f, 0.0f);
-            }
-        } else {
-            if (v.z > 0) {
-                return vec3(0.0f, 0.0f, border);
-            } else {
-                return vec3(0.0f, 0.0f, -border);
-            }
-        }
-    } else {
-        if (temp.y > temp.z) {
-            if (v.y > 0) {
-                return vec3(0.0f, border, 0.0f);
-            } else {
-                return vec3(0.0f, -border, 0.0f);
-            }
-        } else {
-            if (v.z > 0) {
-                return vec3(0.0f, 0.0f, border);
-            } else {
-                return vec3(0.0f, 0.0f, -border);
-            }
-        }
-    }
-}
-
 uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
     uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+    /*
     if (length(s.rayHitPos - targetSamplePos) < 0.01) {
         triangleIDOutput[index] = absOutput[launchIndex].triangleID;
         absOutput[index] = absOutput[launchIndex];
@@ -102,6 +69,10 @@ uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
         triangleIDOutput[index] = s.triangleID;
         absOutput[index] = s;
     }
+    */
+
+    triangleIDOutput[index] = s.triangleID;
+    absOutput[index] = s;
 
     return index;
 }
@@ -118,7 +89,7 @@ uint tracedRsRays = 0;
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / 16.0));   // for each triangle 16 rays are shot i.e. for each triangle the shader is invoked 16 times
+    const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));   // for each triangle 15 rays are shot i.e. for each triangle the shader is invoked 15 times
 
     const uint currentVertexIndex = uint(mod(floor(launchIndex / 5.0), 3.0));
     const uint nextVertexIndex = uint(mod(currentVertexIndex + 1, 3));
@@ -140,22 +111,19 @@ void main() {
     vectors[1] = v[1].worldPos - rayOrigin;
     vectors[2] = v[2].worldPos - rayOrigin;
 
-    // Offset
-    vec3 samplePos;
-    if (launchIndex > 0 && mod(launchIndex, 16) == 0) {
-        vec3 delta = offsetVector(cross(vectors[2], vectors[0]));
-        vec3 samplePosA = v[2].worldPos + delta;
-        vec3 samplePosB = v[0].worldPos + delta;
-        samplePos = mix(samplePosA, samplePosB, 0.8f);
-    } else {
-        vec3 delta = offsetVector(cross(vectors[currentVertexIndex], vectors[nextVertexIndex]));
-
-        vec3 samplePosA = v[currentVertexIndex].worldPos + delta;
-        vec3 samplePosB = v[nextVertexIndex].worldPos + delta;
-
-        // Interpolate the current two outermost sample points
-        samplePos = mix(samplePosA, samplePosB, currentVertexSamplePosIndex / 5.0f);
-    }
+    const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
+    vec3 offsetA = -normalize(
+        (v[nextVertexIndex].worldPos - v[currentVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[currentVertexIndex].worldPos)
+    );
+    vec3 offsetB = -normalize(
+        (v[currentVertexIndex].worldPos - v[nextVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[nextVertexIndex].worldPos)
+    );
+    float delta = 0.0001f;
+    vec3 samplePos = mix(
+        v[nextVertexIndex].worldPos + offsetB * delta,
+        v[currentVertexIndex].worldPos + offsetA * delta,
+        currentVertexSamplePosIndex / 5.0f
+    );
 
     // Get view cell coordinate system
     vec3 viewCellSize = vec3(
@@ -237,10 +205,17 @@ void main() {
         // Reverse sampling
         if (!pointBehindViewCell) {
             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
+                int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
             #elif REVERSE_SAMPLING_METHOD == 1
-                reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
+                int foundReverseSampleIndex = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
             #endif
+            if (foundReverseSampleIndex != -1) {
+                Sample s = absOutput[launchIndex];
+                triangleIDOutput[launchIndex] = triangleIDOutput[foundReverseSampleIndex];
+                absOutput[launchIndex] = absOutput[foundReverseSampleIndex];
+                triangleIDOutput[foundReverseSampleIndex] = s.triangleID;
+                absOutput[foundReverseSampleIndex] = s;
+            }
         }
         
         atomicAdd(rsRayCounter, tracedRsRays);
