@@ -43,8 +43,9 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                     viewCellSize.xzy
                 };
 
+                vec3 startRayDir = rayDir;
                 for (int m = 0; m < 6; m++) {
-                    if (dot(rayDir, faceNormals[m]) < 0) {
+                    if (dot(startRayDir, faceNormals[m]) < 0) {
                         continue;
                     }
 
@@ -89,10 +90,9 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                 // Mutate the ray origin along the edges of the view cell. If the mutated ray origin lies outside the
                 // projected triangle, a ray is traced using the mutated ray origin
                 for (int i = 0; i < 4; i++) {
-                    vec3 vec = (corners[(i + 1) % 4] - corners[i]) / float(NUM_SAMPLES_ALONG_EDGE);
+                    vec3 vec = (corners[(i + 1) % 4] - corners[i]) / float(NUM_SAMPLES_ALONG_EDGE - 1);
                     for (int k = 0; k < NUM_SAMPLES_ALONG_EDGE - 1; k++) {
                         const vec3 viewCellSamplePoint = corners[i] + vec * k;
-                        rayDir = normalize(samplePos - viewCellSamplePoint);
 
                         // Check if viewCellSamplePoint is within the occluding triangle projected onto the view cell
                         // Ericson, Christer. Real-time collision detection. CRC Press, 2004.
@@ -103,7 +103,7 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
                         const float w = (dot00 * dot21 - dot01 * dot20) / denom;
                         if (any(bvec3(w < 0.0f || w > 1.0f, v < 0.0f || v > 1.0f, w + v > 1.0f))) {
                             const vec3 rayOrigin = viewCellSamplePoint;
-                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                            traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
                             tracedRsRays++;
 
                             int triangleID = int(hitInfo.w);

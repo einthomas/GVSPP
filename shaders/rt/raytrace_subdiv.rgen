@@ -42,7 +42,7 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint rsRayCounter;
 };
 
-layout(binding = 0, set = 1) readonly buffer absOutputBuffer {
+layout(binding = 0, set = 1) buffer absOutputBuffer {
     Sample absOutput[];
 };
 layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
@@ -96,25 +96,6 @@ void main() {
         v[2] = unpackVertexData(indices.i[3 * originalSample.triangleID + 2]);
     #endif
 
-    // Get view cell coordinate system
-    vec3 viewCellSize = vec3(
-        length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-        length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-        length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-    ) * 2.0f;
-    vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-    vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-    vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-    if (viewCellSize.x == 0.0f) {
-        viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-    } else if (viewCellSize.y == 0.0f) {
-        viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-    } else if (viewCellSize.z == 0.0f) {
-        //viewCellRight = -viewCellRight;
-        viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
-    }
-    vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
-
     // Get two adjacent samples
     uint i = launchIndex;
     Sample s0 = absOutput[i];
@@ -123,7 +104,26 @@ void main() {
 
     // Only subdivide the edge between two adjacent samples if they correspond to
     // different triangles
-    if (s0.triangleID != s1.triangleID) {
+    if (s0.triangleID != s1.triangleID && s0.triangleID != -2 && s1.triangleID != -2) {
+        // Get view cell coordinate system
+        vec3 viewCellSize = vec3(
+            length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+            length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+            length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+        ) * 2.0f;
+        vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+        vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+        vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+        if (viewCellSize.x == 0.0f) {
+            viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+        } else if (viewCellSize.y == 0.0f) {
+            viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+        } else if (viewCellSize.z == 0.0f) {
+            //viewCellRight = -viewCellRight;
+            viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+        }
+        vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+
         int index = int(numSamplesPerEdge / 2.0f);
 
         // Initialize the array storing the generated samples

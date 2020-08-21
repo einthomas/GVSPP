@@ -6,6 +6,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
         vec3 planeNormal = normalize(cross(v[1].worldPos - v[0].worldPos, v[2].worldPos - v[0].worldPos));
         vec3 predictedHitPoint = vec3(0.0f);
         const float samplePointDistance = length(predictedHitPoint - rayOrigin);
+        vec3 startRayDir = rayDir;
         if (
             intersectRayPlane(v[0].worldPos, planeNormal, rayOrigin, rayDir, predictedHitPoint) &&
             length(predictedHitPoint - rayOrigin) - length(hitPoint - rayOrigin) > 0.985
@@ -102,7 +103,7 @@ int reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, vec
 
                     #ifdef USE_3D_VIEW_CELL
                         for (int m = 0; m < 6; m++) {
-                            if (dot(rayDir, faceNormals[m]) < 0) {
+                            if (dot(startRayDir, faceNormals[m]) < 0) {
                                 continue;
                             }
 

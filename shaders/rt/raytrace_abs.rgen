@@ -87,6 +87,8 @@ uint tracedRsRays = 0;
     #include "reverse_sampling_new.rgen"
 #endif
 
+const float DELTA = 0.0001f;
+
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
     const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));   // for each triangle 15 rays are shot i.e. for each triangle the shader is invoked 15 times
@@ -118,10 +120,9 @@ void main() {
     vec3 offsetB = -normalize(
         (v[currentVertexIndex].worldPos - v[nextVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[nextVertexIndex].worldPos)
     );
-    float delta = 0.0001f;
     vec3 samplePos = mix(
-        v[nextVertexIndex].worldPos + offsetB * delta,
-        v[currentVertexIndex].worldPos + offsetA * delta,
+        v[nextVertexIndex].worldPos + offsetB * DELTA,
+        v[currentVertexIndex].worldPos + offsetA * DELTA,
         currentVertexSamplePosIndex / 5.0f
     );
 
@@ -215,14 +216,21 @@ void main() {
                 absOutput[launchIndex] = absOutput[foundReverseSampleIndex];
                 triangleIDOutput[foundReverseSampleIndex] = s.triangleID;
                 absOutput[foundReverseSampleIndex] = s;
+            } else {
+                uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+                triangleIDOutput[index] = triangleIDOutput[launchIndex];
+                absOutput[index] = absOutput[launchIndex];
+
+                triangleIDOutput[launchIndex] = -2;
+                absOutput[launchIndex].triangleID = -2;
             }
         }
         
         atomicAdd(rsRayCounter, tracedRsRays);
     #ifndef USE_3D_VIEW_CELL
         } else {
-            triangleIDOutput[launchIndex] = -1;
-            absOutput[launchIndex] = Sample(-1, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
+            triangleIDOutput[launchIndex] = -2;
+            absOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
         }
     #endif
 }

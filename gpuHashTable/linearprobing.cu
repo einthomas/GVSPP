@@ -101,7 +101,7 @@ __global__ void gpu_hashtable_insert(
     if (threadid < numkvs)
     {
         int key = keys[threadid];
-        if (key == -1) {
+        if (key < 0) {
             inserted[threadid] = 0;
             return;
         }
