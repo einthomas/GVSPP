@@ -30,10 +30,18 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint rsTriangleCounter;
     uint rayCounter;
     uint rsRayCounter;
+    uint pvsSize;
+};
+
+layout(binding = 9, set = 0) buffer setBuffer {
+    int set[];
 };
 
 layout(binding = 10, set = 0) writeonly buffer randomSamplingOutputIDbuffer {
-    int triangleIDOutput[];
+    int randomSamplingOutputID[];
+};
+layout(binding = 11, set = 0) uniform pvsBufferCapacity {
+    int pvsCapacity;
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
@@ -41,6 +49,8 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 layout(push_constant) uniform PushConstants {
 	int faceIndices[7];  // faceIndices[0] stores the number of faces
 } pushConstants;
+
+#include "gpuHashSet.glsl"
 
 void main() {
     // Calculate 1D launch index
@@ -125,9 +135,11 @@ void main() {
         0               // payload (location = 0)
     );
     
-    if (int(hitInfo.w) != -1) {
-        uint index = atomicAdd(triangleCounter, 1);
-        triangleIDOutput[index] = int(hitInfo.w);
-        randomSamplingOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, hitInfo.xyz);
+    int triangleID = int(hitInfo.w);
+    if (triangleID != -1) {
+        if (insert(triangleID)) {
+            uint index = atomicAdd(triangleCounter, 1);
+            randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
+        }
     }
 }

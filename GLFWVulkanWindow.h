@@ -68,7 +68,7 @@ struct QueueFamilyIndices {
     }
 };
 
-const bool enableValidationLayers = false;
+const bool enableValidationLayers = true;
 
 class GLFWVulkanWindow {
 public:
@@ -125,8 +125,8 @@ private:
     bool firstMouse = true;
     double lastX;
     double lastY;
-    double yaw;
-    double pitch;
+    double yaw = 0.0f;
+    double pitch = 0.0f;
 
     void createSurface();
     void createInstance();

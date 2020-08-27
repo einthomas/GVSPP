@@ -80,16 +80,19 @@ private:
     const size_t RAY_COUNT_TERMINATION_THRESHOLD = 100000000;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
     const int NUM_ABS_SAMPLES = 15;
-    const int NUM_REVERSE_SAMPLING_SAMPLES = 16;
+    const int NUM_REVERSE_SAMPLING_SAMPLES = 15;
+    const int MAX_BULK_INSERT_BUFFER_SIZE = 1000000;
     int MAX_TRIANGLE_COUNT;
 
-    const size_t RAYS_PER_ITERATION = 500000;
+    const size_t RAYS_PER_ITERATION = 15;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 50000;
+    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
+
+    unsigned int pvsBufferCapacity;
 
     GPUHashSet *gpuHashSet;
     //int* hashTablePVS;
@@ -113,6 +116,7 @@ private:
     std::vector<VkCommandBuffer> commandBuffer;
     std::vector<VkCommandBuffer> commandBufferABS;
     std::vector<VkCommandBuffer> commandBufferEdgeSubdiv;
+    std::vector<VkCommandBuffer> commandBufferCompute;
     std::vector<VkFence> commandBufferFence;
     VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
     VkPipeline pipeline;
@@ -121,6 +125,8 @@ private:
     VkPipelineLayout pipelineABSLayout;
     VkPipeline pipelineEdgeSubdiv;
     VkPipelineLayout pipelineEdgeSubdivLayout;
+    VkPipeline pipelineCompute;
+    VkPipelineLayout pipelineComputeLayout;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSet;
@@ -129,6 +135,8 @@ private:
     VkDescriptorSetLayout descriptorSetLayoutABS;
     std::vector<VkDescriptorSet> descriptorSetEdgeSubdiv;
     VkDescriptorSetLayout descriptorSetLayoutEdgeSubdiv;
+    std::vector<VkDescriptorSet> descriptorSetCompute;
+    VkDescriptorSetLayout descriptorSetLayoutCompute;
     VkPushConstantRange pushConstantRange;
 
     VkImageView storageImageView;
@@ -170,11 +178,16 @@ private:
     std::vector<VkBuffer> triangleIDTempBuffer;
     std::vector<VkDeviceMemory> triangleIDTempBufferMemory;
 
+    std::vector<VkBuffer> pvsBulkInsertBuffer;
+    std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
+
     std::vector<VkBuffer> testBuffer;
     std::vector<VkDeviceMemory> testBufferMemory;
     std::vector<VkBuffer> testHostBuffer;
     std::vector<VkDeviceMemory> testHostBufferMemory;
     std::vector<void*> testPointer;
+    std::vector<VkBuffer> pvsCapacityUniformBuffer;
+    std::vector<VkDeviceMemory> pvsCapacityUniformMemory;
     int *pvsCuda;
     cudaExternalMemory_t pvsCudaMemory = {};
     float *haltonCuda;
@@ -255,8 +268,13 @@ private:
     void createEdgeSubdivPipeline();
     void createEdgeSubdivDescriptorSetLayout();
     void createEdgeSubdivDescriptorSets(int threadId);
+    void createComputeDescriptorSets(int threadId);
+    void createComputeDescriptorSetLayout();
+    void createComputePipeline();
     ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
     void resetPVSGPUBuffer();
+    void resetAtomicBuffers();
+    void resizePVSBuffer(int newSize);
 
     ShaderExecutionInfo randomSample(int numRays, int threadId);
     ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);

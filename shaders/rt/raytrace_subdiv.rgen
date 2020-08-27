@@ -40,6 +40,14 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint rsTriangleCounter;
     uint rayCounter;
     uint rsRayCounter;
+    uint pvsSize;
+};
+
+layout(binding = 9, set = 0) buffer setBuffer {
+    int set[];
+};
+layout(binding = 11, set = 0) uniform pvsBufferCapacity {
+    int pvsCapacity;
 };
 
 layout(binding = 0, set = 1) buffer absOutputBuffer {
@@ -59,16 +67,29 @@ layout(binding = 1, set = 2) writeonly buffer edgeSubdivIDOutputBuffer {
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 #include "util.glsl"
+#include "gpuHashSet.glsl"
 
 const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
 const int MAX_SUBDIVISION_STEPS = 3;
 uint tracedRays = 0;
 
-uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
-    atomicAdd(rsTriangleCounter, 1);
-    uint index = atomicAdd(triangleCounter, 1);
-    triangleIDOutput[index] = s.triangleID;
-    edgeSubdivOutput[index] = s;
+int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
+    int index = -1;
+    if (insert(s.triangleID)) {
+        atomicAdd(rsTriangleCounter, 1);
+        edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = s;
+    }
+
+    /*
+    if (targetSampleReached) {
+        atomicAdd(rsTriangleCounter, 1);
+        index = int(atomicAdd(triangleCounter, 1));
+        edgeSubdivOutput[index] = s;
+    } else if (insert(s.triangleID)) {
+        atomicAdd(rsTriangleCounter, 1);
+        edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = s;
+    }
+    */
 
     return index;
 }
@@ -102,6 +123,13 @@ void main() {
     i = (int(mod(launchIndex + 1, 15) + 15 * currentTriangleIndex));
     Sample s1 = absOutput[i];
 
+    if (insert(s0.triangleID)) {
+        edgeSubdivOutput[atomicAdd(triangleCounter, 1)] = s0;
+    }
+    if (insert(s1.triangleID)) {
+        edgeSubdivOutput[atomicAdd(triangleCounter, 1)] = s1;
+    }
+
     // Only subdivide the edge between two adjacent samples if they correspond to
     // different triangles
     if (s0.triangleID != s1.triangleID && s0.triangleID != -2 && s1.triangleID != -2) {
@@ -128,8 +156,9 @@ void main() {
 
         // Initialize the array storing the generated samples
         Sample samplesOutput[numSamplesPerEdge];
+        vec3 rayDirss[numSamplesPerEdge];
         for (int k = 0; k < numSamplesPerEdge; k++) {
-            samplesOutput[k] = Sample(-2, vec3(0.0), vec3(0.0), vec3(0.0));
+            samplesOutput[k] = Sample(-3, vec3(0.0), vec3(0.0), vec3(0.0));
         }
 
         samplesOutput[0] = s0;
@@ -147,6 +176,7 @@ void main() {
         traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
         tracedRays++;
         samplesOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+        rayDirss[index] = normalize(samplePos - rayOrigin);
 
         vec3 offset = (samplesOutput[numSamplesPerEdge - 1].pos - samplesOutput[0].pos) / 2.0f;
         for (int k = 0; k < MAX_SUBDIVISION_STEPS - 1; k++) {
@@ -161,7 +191,7 @@ void main() {
             for (int m = 0; m < pow(2, k); m++) {
                 int currentIndex = index + (index * 2) * m;
                 Sample currentSample = samplesOutput[currentIndex];
-                if (currentSample.triangleID == -2) {
+                if (currentSample.triangleID == -3) {
                     continue;
                 }
 
@@ -184,31 +214,46 @@ void main() {
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
-                    Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-                    if (newSample.triangleID != -1) {
-                        vec3 faceNormal = vec3(
-                            unpackVertexData(indices.i[3 * newSample.triangleID]).normal
-                            + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
-                            + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
-                        ) / 3.0f;
-                        if (dot(rayDir, faceNormal) < 0.0f) {
+                    if (int(hitInfo.w) != -1) {
+                        Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+
                             
                             if (newSample.triangleID != -1) {
+                                Sample foundSample;
                                 #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                                    int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                    bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
                                 #elif REVERSE_SAMPLING_METHOD == 1
-                                    int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                    bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
                                 #endif
-                                if (foundReverseSampleIndex != -1) {
+                                if (discontinuityFound && foundSample.triangleID >= 0) {
+                                    vec3 faceNormal = vec3(
+                                        unpackVertexData(indices.i[3 * newSample.triangleID]).normal
+                                        + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
+                                        + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
+                                    ) / 3.0f;
+                                    if (dot(rayDir, faceNormal) < 0.0f) {
+                                        if (insert(newSample.triangleID)) {
+                                            edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
+                                        }
+                                        newSample = foundSample;
+                                    }
+                                }
+                                /*
+                                if (foundReverseSampleIndex >= 0) {
                                     Sample temp = newSample;
                                     newSample = edgeSubdivOutput[foundReverseSampleIndex];
-                                    triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
-                                    edgeSubdivOutput[foundReverseSampleIndex] = temp;
+
+                                    if (insert(temp.triangleID)) {
+                                        //triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
+                                        edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                                    }
                                 }
+                                */
                             }
                             
                             samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
-                        }
+                            rayDirss[int(currentIndex + index / 2.0f)] = rayDir;
+                        
                     }
                     #ifndef USE_3D_VIEW_CELL
                         }
@@ -232,31 +277,45 @@ void main() {
                     traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
-                    Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-                    if (newSample.triangleID != -1) {
-                        vec3 faceNormal = vec3(
-                            unpackVertexData(indices.i[3 * newSample.triangleID]).normal
-                            + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
-                            + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
-                        ) / 3.0f;
-                        if (dot(rayDir, faceNormal) < 0.0f) {
-                            
+                    if (int(hitInfo.w) != -1) {
+                        Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                           
                             if (newSample.triangleID != -1) {
+                                Sample foundSample;
                                 #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                                    int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                    bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
                                 #elif REVERSE_SAMPLING_METHOD == 1
-                                    int foundReverseSampleIndex = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos);
+                                    bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
                                 #endif
-                                if (foundReverseSampleIndex != -1) {
+                                if (discontinuityFound && foundSample.triangleID >= 0) {
+                                    vec3 faceNormal = vec3(
+                                        unpackVertexData(indices.i[3 * newSample.triangleID]).normal
+                                        + unpackVertexData(indices.i[3 * newSample.triangleID + 1]).normal
+                                        + unpackVertexData(indices.i[3 * newSample.triangleID + 2]).normal
+                                    ) / 3.0f;
+                                    if (dot(rayDir, faceNormal) < 0.0f) {
+                                        if (insert(newSample.triangleID)) {
+                                            edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
+                                        }
+                                        newSample = foundSample;
+                                    }
+                                }
+                                /*
+                                if (foundReverseSampleIndex >= 0) {
                                     Sample temp = newSample;
                                     newSample = edgeSubdivOutput[foundReverseSampleIndex];
-                                    triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
-                                    edgeSubdivOutput[foundReverseSampleIndex] = temp;
+
+                                    if (insert(temp.triangleID)) {
+                                        //triangleIDOutput[foundReverseSampleIndex] = temp.triangleID;
+                                        edgeSubdivOutput[foundReverseSampleIndex] = temp;
+                                    }
                                 }
+                                */
                             }
                             
                             samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
-                        }
+                            rayDirss[int(currentIndex - index / 2.0f)] = rayDir;
+                        
                     }
                     #ifndef USE_3D_VIEW_CELL
                         }
@@ -267,17 +326,24 @@ void main() {
             index = int(index / 2.0f);
         }
 
-        // Count then umber of triangles that have been found
+        // Count then number of triangles that have been found
         const int numSubdivSamples = numSamplesPerEdge - 2;
         uint foundTriangles = 0;
         for (int k = 0; k < numSubdivSamples; k++) {
             #ifdef USE_3D_VIEW_CELL
-                if (samplesOutput[k + 1].triangleID >= 0) {
+                vec3 faceNormal = vec3(
+                    unpackVertexData(indices.i[3 * samplesOutput[k + 1].triangleID]).normal
+                    + unpackVertexData(indices.i[3 * samplesOutput[k + 1].triangleID + 1]).normal
+                    + unpackVertexData(indices.i[3 * samplesOutput[k + 1].triangleID + 2]).normal
+                ) / 3.0f;
+                if (samplesOutput[k + 1].triangleID >= 0 && dot(rayDirss[k + 1], faceNormal) < 0.0f && insert(samplesOutput[k + 1].triangleID)) {
                     foundTriangles++;
+                } else {
+                    samplesOutput[k + 1].triangleID = -1;
                 }
             #else
                 // In case of a 2d view cell, also check if the found triangle is front-facing
-                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCellNormal, viewCellPos, samplesOutput[k + 1].triangleID)) {
+                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCellNormal, viewCellPos, samplesOutput[k + 1].triangleID) && insert(samplesOutput[k + 1].triangleID)) {
                     foundTriangles++;
                 } else {
                     samplesOutput[k + 1].triangleID = -1;
@@ -290,7 +356,7 @@ void main() {
             uint insertionIndex = atomicAdd(triangleCounter, foundTriangles);
             for (int k = 0, m = 0; k < numSubdivSamples; k++) {
                 if (samplesOutput[k + 1].triangleID >= 0) {
-                    triangleIDOutput[insertionIndex + m] = samplesOutput[k + 1].triangleID;
+                    //triangleIDOutput[insertionIndex + m] = samplesOutput[k + 1].triangleID;
                     edgeSubdivOutput[insertionIndex + m] = samplesOutput[k + 1];
                     m++;
                 }

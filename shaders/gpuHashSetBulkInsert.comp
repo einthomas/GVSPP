@@ -1,0 +1,20 @@
+#version 450
+
+layout(binding = 0, set = 0) buffer pvsValues {
+    int values[];
+};
+layout(binding = 1, set = 0) buffer setBuffer {
+    int set[];
+};
+layout(binding = 2, set = 0) uniform pvsBufferCapacity {
+    int pvsCapacity;
+};
+
+#define BULK_INSERT
+#include "rt/defines.glsl"
+#include "rt/gpuHashSet.glsl"
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    insert(values[index]);
+}

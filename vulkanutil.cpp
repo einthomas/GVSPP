@@ -42,16 +42,18 @@ void VulkanUtil::createBuffer(
 
 void VulkanUtil::copyBuffer(
     VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-    VkBuffer dstBuffer, VkDeviceSize size, std::mutex *mutex
+    VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset
 ) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(logicalDevice, commandPool);
 
     // Copy command
     VkBufferCopy copyRegion = {};
     copyRegion.size = size;
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = 0;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    endSingleTimeCommands(logicalDevice, commandBuffer, commandPool, queue, mutex);
+    endSingleTimeCommands(logicalDevice, commandBuffer, commandPool, queue);
 }
 
 VkCommandBuffer VulkanUtil::beginSingleTimeCommands(

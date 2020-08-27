@@ -1,4 +1,4 @@
-int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint) {
+int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint, out Sample foundSample) {
     int foundSampleIndex = -1;
     const float samplePointDistance = length(samplePos - rayOrigin);
     if (occludingTriangleID == -1 || samplePointDistance - length(hitPoint - rayOrigin) > 0.985) {

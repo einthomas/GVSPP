@@ -40,6 +40,14 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint rsTriangleCounter;
     uint rayCounter;
     uint rsRayCounter;
+    uint pvsSize;
+};
+
+layout(binding = 9, set = 0) buffer setBuffer {
+    int set[];
+};
+layout(binding = 11, set = 0) uniform pvsBufferCapacity {
+    int pvsCapacity;
 };
 
 layout(binding = 0, set = 1) buffer absOutputBuffer {
@@ -55,9 +63,23 @@ layout(binding = 2, set = 1) buffer absIDOutputBuffer {
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 #include "util.glsl"
+#include "gpuHashSet.glsl"
 
-uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
-    uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
+    int index = -1;
+
+    if (targetSampleReached) {
+        if (insert(absOutput[launchIndex].triangleID)) {
+            index = int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1));
+            absOutput[index] = absOutput[launchIndex];
+        }
+        absOutput[launchIndex] = s;
+    } else {
+        if (insert(s.triangleID)) {
+            absOutput[int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1))] = s;
+        }
+    }
+
     /*
     if (length(s.rayHitPos - targetSamplePos) < 0.01) {
         triangleIDOutput[index] = absOutput[launchIndex].triangleID;
@@ -71,8 +93,8 @@ uint storeReverseSample(uint launchIndex, Sample s, vec3 targetSamplePos) {
     }
     */
 
-    triangleIDOutput[index] = s.triangleID;
-    absOutput[index] = s;
+    //triangleIDOutput[index] = s.triangleID;
+    //absOutput[index] = s;
 
     return index;
 }
@@ -126,27 +148,28 @@ void main() {
         currentVertexSamplePosIndex / 5.0f
     );
 
-    // Get view cell coordinate system
-    vec3 viewCellSize = vec3(
-        length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-        length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-        length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-    ) * 2.0f;
-    vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-    vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-    vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-    if (viewCellSize.x == 0.0f) {
-        viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-    } else if (viewCellSize.y == 0.0f) {
-        viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-    } else if (viewCellSize.z == 0.0f) {
-        //viewCellRight = -viewCellRight;
-        viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
-    }
-    vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
-
     vec3 rayDir = normalize(samplePos - rayOrigin);
+    
     #ifndef USE_3D_VIEW_CELL
+        // Get view cell coordinate system
+        vec3 viewCellSize = vec3(
+            length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+            length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+            length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+        ) * 2.0f;
+        vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+        vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+        vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+        if (viewCellSize.x == 0.0f) {
+            viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+        } else if (viewCellSize.y == 0.0f) {
+            viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+        } else if (viewCellSize.z == 0.0f) {
+            //viewCellRight = -viewCellRight;
+            viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+        }
+        vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+        
         if (dot(rayDir, viewCellNormal) > 0) {
     #endif
         // Trace ray
@@ -171,7 +194,6 @@ void main() {
         int triangleID = int(hitInfo.w);
         vec3 hitPoint = hitInfo.xyz;
         bool pointBehindViewCell = false;
-        int originalABSSampleIndex = -1;
         #ifdef USE_3D_VIEW_CELL
             if (triangleID != -1) {
                 vec3 faceNormal = vec3(
@@ -185,7 +207,7 @@ void main() {
                 }
             }
 
-            triangleIDOutput[launchIndex] = triangleID;
+            //triangleIDOutput[launchIndex] = triangleID;
             absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
             if (triangleID != -1) {
                 atomicAdd(triangleCounter, 1);
@@ -193,43 +215,57 @@ void main() {
         #else
             if (triangleID != -1 && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
                 atomicAdd(triangleCounter, 1);
-                triangleIDOutput[launchIndex] = triangleID;
                 absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
             } else {
                 pointBehindViewCell = true;
                 triangleID = -1;
-                triangleIDOutput[launchIndex] = -1;
+                //triangleIDOutput[launchIndex] = -1;
                 absOutput[launchIndex] = Sample(-1, rayOrigin, hitPoint, samplePos);
             }
         #endif
 
         // Reverse sampling
         if (!pointBehindViewCell) {
+            
+            Sample foundSample;
             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                int foundReverseSampleIndex = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
+                bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
             #elif REVERSE_SAMPLING_METHOD == 1
-                int foundReverseSampleIndex = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint);
+                bool discontinuityFound = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
             #endif
-            if (foundReverseSampleIndex != -1) {
-                Sample s = absOutput[launchIndex];
-                triangleIDOutput[launchIndex] = triangleIDOutput[foundReverseSampleIndex];
-                absOutput[launchIndex] = absOutput[foundReverseSampleIndex];
-                triangleIDOutput[foundReverseSampleIndex] = s.triangleID;
-                absOutput[foundReverseSampleIndex] = s;
-            } else {
-                uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
-                triangleIDOutput[index] = triangleIDOutput[launchIndex];
-                absOutput[index] = absOutput[launchIndex];
-
-                triangleIDOutput[launchIndex] = -2;
+            if (discontinuityFound && foundSample.triangleID == -2) {
+                if (insert(absOutput[launchIndex].triangleID)) {
+                    uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+                    absOutput[index] = absOutput[launchIndex];
+                }
                 absOutput[launchIndex].triangleID = -2;
             }
+            
+
+
+
+            /*
+            if (foundReverseSampleIndex >= 0) {
+                Sample s = absOutput[launchIndex];
+                //triangleIDOutput[launchIndex] = triangleIDOutput[foundReverseSampleIndex];
+                absOutput[launchIndex] = absOutput[foundReverseSampleIndex];
+                //triangleIDOutput[foundReverseSampleIndex] = s.triangleID;
+                absOutput[foundReverseSampleIndex] = s;
+            } else if (foundReverseSampleIndex == -1) {
+                uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+                //triangleIDOutput[index] = triangleIDOutput[launchIndex];
+                absOutput[index] = absOutput[launchIndex];
+
+                //triangleIDOutput[launchIndex] = -2;
+                absOutput[launchIndex].triangleID = -2;
+            }
+            */
         }
         
         atomicAdd(rsRayCounter, tracedRsRays);
     #ifndef USE_3D_VIEW_CELL
         } else {
-            triangleIDOutput[launchIndex] = -2;
+            //triangleIDOutput[launchIndex] = -2;
             absOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
         }
     #endif

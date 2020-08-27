@@ -9,7 +9,7 @@
 
 class ViewCell {
 public:
-    glm::mat4 model;
+    alignas(64) glm::mat4 model;
 
     ViewCell();
     ViewCell(glm::mat4 model);

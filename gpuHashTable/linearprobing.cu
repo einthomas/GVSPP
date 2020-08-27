@@ -38,7 +38,7 @@ void GPUHashSet::reset() {
 }
 
 __global__ void gpu_resize(int *hashSet, int *newHashSet, int size, int newSize) {
-    unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
+    unsigned int threadid = blockIdx.x * blockDim.x + threadIdx.x;
     if (threadid < size) {
         int key = hashSet[threadid];
         int slot = hash(key, newSize);
@@ -133,7 +133,7 @@ __global__ void gpu_hashtable_insert(
     unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
     if (threadid < numkvs) {
         int key = keys[threadid];
-        if (key == -1) {
+        if (key < 0) {
             inserted[threadid] = 0;
             return;
         }

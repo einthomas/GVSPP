@@ -24,9 +24,9 @@
 #include "viewcell.h"
 
 struct UniformBufferObject {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 projection;
+    alignas(64) glm::mat4 model;
+    alignas(64) glm::mat4 view;
+    alignas(64) glm::mat4 projection;
 };
 
 /*
@@ -195,7 +195,7 @@ void VulkanRenderer::createGraphicsPipeline(
     rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     //rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizerInfo.lineWidth = 3.0f;
+    rasterizerInfo.lineWidth = 10.0f;
     //rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -738,7 +738,7 @@ void VulkanRenderer::createUniformBuffers() {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
     for (int i = 0; i < window->imageCount; i++) {
         VulkanUtil::createBuffer(
-        window->physicalDevice,
+            window->physicalDevice,
             window->device,
             bufferSize,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -752,17 +752,7 @@ void VulkanRenderer::createUniformBuffers() {
 void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     UniformBufferObject ubo;
 
-    /*
-    ubo.model = glm::rotate(
-        glm::mat4(1.0f),
-        glm::radians(0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-    */
-    ubo.model = glm::translate(
-        glm::mat4(1.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f) * 0.5f
-    );
+    ubo.model = glm::mat4(1.0f);
 
     ubo.view = glm::lookAt(cameraPos, cameraPos + cameraForward, glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -922,7 +912,24 @@ void VulkanRenderer::nextViewCell() {
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
+    /*
+    glm::vec3 viewCellNormal = visibilityManager.viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+    if (glm::length(viewCellNormal) == 0.0f) {
+        viewCellNormal = glm::cross(
+                    )
+    }
+    */
+    /*
     cameraForward = visibilityManager.viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+    std::cout << glm::to_string((visibilityManager.viewCells[currentViewCellIndex].model)) << std::endl;
+    std::cout << glm::to_string(glm::cross(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[0]),glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[1]))) << std::endl;
+    std::cout << "cf " << glm::to_string(cameraForward) << std::endl;
+    */
+
+    cameraForward = glm::cross(
+        glm::normalize(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[0])),
+        glm::normalize(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[1]))
+    );
 }
 
 void VulkanRenderer::initVisibilityManager() {
