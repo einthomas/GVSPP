@@ -4,8 +4,6 @@
 #define GLM_FORCE_RADIANS
 #define STB_IMAGE_IMPLEMENTATION
 
-//#include <QFile>
-//#include <QKeyEvent>
 #include <chrono>
 
 //#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -48,23 +46,19 @@ VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
 VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     : window(w), visibilityManager()
 {
-    initResources();
-
-    cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
-    glm::vec3 cameraTarget = glm::vec3(0.0f);
-    cameraForward = glm::normalize(cameraTarget - cameraPos);
-    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
-    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
-
-    nextCorner();
-    alignCameraWithViewCellNormal();
-
-    initVisibilityManager();
-}
-
-void VulkanRenderer::initResources() {
     Settings settings = loadSettingsFile();
-    loadSceneFile(settings);
+
+    std::cout << "compiling shaders..." << std::endl;
+    system(se.at("SHADER_COMPILE_SCRIPT").c_str());
+
+    std::cout << std::endl << "========================================" << std::endl;
+    std::cout << "Settings loaded: " << std::endl;
+    for (const auto &pair : se) {
+        std::cout << "    " << pair.first << " " << pair.second << std::endl;
+    }
+    std::cout << "========================================" << std::endl << std::endl;
+
+    std::vector<glm::mat4> viewCellMatrices = loadSceneFile(settings);
 
     createDescriptorSetLayout();
     createGraphicsPipeline(
@@ -76,19 +70,6 @@ void VulkanRenderer::initResources() {
         VK_PRIMITIVE_TOPOLOGY_LINE_LIST
     );
 
-    //inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-    //createTextureImage();
-    //createTextureImageView();
-    //createTextureSampler();
-
-    // Create vertex buffer using GPU memory
-    /*
-    VulkanUtil::createBuffer(
-        window->physicalDevice,
-        window->device, sizeof(vertices[0]) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        vertexBuffer, vertexBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    */
     createVertexBuffer(vertices, vertexBuffer, vertexBufferMemory);
     updateVertexBuffer(vertices, vertexBuffer, vertexBufferMemory);
 
@@ -102,6 +83,44 @@ void VulkanRenderer::initResources() {
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
+
+    cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
+    glm::vec3 cameraTarget = glm::vec3(0.0f);
+    cameraForward = glm::normalize(cameraTarget - cameraPos);
+    cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+
+    updateUniformBuffer(0);
+    updateUniformBuffer(1);
+    bool USE_TERMINATION_CRITERION;
+    std::istringstream(se.at("USE_TERMINATION_CRITERION")) >> USE_TERMINATION_CRITERION;
+    visibilityManager = new VisibilityManager(
+        USE_TERMINATION_CRITERION,
+        std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
+        std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+        std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),
+        std::stoi(se.at("MAX_SUBDIVISION_STEPS")),
+        std::stoi(se.at("MAX_BULK_INSERT_BUFFER_SIZE")),
+        std::stoi(se.at("SET_TYPE")),
+        std::stoi(se.at("INITIAL_HASH_SET_SIZE")),
+        window->physicalDevice,
+        window->device,
+        indexBuffer,
+        indices,
+        vertexBuffer,
+        vertices,
+        uniformBuffers,
+        NUM_THREADS,
+        window->deviceUUID,
+        viewCellMatrices
+    );
+
+    nextCorner();
+    alignCameraWithViewCellNormal();
+}
+
+void VulkanRenderer::initResources() {
+
 }
 
 void VulkanRenderer::initSwapChainResources() {
@@ -138,7 +157,7 @@ void VulkanRenderer::releaseResources() {
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    visibilityManager.releaseResources();
+    visibilityManager->releaseResources();
 }
 
 void VulkanRenderer::createGraphicsPipeline(
@@ -846,7 +865,7 @@ void VulkanRenderer::startNextFrame(
     if (viewCellRendering) {
         vkCmdPushConstants(
             commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-            (std::array<glm::mat4, 1> { visibilityManager.viewCells[currentViewCellIndex].model }).data()
+            (std::array<glm::mat4, 1> { visibilityManager->viewCells[currentViewCellIndex].model }).data()
         );
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &viewCellGeometry[currentViewCellIndex].vertexBuffer, offsets);
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
@@ -854,8 +873,8 @@ void VulkanRenderer::startNextFrame(
 
     // Draw ray visualizations
     if (
-        visibilityManager.visualizeRandomRays || visibilityManager.visualizeABSRays
-        || visibilityManager.visualizeEdgeSubdivRays
+        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays
     ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
@@ -871,7 +890,7 @@ void VulkanRenderer::startNextFrame(
             commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
             (std::array<VkBool32, 1> { shadedRendering }).data()
         );
-        vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager.rayVertices.size()), 1, 0, 0);
+        vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices.size()), 1, 0, 0);
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -886,7 +905,7 @@ void VulkanRenderer::toggleViewCellRendering() {
 }
 
 void VulkanRenderer::toggleRayVisualization() {
-    visibilityManager.visualizeRandomRays = !visibilityManager.visualizeRandomRays;
+    visibilityManager->visualizeRandomRays = !visibilityManager->visualizeRandomRays;
 }
 
 void VulkanRenderer::nextCorner() {
@@ -895,14 +914,14 @@ void VulkanRenderer::nextCorner() {
     offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
     offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
-    cameraPos = visibilityManager.viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
+    cameraPos = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
     //std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
 
 void VulkanRenderer::nextViewCell() {
     currentViewCellIndex++;
-    currentViewCellIndex %= visibilityManager.viewCells.size();
+    currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
     std::cout
@@ -913,36 +932,32 @@ void VulkanRenderer::nextViewCell() {
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
     /*
-    glm::vec3 viewCellNormal = visibilityManager.viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+    glm::vec3 viewCellNormal = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
     if (glm::length(viewCellNormal) == 0.0f) {
         viewCellNormal = glm::cross(
                     )
     }
     */
     /*
-    cameraForward = visibilityManager.viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-    std::cout << glm::to_string((visibilityManager.viewCells[currentViewCellIndex].model)) << std::endl;
-    std::cout << glm::to_string(glm::cross(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[0]),glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[1]))) << std::endl;
+    cameraForward = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+    std::cout << glm::to_string((visibilityManager->viewCells[currentViewCellIndex].model)) << std::endl;
+    std::cout << glm::to_string(glm::cross(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0]),glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[1]))) << std::endl;
     std::cout << "cf " << glm::to_string(cameraForward) << std::endl;
     */
 
     cameraForward = glm::cross(
-        glm::normalize(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[0])),
-        glm::normalize(glm::vec3(visibilityManager.viewCells[currentViewCellIndex].model[1]))
+        glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0])),
+        glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[1]))
     );
 }
 
 void VulkanRenderer::initVisibilityManager() {
-    updateUniformBuffer(0);
-    updateUniformBuffer(1);
 
-    visibilityManager.init(
-        window->physicalDevice, window->device, indexBuffer, indices, vertexBuffer, vertices,
-        uniformBuffers, NUM_THREADS, window->deviceUUID
-    );
 }
 
-void VulkanRenderer::loadSceneFile(Settings settings) {
+std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
+    std::vector<glm::mat4> viewCellMatrices;
+
     std::string scene = settings.modelName;
     int viewCellIndex = settings.viewCellIndex;
 
@@ -953,8 +968,9 @@ void VulkanRenderer::loadSceneFile(Settings settings) {
     float x, y, z;
     glm::vec3 v[3];
 
-    std::cout << "========================================" << std::endl;
+    std::cout << std::endl << "========================================" << std::endl;
 
+    int viewCellCounter = 0;
     std::string modelPath;
     std::ifstream file("scenes.txt");
     std::string line;
@@ -971,13 +987,13 @@ void VulkanRenderer::loadSceneFile(Settings settings) {
             model = glm::translate(model, size * glm::vec3(1.0f, 1.0f, 1.0f)); // translate such that the bottom left corner is at the position read from scenes.txt
             model = glm::scale(model, size);
 
-            std::cout << "View cell " << visibilityManager.viewCells.size() + 1 << ":" << std::endl;
+            std::cout << "View cell " << viewCellCounter++ << ":" << std::endl;
             std::cout << "    Position (bottom left corner): " << glm::to_string(pos) << std::endl;
             std::cout << "    Rotation around axes (radiant): " << glm::to_string(rotation) << std::endl;
             std::cout << "    Size: " << glm::to_string(size * 2.0f) << std::endl;
             std::cout << "    Model matrix: " << glm::to_string(model) << std::endl;
 
-            visibilityManager.addViewCell(model);
+            viewCellMatrices.push_back(model);
 
             if (line.length() == 0) {
                 break;
@@ -1009,7 +1025,9 @@ void VulkanRenderer::loadSceneFile(Settings settings) {
     loadModel(modelPath);
 
     std::cout << "Model: " << modelPath << " (" << int(indices.size() / 3.0f) << " triangles)" << std::endl;
-    std::cout << "========================================" << std::endl;
+    std::cout << "========================================" << std::endl << std::endl;
+
+    return viewCellMatrices;
 }
 
 Settings VulkanRenderer::loadSettingsFile() {
@@ -1018,19 +1036,52 @@ Settings VulkanRenderer::loadSettingsFile() {
     std::ifstream file("settings.txt");
     std::string line;
 
-    std::getline(file, line);
-    if (line.rfind("CALCPVS", 0) == 0) {
-        loadPVS = false;
-    } else if (line.rfind("LOADPVS", 0) == 0) {
-        loadPVS = true;
+    bool readSettings = false;
+    bool readSceneDefinition = false;
+    bool readComment = false;
+    while (std::getline(file, line)) {
+        if (line.length() == 0) {
+            continue;
+        }
+
+        if (line.rfind("/*", 0) == 0) {
+            readComment = true;
+        } else if (line.rfind("*/") == 0) {
+            readComment = false;
+        } else if (!readComment) {
+            if (line.rfind("--- SCENE ---", 0) == 0) {
+                readSettings = false;
+                readSceneDefinition = true;
+            } else if (line.rfind("--- SETTINGS ---", 0) == 0) {
+                readSettings = true;
+                readSceneDefinition = false;
+            } else if (readSettings) {
+                se[line.substr(0, line.find(" "))] = line.substr(line.find(" ") + 1, line.length());
+            } else if (readSceneDefinition) {
+                if (line.rfind("CALCPVS", 0) == 0) {
+                    loadPVS = false;
+                } else if (line.rfind("LOADPVS", 0) == 0) {
+                    loadPVS = true;
+                }
+                pvsStorageFile = line.substr(line.find(" "));
+
+                std::getline(file, line);
+                settings.modelName = line;
+
+                std::getline(file, line);
+                settings.viewCellIndex = std::stoi(line);
+            }
+        }
     }
-    pvsStorageFile = line.substr(line.find(" "));
 
-    std::getline(file, line);
-    settings.modelName = line;
-
-    std::getline(file, line);
-    settings.viewCellIndex = std::stoi(line);
+    std::ofstream shaderDefinesFile;
+    shaderDefinesFile.open("shaders/rt/defines.glsl");
+    shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se.at("REVERSE_SAMPLING_METHOD") << "\n";
+    shaderDefinesFile << "#define SET_TYPE " << se.at("SET_TYPE") << "\n";
+    if (se.at("USE_3D_VIEW_CELL") == "true") {
+        shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
+    }
+    shaderDefinesFile.close();
 
     return settings;
 }
@@ -1039,24 +1090,24 @@ void VulkanRenderer::startVisibilityThread() {
     if (!loadPVS) {
         std::ofstream pvsFile;
         pvsFile.open(pvsStorageFile);
-        for (int k = 0; k < visibilityManager.viewCells.size(); k++) {
+        for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
             std::cout << "View cell " << k << ":" << std::endl;
-            visibilityManager.rayTrace(indices, 0, k);
+            visibilityManager->rayTrace(indices, 0, k);
 
             // Fetch the PVS from the GPU
-            visibilityManager.fetchPVS();
+            visibilityManager->fetchPVS();
 
             // Write view cell model matrix to the PVS file
             for (int x = 0; x < 4; x++) {
                 for (int y = 0; y < 4; y++) {
-                    pvsFile << visibilityManager.viewCells[k].model[x][y] << ";";
+                    pvsFile << visibilityManager->viewCells[k].model[x][y] << ";";
                 }
             }
             pvsFile << "|";
 
             // Write pvs to the PVS file
             std::ostringstream oss;
-            std::copy(visibilityManager.pvs.pvsVector.begin(), visibilityManager.pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
+            std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
             pvsFile << oss.str() << "\n";
         }
         pvsFile.close();
@@ -1162,15 +1213,15 @@ void VulkanRenderer::startVisibilityThread() {
     pvsFile.close();
 
     currentViewCellIndex = 0;
-    cameraPos = visibilityManager.viewCells[currentViewCellIndex].model[3];
+    cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
     createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
     if (
-        visibilityManager.visualizeRandomRays || visibilityManager.visualizeABSRays
-        || visibilityManager.visualizeEdgeSubdivRays
+        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays
     ) {
-        createVertexBuffer(visibilityManager.rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
-        updateVertexBuffer(visibilityManager.rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
+        createVertexBuffer(visibilityManager->rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
+        updateVertexBuffer(visibilityManager->rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
     }
 }

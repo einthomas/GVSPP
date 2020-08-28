@@ -23,27 +23,56 @@ struct UniformBufferObject {
     alignas(64) glm::mat4 projection;
 };
 
-VisibilityManager::VisibilityManager()
-    : statistics(1000000)
+VisibilityManager::VisibilityManager(
+    bool USE_TERMINATION_CRITERION,
+    int RAY_COUNT_TERMINATION_THRESHOLD,
+    int NEW_TRIANGLE_TERMINATION_THRESHOLD,
+    int RANDOM_RAYS_PER_ITERATION,
+    int MAX_SUBDIVISION_STEPS,
+    int MAX_BULK_INSERT_BUFFER_SIZE,
+    int GPU_SET_TYPE,
+    int INITIAL_HASH_SET_SIZE,
+    VkPhysicalDevice physicalDevice,
+    VkDevice logicalDevice,
+    VkBuffer indexBuffer,
+    const std::vector<uint32_t> &indices,
+    VkBuffer vertexBuffer,
+    const std::vector<Vertex> &vertices,
+    const std::vector<VkBuffer> &uniformBuffers,
+    int numThreads,
+    std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
+    std::vector<glm::mat4> viewCellMatrices
+):
+    USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
+    RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
+    NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
+    RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
+    MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
+    MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
+    GPU_SET_TYPE(GPU_SET_TYPE),
+    MAX_TRIANGLE_COUNT(indices.size()),
+    statistics(1000000)
 {
-}
-
-void VisibilityManager::init(
-    VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
-    VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
-    const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-    int numThreads, std::array<uint8_t, VK_UUID_SIZE> deviceUUID
-) {
-    std::cout << sizeof(glm::mat4) << std::endl;
-
     this->logicalDevice = logicalDevice;
     this->physicalDevice = physicalDevice;
     this->numThreads = numThreads;
     this->deviceUUID = deviceUUID;
-    this->MAX_TRIANGLE_COUNT = indices.size();
 
-    //pvsBufferCapacity = indices.size();   // PVS size when a GPU SET is used. Has to be equal to the number of triangles in the scene
-    pvsBufferCapacity = 2;     // PVS size when a GPU HASH SET is used. Has to be a power of 2
+    for (auto m : viewCellMatrices) {
+        addViewCell(m);
+    }
+
+    if (GPU_SET_TYPE == 0) {
+        // PVS size when a GPU SET is used. Has to be equal to the number of triangles in the scene
+        pvsBufferCapacity = indices.size();
+    } else {
+        if (INITIAL_HASH_SET_SIZE == 0) {
+            // Initial PVS size when a GPU HASH SET is used. Has to be a power of 2
+            pvsBufferCapacity = 1 << int(std::ceil(std::log2(indices.size() / 2.0f)));
+        } else {
+            pvsBufferCapacity = INITIAL_HASH_SET_SIZE;
+        }
+    }
 
     tracedRays = 0;
     if (numThreads > 1) {
@@ -76,7 +105,7 @@ void VisibilityManager::init(
 
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
-    generateHaltonSequence(RAYS_PER_ITERATION, 0);
+    generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, 0);
     //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
     //generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
 
@@ -495,9 +524,9 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     //VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
     VkDeviceSize pvsSize = sizeof(int) * pvsBufferCapacity;
 
-    VkDeviceSize haltonSize = sizeof(float) * RAYS_PER_ITERATION * 4;
+    VkDeviceSize haltonSize = sizeof(float) * RANDOM_RAYS_PER_ITERATION * 4;
 
-    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RAYS_PER_ITERATION;
+    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RANDOM_RAYS_PER_ITERATION;
     //VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * RAYS_PER_ITERATION;
     VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * MAX_TRIANGLE_COUNT;
 
@@ -2410,17 +2439,17 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         previousPVSSize = pvsSize;
 
         // Check GPU hash set size
-        int potentialNewTriangles = std::min(RAYS_PER_ITERATION, (size_t)MAX_TRIANGLE_COUNT - pvsSize);
+        int potentialNewTriangles = std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT - pvsSize);
         if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
             resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
         }
 
         // Execute random sampling
         statistics.startOperation(RANDOM_SAMPLING);
-        ShaderExecutionInfo randomSampleInfo = randomSample(RAYS_PER_ITERATION, threadId);
+        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId);
         statistics.endOperation(RANDOM_SAMPLING);
 
-        statistics.entries.back().numShaderExecutions += RAYS_PER_ITERATION;
+        statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
         statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
         statistics.entries.back().rnsRays += randomSampleInfo.numRays;
 
@@ -2465,7 +2494,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
-            const int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, absSampleQueue.size());
+            const int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, (int)absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
             if (numAbsRays == absSampleQueue.size()) {
                 absWorkingVector = absSampleQueue;
@@ -2607,7 +2636,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             // Generate new Halton points
             start = std::chrono::steady_clock::now();
             //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
-            generateHaltonSequence(RAYS_PER_ITERATION, RAYS_PER_ITERATION * (i + 1));
+            generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, RANDOM_RAYS_PER_ITERATION * (i + 1));
             end = std::chrono::steady_clock::now();
             haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         } else {

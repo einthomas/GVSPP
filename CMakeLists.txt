@@ -53,20 +53,20 @@ target_link_libraries(Vulkan_RTX_Master_Qt_CMake C:/Users/thoma/Documents/dev/cp
 target_link_libraries(Vulkan_RTX_Master_Qt_CMake E:/VulkanSDK/1.2.135.0/Lib/vulkan-1.lib)
 
 
-if (UNIX)
-    add_custom_command(
-        TARGET Vulkan_RTX_Master_Qt_CMake
-        POST_BUILD
-        COMMAND /bin/sh ${SHADERS_PATH}compileShaders.sh ${GLSLC_PATH} ${SHADERS_PATH}
-    )
-endif (UNIX)
-
-if (WIN32)
-    add_custom_command(
-        TARGET Vulkan_RTX_Master_Qt_CMake
-        POST_BUILD
-        COMMAND cmd /c ${SHADERS_PATH}compileShaders.bat
-    )
-endif (WIN32)
+#if (UNIX)
+#    add_custom_command(
+#        TARGET Vulkan_RTX_Master_Qt_CMake
+#        POST_BUILD
+#        COMMAND /bin/sh ${SHADERS_PATH}compileShaders.sh ${GLSLC_PATH} ${SHADERS_PATH}
+#    )
+#endif (UNIX)
+#
+#if (WIN32)
+#    add_custom_command(
+#        TARGET Vulkan_RTX_Master_Qt_CMake
+#        POST_BUILD
+#        COMMAND cmd /c ${SHADERS_PATH}compileShaders.bat
+#    )
+#endif (WIN32)
 
 add_definitions(-DUSE_CUDA)

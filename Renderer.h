@@ -56,6 +56,7 @@ private:
 
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
+    std::map<std::string, std::string> se;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -129,11 +130,11 @@ private:
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
 
-    VisibilityManager visibilityManager;
+    VisibilityManager *visibilityManager;
     VkDescriptorSet rtDescriptorSetsABS;
     VkDescriptorSetLayout rtDescriptorSetLayoutABS;
     void initVisibilityManager();
-    void loadSceneFile(Settings settings);
+    std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
 };
 

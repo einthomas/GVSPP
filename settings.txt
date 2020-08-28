@@ -1,3 +1,48 @@
+--- SETTINGS ---
+/*
+    The shader compile script is executed during runtime since a number of settings are written to
+    defines.glsl
+*/
+SHADER_COMPILE_SCRIPT shaders\\compileShaders.bat
+
+/*
+    if USE_TERMINATION_CRITERION is true, rays are traced until either at least RAY_COUNT_TERMINATION_THRESHOLD
+    rays have been traced or fewer than NEW_TRIANGLE_TERMINATION_THRESHOLD have been found after processing
+    the adaptive border sampling queue
+*/
+USE_TERMINATION_CRITERION true
+RAY_COUNT_TERMINATION_THRESHOLD 100000000
+NEW_TRIANGLE_TERMINATION_THRESHOLD 1
+
+RANDOM_RAYS_PER_ITERATION 500000
+MAX_SUBDIVISION_STEPS 3
+
+/*
+    REVERSE_SAMPLING_METHOD 0       Reverse sampling method based on the old CPU implementation
+    REVERSE_SAMPLING_METHOD 1       Reverse sampling based on the GVS paper
+    REVERSE_SAMPLING_METHOD 2       New reverse sampling
+*/
+REVERSE_SAMPLING_METHOD 2
+
+/*
+    SET_TYPE 0      Set implemented as an array that's as big as there are triangles
+                    in the scene (4 byte per triangle).
+    SET_TYPE 1      Hash set. Needs less space than SET_TYPE 1. Recommended for scenes
+                    with >= 10,000,000 triangles. If the hash set runs out of space,
+                    it is resized.
+*/
+SET_TYPE 1
+MAX_BULK_INSERT_BUFFER_SIZE 1000000
+
+/*
+    INITIAL_HASH_SET_SIZE has to be a power of 2
+    If this is set to 0, the initial hash set size is equal to 2^(ceil(log2(number_of_triangles_in_scene / 2)))
+*/
+INITIAL_HASH_SET_SIZE 0
+
+USE_3D_VIEW_CELL false
+
+--- SCENE ---
 CALCPVS pvs.txt
 BBB
 0

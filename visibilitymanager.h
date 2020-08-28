@@ -54,12 +54,25 @@ public:
     bool visualizeABSRays = false;
     bool visualizeEdgeSubdivRays = false;
 
-    VisibilityManager();
-    void init(
-        VkPhysicalDevice physicalDevice, VkDevice logicalDevice,
-        VkBuffer indexBuffer, const std::vector<uint32_t> &indices, VkBuffer vertexBuffer,
-        const std::vector<Vertex> &vertices, const std::vector<VkBuffer> &uniformBuffers,
-        int numThreads, std::array<uint8_t, VK_UUID_SIZE> deviceUUID
+    VisibilityManager(
+        bool USE_TERMINATION_CRITERION,
+        int RAY_COUNT_TERMINATION_THRESHOLD,
+        int NEW_TRIANGLE_TERMINATION_THRESHOLD,
+        int RANDOM_RAYS_PER_ITERATION,
+        int MAX_SUBDIVISION_STEPS,
+        int MAX_BULK_INSERT_BUFFER_SIZE,
+        int GPU_SET_TYPE,
+        int INITIAL_HASH_SET_SIZE,
+        VkPhysicalDevice physicalDevice,
+        VkDevice logicalDevice,
+        VkBuffer indexBuffer,
+        const std::vector<uint32_t> &indices,
+        VkBuffer vertexBuffer,
+        const std::vector<Vertex> &vertices,
+        const std::vector<VkBuffer> &uniformBuffers,
+        int numThreads,
+        std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
+        std::vector<glm::mat4> viewCellMatrices
     );
     void addViewCell(glm::mat4 model);
     void generateHaltonPoints2d(int n, int threadId, int offset = 0);
@@ -75,19 +88,19 @@ private:
     int pvsSize = 0;
     int numThreads;
 
-    const bool USE_TERMINATION_CRITERION = true;
-    const bool USE_EDGE_SUBDIV_CPU = false;
-    const size_t RAY_COUNT_TERMINATION_THRESHOLD = 100000000;
-    const int NEW_TRIANGLE_TERMINATION_THRESHOLD = 1;
+    const bool USE_TERMINATION_CRITERION;
+    const int RAY_COUNT_TERMINATION_THRESHOLD;
+    const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const int NUM_ABS_SAMPLES = 15;
     const int NUM_REVERSE_SAMPLING_SAMPLES = 15;
-    const int MAX_BULK_INSERT_BUFFER_SIZE = 1000000;
-    int MAX_TRIANGLE_COUNT;
+    const int MAX_BULK_INSERT_BUFFER_SIZE;
+    const int MAX_TRIANGLE_COUNT;
+    const int GPU_SET_TYPE;
 
-    const size_t RAYS_PER_ITERATION = 10000000;
-    const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
-    const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
+    const int RANDOM_RAYS_PER_ITERATION;
+    const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
+    const int MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
