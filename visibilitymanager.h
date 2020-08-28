@@ -84,7 +84,7 @@ private:
     const int MAX_BULK_INSERT_BUFFER_SIZE = 1000000;
     int MAX_TRIANGLE_COUNT;
 
-    const size_t RAYS_PER_ITERATION = 15;
+    const size_t RAYS_PER_ITERATION = 10000000;
     const size_t MIN_ABS_TRIANGLES_PER_ITERATION = 1;
     const size_t MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
     const size_t MAX_SUBDIVISION_STEPS = 3;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
@@ -117,6 +117,7 @@ private:
     std::vector<VkCommandBuffer> commandBufferABS;
     std::vector<VkCommandBuffer> commandBufferEdgeSubdiv;
     std::vector<VkCommandBuffer> commandBufferCompute;
+    std::vector<VkCommandBuffer> commandBufferHaltonCompute;
     std::vector<VkFence> commandBufferFence;
     VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
     VkPipeline pipeline;
@@ -127,6 +128,8 @@ private:
     VkPipelineLayout pipelineEdgeSubdivLayout;
     VkPipeline pipelineCompute;
     VkPipelineLayout pipelineComputeLayout;
+    VkPipeline pipelineHaltonCompute;
+    VkPipelineLayout pipelineHaltonComputeLayout;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSet;
@@ -137,6 +140,8 @@ private:
     VkDescriptorSetLayout descriptorSetLayoutEdgeSubdiv;
     std::vector<VkDescriptorSet> descriptorSetCompute;
     VkDescriptorSetLayout descriptorSetLayoutCompute;
+    std::vector<VkDescriptorSet> descriptorSetHaltonCompute;
+    VkDescriptorSetLayout descriptorSetLayoutHaltonCompute;
     VkPushConstantRange pushConstantRange;
 
     VkImageView storageImageView;
@@ -271,13 +276,16 @@ private:
     void createComputeDescriptorSets(int threadId);
     void createComputeDescriptorSetLayout();
     void createComputePipeline();
+    void createHaltonComputeDescriptorSets(int threadId);
+    void createHaltonComputeDescriptorSetLayout();
+    void createHaltonComputePipeline();
     ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
     void resetPVSGPUBuffer();
     void resetAtomicBuffers();
     void resizePVSBuffer(int newSize);
+    void generateHaltonSequence(int n, int startIndex);
 
     ShaderExecutionInfo randomSample(int numRays, int threadId);
     ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);
     ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId);
 };
-

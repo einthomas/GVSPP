@@ -43,7 +43,7 @@ void VisibilityManager::init(
     this->MAX_TRIANGLE_COUNT = indices.size();
 
     //pvsBufferCapacity = indices.size();   // PVS size when a GPU SET is used. Has to be equal to the number of triangles in the scene
-    pvsBufferCapacity = 2;     // PVS size when a GPU HASH SET is used. Has to be power of 2
+    pvsBufferCapacity = 2;     // PVS size when a GPU HASH SET is used. Has to be a power of 2
 
     tracedRays = 0;
     if (numThreads > 1) {
@@ -74,19 +74,25 @@ void VisibilityManager::init(
     cudaStream_t cudaStream;
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
 
-    //gpuHashSet = new GPUHashSet(1024 * 1024 * 32);
-    //hashTablePVS = create_hashtable(hashTableCapacity);
-    //device_inserted = create_inserted();
-
     createBuffers(indices);
-    CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
+    generateHaltonSequence(RAYS_PER_ITERATION, 0);
+    //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
+    //generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
 
+
+    // Halton generation benchmark (CUDA, Compute Shader, CPU)
     /*
-    auto start = std::chrono::steady_clock::now();
-    generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
-    auto end = std::chrono::steady_clock::now();
-    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "microseconds" << std::endl;
+    uint64_t avgHaltonTime = 0;
+    const int NUM_HALTON_SAMPLES = 100;
+    for (int i = 0; i < NUM_HALTON_SAMPLES; i++) {
+        auto start = std::chrono::steady_clock::now();
+        CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, 0);
+        //generateHaltonSequence(RAYS_PER_ITERATION, (i + 1) * RAYS_PER_ITERATION);
+        auto end = std::chrono::steady_clock::now();
+        avgHaltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    }
+    std::cout << "avg halton time " << avgHaltonTime / float(NUM_HALTON_SAMPLES) << std::endl;
     */
 }
 
@@ -402,6 +408,35 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     vkFreeMemory(logicalDevice, pvsBulkInsertBufferMemory[0], nullptr);
 }
 
+void VisibilityManager::generateHaltonSequence(int n, int startIndex) {
+    // Generate Halton sequence of length n using a compute shader
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBufferHaltonCompute[0], &beginInfo);
+    vkCmdBindPipeline(commandBufferHaltonCompute[0], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineHaltonCompute);
+    vkCmdBindDescriptorSets(
+        commandBufferHaltonCompute[0], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineHaltonComputeLayout,
+        0, 1, &descriptorSetHaltonCompute[0], 0, nullptr
+    );
+    vkCmdPushConstants(
+        commandBufferHaltonCompute[0], pipelineHaltonComputeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+        sizeof(int), &startIndex
+    );
+    vkCmdPushConstants(
+        commandBufferHaltonCompute[0], pipelineHaltonComputeLayout, VK_SHADER_STAGE_COMPUTE_BIT, sizeof(int),
+        sizeof(int), &n
+    );
+    vkCmdDispatch(commandBufferHaltonCompute[0], ((n / 4.0f) + 256 - 1) / 256.0f, 1, 1);
+    vkEndCommandBuffer(commandBufferHaltonCompute[0]);
+
+    VulkanUtil::executeCommandBuffer(
+        logicalDevice, computeQueue, commandBufferHaltonCompute[0], commandBufferFence[0],
+        queueSubmitMutex
+    );
+}
+
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     randomSamplingOutputBuffer.resize(numThreads);
     randomSamplingOutputBufferMemory.resize(numThreads);
@@ -474,8 +509,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VkDeviceSize edgeSubdivIDOutputBufferSize = sizeof(int) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 1;
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
-
-    VkDeviceSize pvsBulkInsertBufferSize = sizeof(int) * 1000000;
     for (int i = 0; i < numThreads; i++) {
         /*
         VulkanUtil::createBuffer(
@@ -578,7 +611,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         /*
         VulkanUtil::createBuffer(
             physicalDevice, logicalDevice, sizeof(haltonPoints[0][0]) * RAYS_PER_ITERATION,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
         */
@@ -638,17 +671,19 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         pvsVisualizationBuffer, pvsVisualizationBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice, sizeof(int),
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        pvsCapacityUniformBuffer[0], pvsCapacityUniformMemory[0],
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-    void *data;
-    vkMapMemory(logicalDevice, pvsCapacityUniformMemory[0], 0, sizeof(pvsBufferCapacity), 0, &data);
-    memcpy(data, &pvsBufferCapacity, sizeof(pvsBufferCapacity));
-    vkUnmapMemory(logicalDevice, pvsCapacityUniformMemory[0]);
+    {
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, sizeof(int),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            pvsCapacityUniformBuffer[0], pvsCapacityUniformMemory[0],
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+        void *data;
+        vkMapMemory(logicalDevice, pvsCapacityUniformMemory[0], 0, sizeof(pvsBufferCapacity), 0, &data);
+        memcpy(data, &pvsBufferCapacity, sizeof(pvsBufferCapacity));
+        vkUnmapMemory(logicalDevice, pvsCapacityUniformMemory[0]);
+    }
 
     /*
     CUDAUtil::createExternalBuffer(
@@ -994,30 +1029,33 @@ void VisibilityManager::initRayTracing(
 
     createCommandBuffers();
     createDescriptorPool();
+
     createDescriptorSetLayout();
     createABSDescriptorSetLayout();
     createEdgeSubdivDescriptorSetLayout();
     createComputeDescriptorSetLayout();
+    createHaltonComputeDescriptorSetLayout();
 
     descriptorSet.resize(numThreads);
     descriptorSetABS.resize(numThreads);
     descriptorSetEdgeSubdiv.resize(numThreads);
     descriptorSetCompute.resize(numThreads);
+    descriptorSetHaltonCompute.resize(numThreads);
     for (int i = 0; i < numThreads; i++) {   // TODO: Cleanup
-        std::array<VkDescriptorSetLayout, 4> d = {
+        std::array<VkDescriptorSetLayout, 5> d = {
             descriptorSetLayout, descriptorSetLayoutABS, descriptorSetLayoutEdgeSubdiv,
-            descriptorSetLayoutCompute
+            descriptorSetLayoutCompute, descriptorSetLayoutHaltonCompute
         };
         VkDescriptorSetAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 4;
+        allocInfo.descriptorSetCount = 5;
         allocInfo.pSetLayouts = d.data();
 
         // Allocate descriptor sets
-        std::array<VkDescriptorSet, 4> dd = {
+        std::array<VkDescriptorSet, 5> dd = {
             descriptorSet[i], descriptorSetABS[i], descriptorSetEdgeSubdiv[i],
-            descriptorSetCompute[i]
+            descriptorSetCompute[i], descriptorSetHaltonCompute[i]
         };
         if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, dd.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets");
@@ -1026,6 +1064,7 @@ void VisibilityManager::initRayTracing(
         descriptorSetABS[i] = dd[1];
         descriptorSetEdgeSubdiv[i] = dd[2];
         descriptorSetCompute[i] = dd[3];
+        descriptorSetHaltonCompute[i] = dd[4];
     }
 
     for (int i = 0; i < numThreads; i++) {
@@ -1047,10 +1086,11 @@ void VisibilityManager::initRayTracing(
     createShaderBindingTable(shaderBindingTableEdgeSubdiv, shaderBindingTableMemoryEdgeSubdiv, pipelineEdgeSubdiv);
 
     for (int i = 0; i < numThreads; i++) {
-        //createComputeDescriptorSets(i);
+        createHaltonComputeDescriptorSets(i);
     }
+
     createComputePipeline();
-    //createShaderBindingTable(shaderBindingTableCompute, shaderBindingTableMemoryCompute, pipelineCompute);
+    createHaltonComputePipeline();
 
     // Calculate shader binding offsets
     bindingOffsetRayGenShader = rayTracingProperties.shaderGroupHandleSize * RT_SHADER_INDEX_RAYGEN;
@@ -1368,7 +1408,7 @@ void VisibilityManager::createDescriptorPool() {
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 4 * numThreads;
+    poolInfo.maxSets = 5 * numThreads;
 
     if (vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create rt descriptor pool");
@@ -1557,6 +1597,93 @@ void VisibilityManager::createComputePipeline() {
         ) != VK_SUCCESS
     ) {
         throw std::runtime_error("failed to create compute pipeline");
+    }
+}
+
+void VisibilityManager::createHaltonComputeDescriptorSets(int threadId) {
+    std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
+
+    VkDescriptorBufferInfo haltonPointsBufferInfo = {};
+    haltonPointsBufferInfo.buffer = haltonPointsBuffer[threadId];
+    haltonPointsBufferInfo.offset = 0;
+    haltonPointsBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = descriptorSetHaltonCompute[threadId];
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].pBufferInfo = &haltonPointsBufferInfo;
+
+    vkUpdateDescriptorSets(
+        logicalDevice,
+        static_cast<uint32_t>(descriptorWrites.size()),
+        descriptorWrites.data(),
+        0,
+        VK_NULL_HANDLE
+    );
+}
+
+void VisibilityManager::createHaltonComputeDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding haltonPointsBinding = {};
+    haltonPointsBinding.binding = 0;
+    haltonPointsBinding.descriptorCount = 1;
+    haltonPointsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    haltonPointsBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 1> bindings = {
+        haltonPointsBinding
+    };
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(
+            logicalDevice, &layoutInfo, nullptr, &descriptorSetLayoutHaltonCompute
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create descriptor set layout Halton compute");
+    }
+}
+
+void VisibilityManager::createHaltonComputePipeline() {
+    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
+    pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    pipelineShaderStageCreateInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/halton.comp.spv");
+    pipelineShaderStageCreateInfo.pName = "main";
+
+    std::array<VkPushConstantRange, 2> pushConstantRanges = {};
+    pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRanges[0].size = sizeof(int);
+    pushConstantRanges[0].offset = 0;
+    pushConstantRanges[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRanges[1].size = sizeof(int);
+    pushConstantRanges[1].offset = sizeof(int);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayoutHaltonCompute;
+    pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
+    pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
+    if (vkCreatePipelineLayout(
+            logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineHaltonComputeLayout
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create halton compute pipeline layout");
+    }
+
+    VkComputePipelineCreateInfo computePipelineCreateInfo = {};
+    computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    computePipelineCreateInfo.stage = pipelineShaderStageCreateInfo;
+    computePipelineCreateInfo.layout = pipelineHaltonComputeLayout;
+
+    if (vkCreateComputePipelines(
+            logicalDevice, 0, 1, &computePipelineCreateInfo, nullptr, &pipelineHaltonCompute
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create halton compute pipeline");
     }
 }
 
@@ -2479,7 +2606,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             // Generate new Halton points
             start = std::chrono::steady_clock::now();
-            CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
+            //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
+            generateHaltonSequence(RAYS_PER_ITERATION, RAYS_PER_ITERATION * (i + 1));
             end = std::chrono::steady_clock::now();
             haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         } else {
@@ -2652,7 +2780,6 @@ VkBuffer VisibilityManager::getPVSIndexBuffer(
 void VisibilityManager::fetchPVS() {
     // Copy the intersected triangles GPU buffer to the host buffer
     VkDeviceSize bufferSize = sizeof(int) * pvsBufferCapacity;
-    std::cout << "fetch " << pvsBufferCapacity << std::endl;
 
     VkBuffer hostBuffer;
     VkDeviceMemory hostBufferMemory;
@@ -2718,6 +2845,7 @@ void VisibilityManager::createCommandBuffers() {
     commandBufferABS.resize(numThreads);
     commandBufferEdgeSubdiv.resize(numThreads);
     commandBufferCompute.resize(numThreads);
+    commandBufferHaltonCompute.resize(numThreads);
     commandBufferFence.resize(numThreads);
 
     for (int i = 0; i < numThreads; i++) {
@@ -2741,6 +2869,10 @@ void VisibilityManager::createCommandBuffers() {
 
         if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBufferCompute[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffer compute!");
+        }
+
+        if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBufferHaltonCompute[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate command buffer Halton compute!");
         }
 
         // Create fence used to wait for command buffer execution completion after submitting them

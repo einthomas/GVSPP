@@ -164,11 +164,12 @@ void findNewTriangles(
     }
 }
 
-__global__ void haltonKernel(float *sequence, int startIndex) {
+__global__ void haltonKernel(int n, float *sequence, int startIndex) {
     int offset = blockIdx.x * blockDim.x + threadIdx.x;
-    int bases[4] = { 2, 3, 5, 7 };
+    if (offset < n) {
+        int i = threadIdx.y;
+        int bases[4] = { 2, 3, 5, 7 };
 
-    for (int i = 0; i < 4; i++) {
         float f = 1.0f;
         float r = 0.0f;
         int k = startIndex + offset + 1;
@@ -182,10 +183,25 @@ __global__ void haltonKernel(float *sequence, int startIndex) {
 }
 
 void CUDAUtil::generateHaltonSequence(int n, float *sequence, int startIndex) {
-    int blockSize = 256;
-    int numBlocks = (n + blockSize - 1) / blockSize;
-    haltonKernel<<<numBlocks, blockSize>>>(sequence, startIndex);
+    /*
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    */
+
+    dim3 blockSize(256, 4, 1);
+    dim3 numBlocks(((n / 4.0f) + blockSize.x - 1) / blockSize.x, 1, 1);
+    haltonKernel<<<numBlocks, blockSize>>>(n, sequence, startIndex);
     cudaDeviceSynchronize();
+
+    /*
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("CUDA HALTON %f\n", milliseconds);
+    */
 }
 
 // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.

@@ -68,7 +68,7 @@ struct QueueFamilyIndices {
     }
 };
 
-const bool enableValidationLayers = true;
+const bool enableValidationLayers = false;
 
 class GLFWVulkanWindow {
 public:
