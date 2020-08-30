@@ -890,7 +890,7 @@ void VulkanRenderer::startNextFrame(
             commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
             (std::array<VkBool32, 1> { shadedRendering }).data()
         );
-        vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices.size()), 1, 0, 0);
+        vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices[currentViewCellIndex].size()), 1, 0, 0);
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -924,6 +924,12 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+    if (
+        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays
+    ) {
+        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+    }
     std::cout
         << "View cell " << currentViewCellIndex << ": "
         << pvsTriangleIDs[currentViewCellIndex].size() << "/" << int(indices.size() / 3.0f)
@@ -1195,7 +1201,7 @@ void VulkanRenderer::startVisibilityThread() {
                         attrib.normals[3 * index.normal_index + 1],
                         attrib.normals[3 * index.normal_index + 2]
                     };
-                    vertex.color = { 0.0f, 0.0f, 0.0f };
+                    vertex.color = { 1.0f, 1.0f, 1.0f };
 
                     viewCellGeomtryVertices.push_back(vertex);
                 }
@@ -1221,7 +1227,7 @@ void VulkanRenderer::startVisibilityThread() {
         visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
         || visibilityManager->visualizeEdgeSubdivRays
     ) {
-        createVertexBuffer(visibilityManager->rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
-        updateVertexBuffer(visibilityManager->rayVertices, rayVertexBuffer, shadedVertexBufferMemory);
+        createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
     }
 }

@@ -49,7 +49,7 @@ class VisibilityManager {
 public:
     std::vector<ViewCell> viewCells;
     PVS<int> pvs;
-    std::vector<Vertex> rayVertices;
+    std::vector<std::vector<Vertex>> rayVertices;
     bool visualizeRandomRays = false;
     bool visualizeABSRays = false;
     bool visualizeEdgeSubdivRays = false;
@@ -99,7 +99,7 @@ private:
 
     const int RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 20000;
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 200;
     const int MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -298,7 +298,7 @@ private:
     void resizePVSBuffer(int newSize);
     void generateHaltonSequence(int n, int startIndex);
 
-    ShaderExecutionInfo randomSample(int numRays, int threadId);
-    ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId);
-    ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId);
+    ShaderExecutionInfo randomSample(int numRays, int threadId, int viewCellIndex);
+    ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId, int viewCellIndex);
+    ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId, int viewCellIndex);
 };

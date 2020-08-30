@@ -567,7 +567,7 @@ void GLFWVulkanWindow::mainLoop() {
 
         glfwPollEvents();
 
-        float cameraSpeed = 200.0f * deltaTime;
+        float cameraSpeed = 20.0f * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             renderer->cameraPos += cameraSpeed * renderer->cameraForward;
         }

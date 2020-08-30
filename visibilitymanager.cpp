@@ -61,6 +61,7 @@ VisibilityManager::VisibilityManager(
     for (auto m : viewCellMatrices) {
         addViewCell(m);
     }
+    rayVertices.resize(viewCells.size());
 
     if (GPU_SET_TYPE == 0) {
         // PVS size when a GPU SET is used. Has to be equal to the number of triangles in the scene
@@ -397,8 +398,10 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
                 queueSubmitMutex
             );
 
+            /*
             std::cout << "fetch" << std::endl;
             fetchPVS();
+            */
         }
 
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
@@ -427,8 +430,10 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
         VK_NULL_HANDLE
     );
 
+    /*
     std::cout << "fetch" << std::endl;
     fetchPVS();
+    */
 
     vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
     vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
@@ -1960,7 +1965,7 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer, int threa
     );
 }
 
-ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
+ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, int viewCellIndex) {
     // Reset atomic triangle counter
     {
         VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
@@ -2057,15 +2062,15 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId) {
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         for (int i = 0; i < numTriangles; i++) {
-            rayVertices.push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
-            rayVertices.push_back({s[i].hitPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f)});
+            rayVertices[viewCellIndex].push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
+            rayVertices[viewCellIndex].push_back({s[i].hitPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f)});
         }
     }
 
     return { numTriangles, 0, (unsigned int) numRays, 0 };
 }
 
-ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sample> &triangles, int threadId) {
+ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sample> &triangles, int threadId, int viewCellIndex) {
     // Copy triangles vector to GPU accessible buffer
     {
         VkDeviceSize bufferSize = sizeof(triangles[0]) * triangles.size();
@@ -2202,21 +2207,22 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         // Visualize ABS rays
         for (int i = 0; i < triangles.size() * NUM_ABS_SAMPLES; i++) {
             if (s[i].triangleID != -1) {
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)
                 });
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].hitPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f)
                 });
+
             }
         }
         // Visualize ABS RS rays
         for (int i = triangles.size() * NUM_ABS_SAMPLES; i < triangles.size() * NUM_ABS_SAMPLES + numRsRays; i++) {
             if (s[i].triangleID != -1) {
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f)
                 });
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].hitPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f)
                 });
             }
@@ -2240,7 +2246,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     //return triangles.size() * 9 * 2;
 }
 
-ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadId) {
+ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadId, int viewCellIndex) {
     // Reset atomic triangle counter
     {
         VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
@@ -2352,15 +2358,14 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
         Sample *s = (Sample*)edgeSubdivOutputPointer[0];
         for (int i = 0; i < numTriangles + numRsTriangles; i++) {
             if (s[i].triangleID != -1) {
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(0.0f)
                 });
-                rayVertices.push_back({
+                rayVertices[viewCellIndex].push_back({
                     s[i].hitPos, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(0.0f)
                 });
             }
         }
-        std::cout<<std::endl;
     }
 
     /*
@@ -2425,6 +2430,7 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
 void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex) {
     updateViewCellBuffer(viewCellIndex);
     resetPVSGPUBuffer();
+    resetAtomicBuffers();
     //gpuHashSet->reset();
     statistics.reset();
 
@@ -2446,7 +2452,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         // Execute random sampling
         statistics.startOperation(RANDOM_SAMPLING);
-        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId);
+        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
         statistics.endOperation(RANDOM_SAMPLING);
 
         statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
@@ -2519,7 +2525,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
 
             statistics.startOperation(ADAPTIVE_BORDER_SAMPLING);
-            ShaderExecutionInfo absInfo = adaptiveBorderSample(absWorkingVector, threadId);
+            ShaderExecutionInfo absInfo = adaptiveBorderSample(absWorkingVector, threadId, viewCellIndex);
             statistics.endOperation(ADAPTIVE_BORDER_SAMPLING);
 
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
@@ -2567,7 +2573,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.update();
 
             // Execute edge subdivision
-            std::cout << absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES << " vs " << (size_t)MAX_TRIANGLE_COUNT - pvsSize << std::endl;
             potentialNewTriangles = std::min(
                 absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
                 (size_t)MAX_TRIANGLE_COUNT - pvsSize
@@ -2577,7 +2582,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
 
             statistics.startOperation(EDGE_SUBDIVISION);
-            ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId);
+            ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId, viewCellIndex);
             statistics.endOperation(EDGE_SUBDIVISION);
 
             statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
@@ -2842,31 +2847,8 @@ void VisibilityManager::fetchPVS() {
         }
     }
 
-    /*
-    std::sort(pvs.pvsVector.begin(), pvs.pvsVector.end());
-    std::cout <<  "fetched: ";
-    for (auto a : pvs.pvsVector) {
-        std::cout << a << " ";
-    }
-    std::cout << std::endl << std::endl;
-
-    std::cout << "pvs.pvsVector.size() " << pvs.pvsVector.size() << std::endl;
-    */
-
     vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
     vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
-
-    /*
-    int *pvsArray = new int[gpuHashSet->capacity];
-    cudaMemcpy(pvsArray, gpuHashSet->hashSet, sizeof(int) * gpuHashSet->capacity, cudaMemcpyDeviceToHost);
-    pvsSize = 0;
-    for (int i = 0; i < gpuHashSet->capacity; i++) {
-        if (pvsArray[i] != -1) {
-            pvs.pvsVector.push_back(pvsArray[i]);
-            pvsSize++;
-        }
-    }
-    */
 }
 
 void VisibilityManager::createCommandBuffers() {

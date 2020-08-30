@@ -227,6 +227,7 @@ void main() {
         // Reverse sampling
         if (!pointBehindViewCell) {
             
+            
             Sample foundSample;
             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
                 bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
@@ -240,6 +241,7 @@ void main() {
                 }
                 absOutput[launchIndex].triangleID = -2;
             }
+            
             
 
 
