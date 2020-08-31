@@ -1,7 +1,10 @@
-int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint, out Sample foundSample) {
-    int foundSampleIndex = -1;
+bool reverseSampling(uint launchIndex, const vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, vec3 samplePos, vec3 hitPoint, out Sample foundSample) {
+    bool discontinuityFound = false;
     const float samplePointDistance = length(samplePos - rayOrigin);
     if (occludingTriangleID == -1 || samplePointDistance - length(hitPoint - rayOrigin) > 0.985) {
+        foundSample.triangleID = -2;
+        discontinuityFound = true;
+
         // Get view cell coordinate system
         vec3 viewCellSize = vec3(
             length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
@@ -103,22 +106,15 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
 
             int triangleID = int(hitInfo.w);
             if (triangleID != -1) { //&& isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
-                vec3 faceNormal = (
-                    unpackVertexData(indices.i[3 * triangleID]).normal
-                    + unpackVertexData(indices.i[3 * triangleID + 1]).normal
-                    + unpackVertexData(indices.i[3 * triangleID + 2]).normal
-                ) / 3.0f;
-                if (dot(rayDirNew, faceNormal) < 0.0f) {
-                    uint index = storeReverseSample(
-                        launchIndex,
-                        Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos),
-                        samplePos
-                    );
-                    //if (length(hitInfo.xyz - samplePos) < 0.01) {
-                    if (length(hitInfo.xyz - rayOrigin) - samplePointDistance > 0.0f) {
-                        foundSampleIndex = int(index);
-                    }
+                bool targetSampleReached = (length(hitInfo.xyz - rayOrigins[i]) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
+                if (targetSampleReached) {
+                    foundSample = Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos);
                 }
+                int index = storeReverseSample(
+                    launchIndex,
+                    Sample(triangleID, rayOrigins[i], hitInfo.xyz, samplePos),
+                    targetSampleReached
+                );
             }
         }
         #ifdef USE_3D_VIEW_CELL
@@ -126,5 +122,5 @@ int reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occluding
         #endif
     }
 
-    return foundSampleIndex;
+    return discontinuityFound;
 }

@@ -111,7 +111,7 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
 
                             int triangleID = int(hitInfo.w);
                             if (triangleID != -1) { // && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
-                                bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance > 0.0f) && (foundSample.triangleID == -2);
+                                bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                                 if (targetSampleReached) {
                                     foundSample = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
                                 }
@@ -120,11 +120,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
                                     Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
                                     targetSampleReached
                                 );
-                                
-                                if (index != -1) {
-                                //if (length(hitInfo.xyz - rayOrigin) - samplePointDistance > 0.0f) {
-                                    //foundSampleIndex = index;
-                                }
                             }
                         }
                     }
