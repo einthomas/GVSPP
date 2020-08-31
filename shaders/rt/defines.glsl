@@ -1,2 +1,3 @@
 #define REVERSE_SAMPLING_METHOD 2
-#define SET_TYPE 1
+#define SET_TYPE 0
+#define USE_3D_VIEW_CELL

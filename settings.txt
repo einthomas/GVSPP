@@ -38,11 +38,12 @@ MAX_BULK_INSERT_BUFFER_SIZE 1000000
     INITIAL_HASH_SET_SIZE has to be a power of 2
     If this is set to 0, the initial hash set size is equal to 2^(ceil(log2(number_of_triangles_in_scene / 2)))
 */
-INITIAL_HASH_SET_SIZE 2
+INITIAL_HASH_SET_SIZE 0
 
-USE_3D_VIEW_CELL false
+USE_3D_VIEW_CELL true
+
 
 --- SCENE ---
 CALCPVS pvs.txt
-CANYON
+CITY_NEW
 0

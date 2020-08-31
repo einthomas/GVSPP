@@ -44,9 +44,9 @@ BBB models/quad/cube.obj
 0 0 -1
 
 CITY_NEW models/citynew/citynew.obj
-70 3 300
-150 50 0
-0 90 0
+30 3 150
+40 50 150
+0 0 0
 
 30 3 150
 40 50 150

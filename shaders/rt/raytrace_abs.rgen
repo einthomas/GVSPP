@@ -67,7 +67,6 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
     int index = -1;
-
     if (targetSampleReached) {
         if (insert(absOutput[launchIndex].triangleID)) {
             index = int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1));
@@ -79,23 +78,7 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
             absOutput[int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1))] = s;
         }
     }
-
-    /*
-    if (length(s.rayHitPos - targetSamplePos) < 0.01) {
-        triangleIDOutput[index] = absOutput[launchIndex].triangleID;
-        absOutput[index] = absOutput[launchIndex];
-
-        triangleIDOutput[launchIndex] = s.triangleID;
-        absOutput[launchIndex] = s;
-    } else {
-        triangleIDOutput[index] = s.triangleID;
-        absOutput[index] = s;
-    }
-    */
-
-    //triangleIDOutput[index] = s.triangleID;
-    //absOutput[index] = s;
-
+    
     return index;
 }
 
@@ -195,18 +178,6 @@ void main() {
         vec3 hitPoint = hitInfo.xyz;
         bool pointBehindViewCell = false;
         #ifdef USE_3D_VIEW_CELL
-            if (triangleID != -1) {
-                vec3 faceNormal = vec3(
-                    unpackVertexData(indices.i[3 * triangleID]).normal
-                    + unpackVertexData(indices.i[3 * triangleID + 1]).normal
-                    + unpackVertexData(indices.i[3 * triangleID + 2]).normal
-                ) / 3.0f;
-                if (dot(rayDir, faceNormal) >= 0.0f) {
-                    triangleID = -1;
-                    pointBehindViewCell = true;
-                }
-            }
-
             //triangleIDOutput[launchIndex] = triangleID;
             absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
             if (triangleID != -1) {
