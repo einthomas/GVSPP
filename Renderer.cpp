@@ -92,12 +92,22 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
+
+    int reverseSamplingMethod = std::stoi(se.at("REVERSE_SAMPLING_METHOD"));
+    int numReverseSamplingSamples = 2;
+    if (reverseSamplingMethod == 1) {
+        numReverseSamplingSamples = 15;
+    } else if (reverseSamplingMethod == 2) {
+        std::stoi(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 3;
+    }
     visibilityManager = new VisibilityManager(
         se.at("USE_TERMINATION_CRITERION") == "true",
         std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
         std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),
-        std::stoi(se.at("MAX_SUBDIVISION_STEPS")),
+        std::stoi(se.at("ABS_MAX_SUBDIVISION_STEPS")),
+        std::stoi(se.at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+        numReverseSamplingSamples,
         std::stoi(se.at("MAX_BULK_INSERT_BUFFER_SIZE")),
         std::stoi(se.at("SET_TYPE")),
         std::stoi(se.at("INITIAL_HASH_SET_SIZE")),
@@ -1080,6 +1090,10 @@ Settings VulkanRenderer::loadSettingsFile() {
 
     std::ofstream shaderDefinesFile;
     shaderDefinesFile.open("shaders/rt/defines.glsl");
+    shaderDefinesFile << "const float ABS_DELTA = " << se.at("ABS_DELTA") << ";\n";
+    shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se.at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
+    shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se.at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
     shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se.at("REVERSE_SAMPLING_METHOD") << "\n";
     shaderDefinesFile << "#define SET_TYPE " << se.at("SET_TYPE") << "\n";
     if (se.at("USE_3D_VIEW_CELL") == "true") {

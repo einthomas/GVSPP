@@ -67,7 +67,6 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 #include "gpuHashSet.glsl"
 
 const float SAMPLE_DISTANCE_THRESHOLD = 0.001;
-const int MAX_SUBDIVISION_STEPS = 3;
 uint tracedRays = 0;
 
 int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
@@ -93,7 +92,7 @@ uint tracedRsRays = 0;
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
     const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));
-    const int numSamplesPerEdge = int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
+    const int numSamplesPerEdge = int(pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1);
 
     #if REVERSE_SAMPLING_METHOD == 1
         Sample originalSample = absWorking[currentTriangleIndex];
@@ -115,6 +114,8 @@ void main() {
     if (insert(s1.triangleID)) {
         edgeSubdivOutput[atomicAdd(triangleCounter, 1)] = s1;
     }
+
+    return;
 
     // Only subdivide the edge between two adjacent samples if they correspond to
     // different triangles
@@ -163,7 +164,7 @@ void main() {
         samplesOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
 
         vec3 offset = (samplesOutput[numSamplesPerEdge - 1].pos - samplesOutput[0].pos) / 2.0f;
-        for (int k = 0; k < MAX_SUBDIVISION_STEPS - 1; k++) {
+        for (int k = 0; k < ABS_MAX_SUBDIVISION_STEPS - 1; k++) {
             offset /= 2.0f;
 
             // Continue subdivision only if the distance of the new samples are

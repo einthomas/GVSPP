@@ -89,17 +89,15 @@ uint tracedRsRays = 0;
     #include "reverse_sampling_new.rgen"
 #endif
 
-const float DELTA = 0.0001f;
-
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));   // for each triangle 15 rays are shot i.e. for each triangle the shader is invoked 15 times
+    const uint currentTriangleIndex = uint(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE * 3)));   // for each triangle 15 rays are shot i.e. for each triangle the shader is invoked 15 times
 
-    const uint currentVertexIndex = uint(mod(floor(launchIndex / 5.0), 3.0));
+    const uint currentVertexIndex = uint(mod(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE)), 3.0));
     const uint nextVertexIndex = uint(mod(currentVertexIndex + 1, 3));
 
-    const uint currentVertexSamplePosIndex = uint(mod(launchIndex, 5));
-    const uint nextVertexSamplePosIndex = uint(mod(currentVertexSamplePosIndex + 1, 5));
+    const uint currentVertexSamplePosIndex = uint(mod(launchIndex, ABS_NUM_SAMPLES_PER_EDGE));
+    const uint nextVertexSamplePosIndex = uint(mod(currentVertexSamplePosIndex + 1, ABS_NUM_SAMPLES_PER_EDGE));
 
     Sample s = absWorking[currentTriangleIndex];
     Vertex v[3];
@@ -123,9 +121,9 @@ void main() {
         (v[currentVertexIndex].worldPos - v[nextVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[nextVertexIndex].worldPos)
     );
     vec3 samplePos = mix(
-        v[nextVertexIndex].worldPos + offsetB * DELTA,
-        v[currentVertexIndex].worldPos + offsetA * DELTA,
-        currentVertexSamplePosIndex / 5.0f
+        v[nextVertexIndex].worldPos + offsetB * ABS_DELTA,
+        v[currentVertexIndex].worldPos + offsetA * ABS_DELTA,
+        currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
     );
 
     vec3 rayDir = normalize(samplePos - rayOrigin);

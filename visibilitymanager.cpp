@@ -29,6 +29,8 @@ VisibilityManager::VisibilityManager(
     int NEW_TRIANGLE_TERMINATION_THRESHOLD,
     int RANDOM_RAYS_PER_ITERATION,
     int MAX_SUBDIVISION_STEPS,
+    int NUM_ABS_SAMPLES,
+    int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
     int MAX_BULK_INSERT_BUFFER_SIZE,
     int GPU_SET_TYPE,
     int INITIAL_HASH_SET_SIZE,
@@ -47,7 +49,9 @@ VisibilityManager::VisibilityManager(
     RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
-    MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
+    ABS_MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
+    NUM_ABS_SAMPLES(NUM_ABS_SAMPLES),
+    NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
     MAX_TRIANGLE_COUNT(indices.size()),
@@ -2498,7 +2502,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             if (GPU_SET_TYPE == 1) {
                 statistics.startOperation(GPU_HASH_SET_RESIZE);
                 int potentialNewTriangles = std::min(
-                    absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
+                    absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
                     (size_t)MAX_TRIANGLE_COUNT - pvsSize
                 );
                 if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {

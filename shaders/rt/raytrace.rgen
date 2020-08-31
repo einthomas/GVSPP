@@ -67,7 +67,6 @@ void main() {
     } else if (viewCellSize.y == 0.0f) {
         viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
     } else if (viewCellSize.z == 0.0f) {
-        //viewCellRight = -viewCellRight;
         viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
     }
     vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);

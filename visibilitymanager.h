@@ -59,7 +59,9 @@ public:
         int RAY_COUNT_TERMINATION_THRESHOLD,
         int NEW_TRIANGLE_TERMINATION_THRESHOLD,
         int RANDOM_RAYS_PER_ITERATION,
-        int MAX_SUBDIVISION_STEPS,
+        int ABS_MAX_SUBDIVISION_STEPS,
+        int NUM_ABS_SAMPLES,
+        int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
         int MAX_BULK_INSERT_BUFFER_SIZE,
         int GPU_SET_TYPE,
         int INITIAL_HASH_SET_SIZE,
@@ -91,16 +93,16 @@ private:
     const bool USE_TERMINATION_CRITERION;
     const int RAY_COUNT_TERMINATION_THRESHOLD;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
-    const int NUM_ABS_SAMPLES = 15;
-    const int NUM_REVERSE_SAMPLING_SAMPLES = 15;
+    const int NUM_ABS_SAMPLES;
+    const int NUM_REVERSE_SAMPLING_SAMPLES;
     const int MAX_BULK_INSERT_BUFFER_SIZE;
     const int MAX_TRIANGLE_COUNT;
     const int GPU_SET_TYPE;
 
     const int RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 30000;
-    const int MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
+    const int ABS_MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
