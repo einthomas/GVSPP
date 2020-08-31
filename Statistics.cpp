@@ -132,6 +132,11 @@ void Statistics::print() {
 
     printf("\n\n");
 
+    printf("Halton sequence generation time: %ims\n", elapsedTimes[HALTON_GENERATION]);
+    printf("GPU hash set resize: %ims\n", elapsedTimes[GPU_HASH_SET_RESIZE]);
+    printf("Total time: %ims\n", elapsedTimes[VISIBILITY_SAMPLING]);
+    printf("\n\n");
+
     setlocale(LC_NUMERIC, "en_US");
 }
 

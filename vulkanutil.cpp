@@ -172,16 +172,6 @@ std::vector<char> VulkanUtil::readBinaryFile(const std::string &filename) {
 }
 
 VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const std::string &filename) {
-    /*
-    QFile file(name);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning("Failed to read shader %s", qPrintable(name));
-        return VK_NULL_HANDLE;
-    }
-    QByteArray blob = file.readAll();
-    file.close();
-    */
-
     auto shaderCode = readBinaryFile(filename);
 
     VkShaderModuleCreateInfo shaderInfo = {};

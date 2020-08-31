@@ -92,10 +92,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 
     updateUniformBuffer(0);
     updateUniformBuffer(1);
-    bool USE_TERMINATION_CRITERION;
-    std::istringstream(se.at("USE_TERMINATION_CRITERION")) >> USE_TERMINATION_CRITERION;
     visibilityManager = new VisibilityManager(
-        USE_TERMINATION_CRITERION,
+        se.at("USE_TERMINATION_CRITERION") == "true",
         std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
         std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),

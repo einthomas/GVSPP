@@ -226,8 +226,6 @@ void main() {
 
         // Reverse sampling
         if (!pointBehindViewCell) {
-            
-            
             Sample foundSample;
             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
                 bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
@@ -241,33 +239,11 @@ void main() {
                 }
                 absOutput[launchIndex].triangleID = -2;
             }
-            
-            
-
-
-
-            /*
-            if (foundReverseSampleIndex >= 0) {
-                Sample s = absOutput[launchIndex];
-                //triangleIDOutput[launchIndex] = triangleIDOutput[foundReverseSampleIndex];
-                absOutput[launchIndex] = absOutput[foundReverseSampleIndex];
-                //triangleIDOutput[foundReverseSampleIndex] = s.triangleID;
-                absOutput[foundReverseSampleIndex] = s;
-            } else if (foundReverseSampleIndex == -1) {
-                uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
-                //triangleIDOutput[index] = triangleIDOutput[launchIndex];
-                absOutput[index] = absOutput[launchIndex];
-
-                //triangleIDOutput[launchIndex] = -2;
-                absOutput[launchIndex].triangleID = -2;
-            }
-            */
         }
         
         atomicAdd(rsRayCounter, tracedRsRays);
     #ifndef USE_3D_VIEW_CELL
         } else {
-            //triangleIDOutput[launchIndex] = -2;
             absOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
         }
     #endif

@@ -13,7 +13,10 @@ enum OPERATION_TYPE {
     ADAPTIVE_BORDER_SAMPLING = 2,
     ADAPTIVE_BORDER_SAMPLING_INSERT = 3,
     EDGE_SUBDIVISION = 4,
-    EDGE_SUBDIVISION_INSERT = 5
+    EDGE_SUBDIVISION_INSERT = 5,
+    HALTON_GENERATION = 6,
+    VISIBILITY_SAMPLING = 7,
+    GPU_HASH_SET_RESIZE = 8
 };
 
 class Statistics {
@@ -30,8 +33,8 @@ public:
 
 private:
     int samplesPerLine;
-    std::array<uint64_t, 6> elapsedTimes;
-    std::array<std::chrono::steady_clock::time_point, 6> startTimes;
+    std::array<uint64_t, 9> elapsedTimes;
+    std::array<std::chrono::steady_clock::time_point, 9> startTimes;
 };
 
 #endif // STATISTICS_H

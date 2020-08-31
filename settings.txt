@@ -10,11 +10,11 @@ SHADER_COMPILE_SCRIPT shaders\\compileShaders.bat
     rays have been traced or fewer than NEW_TRIANGLE_TERMINATION_THRESHOLD have been found after processing
     the adaptive border sampling queue
 */
-USE_TERMINATION_CRITERION false
+USE_TERMINATION_CRITERION true
 RAY_COUNT_TERMINATION_THRESHOLD 100000000
 NEW_TRIANGLE_TERMINATION_THRESHOLD 1
 
-RANDOM_RAYS_PER_ITERATION 100
+RANDOM_RAYS_PER_ITERATION 500000
 MAX_SUBDIVISION_STEPS 3
 
 /*
@@ -38,11 +38,11 @@ MAX_BULK_INSERT_BUFFER_SIZE 1000000
     INITIAL_HASH_SET_SIZE has to be a power of 2
     If this is set to 0, the initial hash set size is equal to 2^(ceil(log2(number_of_triangles_in_scene / 2)))
 */
-INITIAL_HASH_SET_SIZE 0
+INITIAL_HASH_SET_SIZE 2
 
-USE_3D_VIEW_CELL true
+USE_3D_VIEW_CELL false
 
 --- SCENE ---
 CALCPVS pvs.txt
-CITY_NEW
+CANYON
 0

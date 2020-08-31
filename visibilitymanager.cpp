@@ -289,7 +289,6 @@ void VisibilityManager::resetAtomicBuffers() {
 void VisibilityManager::resizePVSBuffer(int newSize) {
     std::cout << "Resize PVS GPU hash set: " << pvsBufferCapacity << " -> " << newSize << std::endl;
 
-
     // Copy PVS buffer to host
     VkDeviceSize bufferSize = sizeof(int) * pvsBufferCapacity;
 
@@ -2206,6 +2205,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         Sample *s = (Sample*)absOutputPointer[0];
         // Visualize ABS rays
         for (int i = 0; i < triangles.size() * NUM_ABS_SAMPLES; i++) {
+            //break;
             if (s[i].triangleID != -1) {
                 rayVertices[viewCellIndex].push_back({
                     s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)
@@ -2434,20 +2434,20 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     //gpuHashSet->reset();
     statistics.reset();
 
-    auto startTotal = std::chrono::steady_clock::now();
-    auto start = std::chrono::steady_clock::now();
-    auto end = std::chrono::steady_clock::now();
-    auto haltonTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
+    statistics.startOperation(VISIBILITY_SAMPLING);
     std::vector<Sample> absSampleQueue;
     size_t previousPVSSize;
     for (int i = 0; true; i++) {
         previousPVSSize = pvsSize;
 
         // Check GPU hash set size
-        int potentialNewTriangles = std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT - pvsSize);
-        if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-            resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+        if (GPU_SET_TYPE == 1) {
+            statistics.startOperation(GPU_HASH_SET_RESIZE);
+            int potentialNewTriangles = std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT - pvsSize);
+            if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
+                resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+            }
+            statistics.endOperation(GPU_HASH_SET_RESIZE);
         }
 
         // Execute random sampling
@@ -2496,7 +2496,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         statistics.entries.back().pvsSize = pvsSize;
         statistics.update();
 
-
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
@@ -2516,12 +2515,16 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
 
             // Execute ABS
-            int potentialNewTriangles = std::min(
-                absWorkingVector.size() * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES,
-                (size_t)MAX_TRIANGLE_COUNT - pvsSize
-            );
-            if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+            if (GPU_SET_TYPE == 1) {
+                statistics.startOperation(GPU_HASH_SET_RESIZE);
+                int potentialNewTriangles = std::min(
+                    absWorkingVector.size() * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES,
+                    (size_t)MAX_TRIANGLE_COUNT - pvsSize
+                );
+                if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
+                    resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+                }
+                statistics.endOperation(GPU_HASH_SET_RESIZE);
             }
 
             statistics.startOperation(ADAPTIVE_BORDER_SAMPLING);
@@ -2573,12 +2576,16 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.update();
 
             // Execute edge subdivision
-            potentialNewTriangles = std::min(
-                absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
-                (size_t)MAX_TRIANGLE_COUNT - pvsSize
-            );
-            if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+            if (GPU_SET_TYPE == 1) {
+                statistics.startOperation(GPU_HASH_SET_RESIZE);
+                int potentialNewTriangles = std::min(
+                    absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
+                    (size_t)MAX_TRIANGLE_COUNT - pvsSize
+                );
+                if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
+                    resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+                }
+                statistics.endOperation(GPU_HASH_SET_RESIZE);
             }
 
             statistics.startOperation(EDGE_SUBDIVISION);
@@ -2634,25 +2641,22 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
                 pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
+                statistics.endOperation(VISIBILITY_SAMPLING);
                 statistics.print();
                 break;
             }
 
             // Generate new Halton points
-            start = std::chrono::steady_clock::now();
             //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
+            statistics.startOperation(HALTON_GENERATION);
             generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, RANDOM_RAYS_PER_ITERATION * (i + 1));
-            end = std::chrono::steady_clock::now();
-            haltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            statistics.endOperation(HALTON_GENERATION);
         } else {
+            statistics.endOperation(VISIBILITY_SAMPLING);
             statistics.print();
             break;
         }
     }
-
-    auto endTotal = std::chrono::steady_clock::now();
-    std::cout << "Halton time: " << haltonTime << "microseconds" << std::endl;
-    //std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(endTotal - startTotal).count() << "ms" << std::endl;
 }
 
 void VisibilityManager::releaseResources() {
