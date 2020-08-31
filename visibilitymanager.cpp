@@ -2434,9 +2434,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     //gpuHashSet->reset();
     statistics.reset();
 
-    statistics.startOperation(VISIBILITY_SAMPLING);
     std::vector<Sample> absSampleQueue;
     size_t previousPVSSize;
+    statistics.startOperation(VISIBILITY_SAMPLING);
     for (int i = 0; true; i++) {
         previousPVSSize = pvsSize;
 

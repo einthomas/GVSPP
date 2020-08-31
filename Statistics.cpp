@@ -102,39 +102,39 @@ void Statistics::print() {
     );
     printf("\n\n");
 
-    auto randSum = elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT];
-    auto absSum = elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT];
-    auto esSum = elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT];
+    const float div = 1000000.0f;
+    auto randSum = (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT]) / div;
+    auto absSum = (elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT]) / div;
+    auto esSum = (elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
 
     printf("%14s%14s%14s\n", "Rand", "Rand Insert", "Total (ms)");
     printf(
-        "%14i%14i%14i\n", elapsedTimes[RANDOM_SAMPLING], elapsedTimes[RANDOM_SAMPLING_INSERT],
-        elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT], randSum
+        "%14.1f%14.1f%14.1f\n", elapsedTimes[RANDOM_SAMPLING]/ div,
+        elapsedTimes[RANDOM_SAMPLING_INSERT]/ div, randSum
     );
     printf("%14s%14s%14s\n", "ABS", "ABS Insert", "Total (ms)");
     printf(
-        "%14i%14i%14i\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING],
-        elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT], absSum
-
+        "%14.1f%14.1f%14.1f\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING] / div,
+        elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] / div, absSum
     );
     printf("%14s%14s%14s\n", "ES", "ES Insert", "Total (ms)");
     printf(
-        "%14i%14i%14i\n", elapsedTimes[EDGE_SUBDIVISION], elapsedTimes[EDGE_SUBDIVISION_INSERT],
-        esSum
+        "%14.1f%14.1f%14.1f\n", elapsedTimes[EDGE_SUBDIVISION] / div,
+        elapsedTimes[EDGE_SUBDIVISION_INSERT] / div, esSum
     );
     printf("%14s", "===\n");
     printf(
-        "%14i%14i%14i\n",
-        elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION],
-        elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT],
+        "%14.1f%14.1f%14.1f\n",
+        (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION]) / div,
+        (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div,
         randSum + absSum + esSum
     );
 
     printf("\n\n");
 
-    printf("Halton sequence generation time: %ims\n", elapsedTimes[HALTON_GENERATION]);
-    printf("GPU hash set resize: %ims\n", elapsedTimes[GPU_HASH_SET_RESIZE]);
-    printf("Total time: %ims\n", elapsedTimes[VISIBILITY_SAMPLING]);
+    printf("Halton sequence generation time: %.2fms\n", elapsedTimes[HALTON_GENERATION] / div);
+    printf("GPU hash set resize: %.2fms\n", elapsedTimes[GPU_HASH_SET_RESIZE] / div);
+    printf("Total time: %.2fms\n", elapsedTimes[VISIBILITY_SAMPLING] / div);
     printf("\n\n");
 
     setlocale(LC_NUMERIC, "en_US");
@@ -146,7 +146,7 @@ void Statistics::startOperation(OPERATION_TYPE operationType) {
 
 void Statistics::endOperation(OPERATION_TYPE operationType) {
     auto end = std::chrono::steady_clock::now();
-    elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTimes[operationType]).count();
+    elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::nanoseconds>(end - startTimes[operationType]).count();
 }
 
 int Statistics::getTotalTracedRays() {
