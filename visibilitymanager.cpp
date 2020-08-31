@@ -520,13 +520,9 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize haltonSize = sizeof(float) * RANDOM_RAYS_PER_ITERATION * 4;
 
-    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RANDOM_RAYS_PER_ITERATION;
-    //VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * RAYS_PER_ITERATION;
-
-    VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES;
-
-    //VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1);
-    VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES;
+    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
+    VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT;
+    VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
@@ -2373,53 +2369,51 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.endOperation(GPU_HASH_SET_RESIZE);
         }
 
-        for (int k = 0; k < 1; k++) {
-            // Execute random sampling
-            statistics.startOperation(RANDOM_SAMPLING);
-            ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
-            statistics.endOperation(RANDOM_SAMPLING);
+        // Execute random sampling
+        statistics.startOperation(RANDOM_SAMPLING);
+        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
+        statistics.endOperation(RANDOM_SAMPLING);
 
-            statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
-            statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
-            statistics.entries.back().rnsRays += randomSampleInfo.numRays;
+        statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
+        statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
+        statistics.entries.back().rnsRays += randomSampleInfo.numRays;
 
-            statistics.startOperation(RANDOM_SAMPLING_INSERT);
-            {
-                /*
-                std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(
-                    pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                    randomSampleInfo.numTriangles
-                );
-                */
-                /*
-                pvsSize = CUDAUtil::work2(
-                    gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                    randomSampleInfo.numTriangles
-                );
-                if (newSamples.size() > 0) {
-                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
-                }
-                */
+        statistics.startOperation(RANDOM_SAMPLING_INSERT);
+        {
+            /*
+            std::vector<Sample> newSamples;
+            pvsSize = CUDAUtil::work(
+                pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                randomSampleInfo.numTriangles
+            );
+            */
+            /*
+            pvsSize = CUDAUtil::work2(
+                gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                randomSampleInfo.numTriangles
+            );
+            if (newSamples.size() > 0) {
+                absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
             }
-            if (randomSampleInfo.numTriangles > 0) {
-                // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
-
-                // Copy the intersected triangles GPU buffer to the host buffer
-                VulkanUtil::copyBuffer(
-                    logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
-                    randomSamplingOutputHostBuffer[threadId], bufferSize
-                );
-
-                Sample *s = (Sample*)randomSamplingOutputPointer[0];
-                absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
-            }
-            statistics.endOperation(RANDOM_SAMPLING_INSERT);
-
-            statistics.entries.back().pvsSize = pvsSize;
-            statistics.update();
+            */
         }
+        if (randomSampleInfo.numTriangles > 0) {
+            // Copy intersected triangles from VRAM to CPU accessible buffer
+            VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
+
+            // Copy the intersected triangles GPU buffer to the host buffer
+            VulkanUtil::copyBuffer(
+                logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
+                randomSamplingOutputHostBuffer[threadId], bufferSize
+            );
+
+            Sample *s = (Sample*)randomSamplingOutputPointer[0];
+            absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
+        }
+        statistics.endOperation(RANDOM_SAMPLING_INSERT);
+
+        statistics.entries.back().pvsSize = pvsSize;
+        statistics.update();
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left

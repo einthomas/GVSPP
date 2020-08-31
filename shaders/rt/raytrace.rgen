@@ -133,10 +133,8 @@ void main() {
     );
     
     int triangleID = int(hitInfo.w);
-    if (triangleID != -1) {
-        if (insert(triangleID)) {
-            uint index = atomicAdd(triangleCounter, 1);
-            randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
-        }
+    if (triangleID != -1 && insert(triangleID)) {
+        uint index = atomicAdd(triangleCounter, 1);
+        randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
     }
 }
