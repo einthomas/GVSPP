@@ -46,7 +46,7 @@ layout(binding = 8, set = 0) buffer triangleCounterBuffer {
 layout(binding = 9, set = 0) buffer setBuffer {
     int set[];
 };
-layout(binding = 11, set = 0) uniform pvsBufferCapacity {
+layout(binding = 10, set = 0) uniform pvsBufferCapacity {
     int pvsCapacity;
 };
 
@@ -59,9 +59,6 @@ layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
 
 layout(binding = 0, set = 2) buffer edgeSubdivOutputBuffer {
     Sample edgeSubdivOutput[];
-};
-layout(binding = 1, set = 2) writeonly buffer edgeSubdivIDOutputBuffer {
-    int triangleIDOutput[];
 };
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;

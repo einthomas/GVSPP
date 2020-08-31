@@ -37,10 +37,7 @@ layout(binding = 9, set = 0) buffer setBuffer {
     int set[];
 };
 
-layout(binding = 10, set = 0) writeonly buffer randomSamplingOutputIDbuffer {
-    int randomSamplingOutputID[];
-};
-layout(binding = 11, set = 0) uniform pvsBufferCapacity {
+layout(binding = 10, set = 0) uniform pvsBufferCapacity {
     int pvsCapacity;
 };
 

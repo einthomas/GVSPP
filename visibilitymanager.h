@@ -99,7 +99,7 @@ private:
 
     const int RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 10000;
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 30000;
     const int MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -170,12 +170,8 @@ private:
     std::vector<VkDeviceMemory> viewCellBufferMemory;
     std::vector<VkBuffer> randomSamplingOutputBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputBufferMemory;
-    std::vector<VkBuffer> randomSamplingOutputIDBuffer;
-    std::vector<VkDeviceMemory> randomSamplingOutputIDBufferMemory;
     std::vector<VkBuffer> absOutputBuffer;
     std::vector<VkDeviceMemory> absOutputBufferMemory;
-    std::vector<VkBuffer> absIDOutputBuffer;
-    std::vector<VkDeviceMemory> absIDOutputBufferMemory;
     std::vector<VkBuffer> absWorkingBuffer;
     std::vector<VkDeviceMemory> absWorkingBufferMemory;
     std::vector<VkBuffer> absOutputHostBuffer;
@@ -183,8 +179,6 @@ private:
     std::vector<void*> absOutputPointer;
     std::vector<VkBuffer> edgeSubdivOutputBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputBufferMemory;
-    std::vector<VkBuffer> edgeSubdivIDOutputBuffer;
-    std::vector<VkDeviceMemory> edgeSubdivIDOutputBufferMemory;
     std::vector<VkBuffer> edgeSubdivOutputHostBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputHostBufferMemory;
     std::vector<void*> edgeSubdivOutputPointer;
@@ -193,8 +187,6 @@ private:
     std::vector<VkBuffer> randomSamplingOutputHostBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputHostBufferMemory;
     std::vector<void*> randomSamplingOutputPointer;
-    std::vector<VkBuffer> triangleIDTempBuffer;
-    std::vector<VkDeviceMemory> triangleIDTempBufferMemory;
 
     std::vector<VkBuffer> pvsBulkInsertBuffer;
     std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
@@ -217,16 +209,6 @@ private:
     cudaExternalMemory_t absOutputCudaMemory = {};
     Sample *edgeSubdivOutputCuda;
     cudaExternalMemory_t edgeSubdivOutputCudaMemory = {};
-
-    int *randomSamplingIDOutputCuda;
-    cudaExternalMemory_t randomSamplingIDOutputCudaMemory = {};
-    int *absIDOutputCuda;
-    cudaExternalMemory_t absIDOutputCudaMemory = {};
-    int *edgeSubdivIDOutputCuda;
-    cudaExternalMemory_t edgeSubdivIDOutputCudaMemory = {};
-
-    int *triangleIDTempCuda;        // TODO: Remove
-    cudaExternalMemory_t triangleIDTempCudaMemory = {};
 
     VkBuffer pvsVisualizationBuffer;
     VkDeviceMemory pvsVisualizationBufferMemory;

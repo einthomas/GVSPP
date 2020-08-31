@@ -473,8 +473,6 @@ void VisibilityManager::generateHaltonSequence(int n, int startIndex) {
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     randomSamplingOutputBuffer.resize(numThreads);
     randomSamplingOutputBufferMemory.resize(numThreads);
-    randomSamplingOutputIDBuffer.resize(numThreads);
-    randomSamplingOutputIDBufferMemory.resize(numThreads);
     randomSamplingOutputHostBuffer.resize(numThreads);
     randomSamplingOutputHostBufferMemory.resize(numThreads);
 
@@ -483,8 +481,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     absOutputBuffer.resize(numThreads);
     absOutputBufferMemory.resize(numThreads);
-    absIDOutputBuffer.resize(numThreads);
-    absIDOutputBufferMemory.resize(numThreads);
     absOutputHostBuffer.resize(numThreads);
     absOutputHostBufferMemory.resize(numThreads);
 
@@ -493,8 +489,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     edgeSubdivOutputBuffer.resize(numThreads);
     edgeSubdivOutputBufferMemory.resize(numThreads);
-    edgeSubdivIDOutputBuffer.resize(numThreads);
-    edgeSubdivIDOutputBufferMemory.resize(numThreads);
     edgeSubdivOutputHostBuffer.resize(numThreads);
     edgeSubdivOutputHostBufferMemory.resize(numThreads);
 
@@ -511,9 +505,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     testHostBufferMemory.resize(numThreads);
     testPointer.resize(numThreads);
 
-    triangleIDTempBuffer.resize(numThreads);
-    triangleIDTempBufferMemory.resize(numThreads);
-
     viewCellBuffer.resize(numThreads);
     viewCellBufferMemory.resize(numThreads);
 
@@ -524,7 +515,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     pvsCapacityUniformMemory.resize(numThreads);
 
     // Random sampling buffers
-    const int MAX_TRIANGLE_COUNT = indices.size();
     //VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
     VkDeviceSize pvsSize = sizeof(int) * pvsBufferCapacity;
 
@@ -532,14 +522,11 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * RANDOM_RAYS_PER_ITERATION;
     //VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * RAYS_PER_ITERATION;
-    VkDeviceSize randomSamplingOutputIDBufferSize = sizeof(int) * MAX_TRIANGLE_COUNT;
 
     VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES;
-    VkDeviceSize absIDOutputBufferSize = sizeof(int) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES;
 
     //VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1);
     VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES;
-    VkDeviceSize edgeSubdivIDOutputBufferSize = sizeof(int) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * (std::pow(2, MAX_SUBDIVISION_STEPS) - 1) * 1;
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
@@ -556,12 +543,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, randomSamplingOutputBuffer[i],
             randomSamplingOutputBufferMemory[i], logicalDevice, physicalDevice
-        );
-        CUDAUtil::createExternalBuffer(
-            randomSamplingOutputIDBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, randomSamplingOutputIDBuffer[i],
-            randomSamplingOutputIDBufferMemory[i], logicalDevice, physicalDevice
         );
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -592,12 +573,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, absOutputBuffer[i],
             absOutputBufferMemory[i], logicalDevice, physicalDevice
         );
-        CUDAUtil::createExternalBuffer(
-            absIDOutputBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, absIDOutputBuffer[i],
-            absIDOutputBufferMemory[i], logicalDevice, physicalDevice
-        );
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, absOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, absOutputHostBuffer[i], absOutputHostBufferMemory[i],
@@ -626,12 +601,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivOutputBuffer[i],
             edgeSubdivOutputBufferMemory[i], logicalDevice, physicalDevice
-        );
-        CUDAUtil::createExternalBuffer(
-            edgeSubdivIDOutputBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivIDOutputBuffer[i],
-            edgeSubdivIDOutputBufferMemory[i], logicalDevice, physicalDevice
         );
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -754,19 +723,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
     );
 
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&randomSamplingIDOutputCuda, randomSamplingIDOutputCudaMemory,
-        randomSamplingOutputIDBufferMemory[0], randomSamplingOutputIDBufferSize, logicalDevice
-    );
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&absIDOutputCuda, absIDOutputCudaMemory,
-        absIDOutputBufferMemory[0], absIDOutputBufferSize, logicalDevice
-    );
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&edgeSubdivIDOutputCuda, edgeSubdivIDOutputCudaMemory,
-        edgeSubdivIDOutputBufferMemory[0], edgeSubdivIDOutputBufferSize, logicalDevice
-    );
-
     // Reset atomic counters
     {
         VkDeviceSize bufferSize = sizeof(unsigned int) * 5;
@@ -818,7 +774,7 @@ void VisibilityManager::createDescriptorSets(
     }
     */
 
-    std::array<VkWriteDescriptorSet, 12> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 11> descriptorWrites = {};
 
     VkWriteDescriptorSetAccelerationStructureNV asWriteInfo = {};
     asWriteInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
@@ -930,27 +886,16 @@ void VisibilityManager::createDescriptorSets(
     descriptorWrites[9].descriptorCount = 1;
     descriptorWrites[9].pBufferInfo = &testBufferInfo;
 
-    VkDescriptorBufferInfo randomSamplingOutputIDBufferInfo = {};
-    randomSamplingOutputIDBufferInfo.buffer = randomSamplingOutputIDBuffer[threadId];
-    randomSamplingOutputIDBufferInfo.offset = 0;
-    randomSamplingOutputIDBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[10].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[10].dstSet = descriptorSet[threadId];
-    descriptorWrites[10].dstBinding = 10;
-    descriptorWrites[10].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[10].descriptorCount = 1;
-    descriptorWrites[10].pBufferInfo = &randomSamplingOutputIDBufferInfo;
-
     VkDescriptorBufferInfo pvsBufferCapacityBufferInfo = {};
     pvsBufferCapacityBufferInfo.buffer = pvsCapacityUniformBuffer[threadId];
     pvsBufferCapacityBufferInfo.offset = 0;
     pvsBufferCapacityBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[11].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[11].dstSet = descriptorSet[threadId];
-    descriptorWrites[11].dstBinding = 11;
-    descriptorWrites[11].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[11].descriptorCount = 1;
-    descriptorWrites[11].pBufferInfo = &pvsBufferCapacityBufferInfo;
+    descriptorWrites[10].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[10].dstSet = descriptorSet[threadId];
+    descriptorWrites[10].dstBinding = 10;
+    descriptorWrites[10].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[10].descriptorCount = 1;
+    descriptorWrites[10].pBufferInfo = &pvsBufferCapacityBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -1788,7 +1733,7 @@ void VisibilityManager::createABSDescriptorSetLayout() {
 }
 
 void VisibilityManager::createEdgeSubdivDescriptorSets(int threadId) {
-    std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
     VkDescriptorBufferInfo edgeSubdivOutputBufferInfo = {};        // TODO: Move descriptor set creation to method
     edgeSubdivOutputBufferInfo.buffer = edgeSubdivOutputBuffer[threadId];
@@ -1800,17 +1745,6 @@ void VisibilityManager::createEdgeSubdivDescriptorSets(int threadId) {
     descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pBufferInfo = &edgeSubdivOutputBufferInfo;
-
-    VkDescriptorBufferInfo edgeSubdivIDOutputBufferInfo = {};
-    edgeSubdivIDOutputBufferInfo.buffer = edgeSubdivIDOutputBuffer[threadId];
-    edgeSubdivIDOutputBufferInfo.offset = 0;
-    edgeSubdivIDOutputBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = descriptorSetEdgeSubdiv[threadId];
-    descriptorWrites[1].dstBinding = 1;
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].pBufferInfo = &edgeSubdivIDOutputBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -1920,7 +1854,7 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer, int threa
     }
     */
 
-    std::array<VkWriteDescriptorSet, 3> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 
     VkDescriptorBufferInfo absOutputBufferInfo = {};
     absOutputBufferInfo.buffer = absOutputBuffer[threadId];
@@ -1943,17 +1877,6 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer, int threa
     descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pBufferInfo = &absWorkingBufferInfo;
-
-    VkDescriptorBufferInfo absIDOutputBufferInfo = {};
-    absIDOutputBufferInfo.buffer = absIDOutputBuffer[threadId];
-    absIDOutputBufferInfo.offset = 0;
-    absIDOutputBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[2].dstSet = descriptorSetABS[threadId];
-    descriptorWrites[2].dstBinding = 2;
-    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[2].descriptorCount = 1;
-    descriptorWrites[2].pBufferInfo = &absIDOutputBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -2450,51 +2373,53 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.endOperation(GPU_HASH_SET_RESIZE);
         }
 
-        // Execute random sampling
-        statistics.startOperation(RANDOM_SAMPLING);
-        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
-        statistics.endOperation(RANDOM_SAMPLING);
+        for (int k = 0; k < 1; k++) {
+            // Execute random sampling
+            statistics.startOperation(RANDOM_SAMPLING);
+            ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
+            statistics.endOperation(RANDOM_SAMPLING);
 
-        statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
-        statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
-        statistics.entries.back().rnsRays += randomSampleInfo.numRays;
+            statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
+            statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
+            statistics.entries.back().rnsRays += randomSampleInfo.numRays;
 
-        statistics.startOperation(RANDOM_SAMPLING_INSERT);
-        {
-            /*
-            std::vector<Sample> newSamples;
-            pvsSize = CUDAUtil::work(
-                pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                randomSampleInfo.numTriangles
-            );
-            */
-            /*
-            pvsSize = CUDAUtil::work2(
-                gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                randomSampleInfo.numTriangles
-            );
-            if (newSamples.size() > 0) {
-                absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+            statistics.startOperation(RANDOM_SAMPLING_INSERT);
+            {
+                /*
+                std::vector<Sample> newSamples;
+                pvsSize = CUDAUtil::work(
+                    pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                    randomSampleInfo.numTriangles
+                );
+                */
+                /*
+                pvsSize = CUDAUtil::work2(
+                    gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                    randomSampleInfo.numTriangles
+                );
+                if (newSamples.size() > 0) {
+                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+                }
+                */
             }
-            */
+            if (randomSampleInfo.numTriangles > 0) {
+                // Copy intersected triangles from VRAM to CPU accessible buffer
+                VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
+
+                // Copy the intersected triangles GPU buffer to the host buffer
+                VulkanUtil::copyBuffer(
+                    logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
+                    randomSamplingOutputHostBuffer[threadId], bufferSize
+                );
+
+                Sample *s = (Sample*)randomSamplingOutputPointer[0];
+                absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
+            }
+            statistics.endOperation(RANDOM_SAMPLING_INSERT);
+
+            statistics.entries.back().pvsSize = pvsSize;
+            statistics.update();
         }
-        if (randomSampleInfo.numTriangles > 0) {
-            // Copy intersected triangles from VRAM to CPU accessible buffer
-            VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
-
-            // Copy the intersected triangles GPU buffer to the host buffer
-            VulkanUtil::copyBuffer(
-                logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
-                randomSamplingOutputHostBuffer[threadId], bufferSize
-            );
-
-            Sample *s = (Sample*)randomSamplingOutputPointer[0];
-            absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
-        }
-        statistics.endOperation(RANDOM_SAMPLING_INSERT);
-
-        statistics.entries.back().pvsSize = pvsSize;
-        statistics.update();
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
@@ -2669,16 +2594,12 @@ void VisibilityManager::releaseResources() {
 
         vkDestroyBuffer(logicalDevice, randomSamplingOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, randomSamplingOutputBufferMemory[i], nullptr);
-        vkDestroyBuffer(logicalDevice, randomSamplingOutputIDBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, randomSamplingOutputIDBufferMemory[i], nullptr);
         vkUnmapMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i]);
         vkDestroyBuffer(logicalDevice, randomSamplingOutputHostBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i], nullptr);
 
         vkDestroyBuffer(logicalDevice, absOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absOutputBufferMemory[i], nullptr);
-        vkDestroyBuffer(logicalDevice, absIDOutputBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, absIDOutputBufferMemory[i], nullptr);
         vkDestroyBuffer(logicalDevice, absWorkingBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absWorkingBufferMemory[i], nullptr);
         vkUnmapMemory(logicalDevice, absOutputHostBufferMemory[i]);
@@ -2687,8 +2608,6 @@ void VisibilityManager::releaseResources() {
 
         vkDestroyBuffer(logicalDevice, edgeSubdivOutputBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
-        vkDestroyBuffer(logicalDevice, edgeSubdivIDOutputBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, edgeSubdivIDOutputBufferMemory[i], nullptr);
         vkUnmapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i]);
         vkDestroyBuffer(logicalDevice, edgeSubdivOutputHostBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], nullptr);
@@ -2701,9 +2620,6 @@ void VisibilityManager::releaseResources() {
         vkUnmapMemory(logicalDevice, testHostBufferMemory[i]);
         vkDestroyBuffer(logicalDevice, testHostBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, testHostBufferMemory[i], nullptr);
-
-        vkDestroyBuffer(logicalDevice, triangleIDTempBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, triangleIDTempBufferMemory[i], nullptr);
 
         vkDestroyFence(logicalDevice, commandBufferFence[i], nullptr);
 
@@ -2725,10 +2641,6 @@ void VisibilityManager::releaseResources() {
     cudaDestroyExternalMemory(randomSamplingOutputCudaMemory);
     cudaDestroyExternalMemory(absOutputCudaMemory);
     cudaDestroyExternalMemory(edgeSubdivOutputCudaMemory);
-    cudaDestroyExternalMemory(randomSamplingIDOutputCudaMemory);
-    cudaDestroyExternalMemory(absIDOutputCudaMemory);
-    cudaDestroyExternalMemory(edgeSubdivIDOutputCudaMemory);
-    cudaDestroyExternalMemory(triangleIDTempCudaMemory);
 
     vkDestroyBuffer(logicalDevice, pvsVisualizationBuffer, nullptr);
     vkFreeMemory(logicalDevice, pvsVisualizationBufferMemory, nullptr);
