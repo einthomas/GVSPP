@@ -102,6 +102,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     }
     visibilityManager = new VisibilityManager(
         se.at("USE_TERMINATION_CRITERION") == "true",
+        se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
         std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
         std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),
@@ -1098,6 +1099,9 @@ Settings VulkanRenderer::loadSettingsFile() {
     shaderDefinesFile << "#define SET_TYPE " << se.at("SET_TYPE") << "\n";
     if (se.at("USE_3D_VIEW_CELL") == "true") {
         shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
+    }
+    if (se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
+        shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
     }
     shaderDefinesFile.close();
 

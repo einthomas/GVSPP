@@ -56,6 +56,7 @@ public:
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
+        bool USE_RECURSIVE_EDGE_SUBDIVISION,
         int RAY_COUNT_TERMINATION_THRESHOLD,
         int NEW_TRIANGLE_TERMINATION_THRESHOLD,
         int RANDOM_RAYS_PER_ITERATION,
@@ -91,6 +92,7 @@ private:
     int numThreads;
 
     const bool USE_TERMINATION_CRITERION;
+    const bool USE_RECURSIVE_EDGE_SUBDIVISION;
     const int RAY_COUNT_TERMINATION_THRESHOLD;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const int NUM_ABS_SAMPLES;

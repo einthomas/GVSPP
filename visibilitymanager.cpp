@@ -25,6 +25,7 @@ struct UniformBufferObject {
 
 VisibilityManager::VisibilityManager(
     bool USE_TERMINATION_CRITERION,
+    bool USE_RECURSIVE_EDGE_SUBDIVISION,
     int RAY_COUNT_TERMINATION_THRESHOLD,
     int NEW_TRIANGLE_TERMINATION_THRESHOLD,
     int RANDOM_RAYS_PER_ITERATION,
@@ -46,6 +47,7 @@ VisibilityManager::VisibilityManager(
     std::vector<glm::mat4> viewCellMatrices
 ):
     USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
+    USE_RECURSIVE_EDGE_SUBDIVISION(USE_RECURSIVE_EDGE_SUBDIVISION),
     RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
@@ -231,6 +233,7 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
 
 void VisibilityManager::resetPVSGPUBuffer() {
     VkDeviceSize pvsSize = sizeof(int) * pvsBufferCapacity;
+    std::cout << "pvsBufferCapacity " << pvsBufferCapacity << std::endl;
 
     VkDeviceSize bufferSize = pvsSize;
 
@@ -2105,8 +2108,12 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         void *data;
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
-        numTriangles = n[0];
         numRsTriangles = n[1];
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
+        } else {
+            numTriangles = n[0];
+        }
         numRsRays = n[3];
         pvsSize = n[4];
 
@@ -2479,84 +2486,105 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 }
                 */
             }
-            if (absInfo.numRsTriangles > 0) {
-                // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * absInfo.numRsTriangles;
-                VkDeviceSize srcBufferOffset = sizeof(Sample) * absInfo.numRays;
 
-                // Copy the intersected triangles GPU buffer to the host buffer
-                VulkanUtil::copyBuffer(
-                    logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
-                    absOutputHostBuffer[threadId], bufferSize, srcBufferOffset
-                );
+            if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+                if (absInfo.numRsTriangles > 0) {
+                    // Copy intersected triangles from VRAM to CPU accessible buffer
+                    VkDeviceSize bufferSize = sizeof(Sample) * absInfo.numRsTriangles;
+                    VkDeviceSize srcBufferOffset = sizeof(Sample) * absInfo.numRays;
 
-                Sample *s = (Sample*)absOutputPointer[0];
-                absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numRsTriangles);
+                    // Copy the intersected triangles GPU buffer to the host buffer
+                    VulkanUtil::copyBuffer(
+                        logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
+                        absOutputHostBuffer[threadId], bufferSize, srcBufferOffset
+                    );
+
+                    Sample *s = (Sample*)absOutputPointer[0];
+                    absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numRsTriangles);
+                }
+            } else {
+                if (absInfo.numTriangles + absInfo.numRsTriangles > 0) {
+                    // Copy intersected triangles from VRAM to CPU accessible buffer
+                    VkDeviceSize bufferSize = sizeof(Sample) * (absInfo.numTriangles + absInfo.numRsTriangles);
+
+                    // Copy the intersected triangles GPU buffer to the host buffer
+                    VulkanUtil::copyBuffer(
+                        logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
+                        absOutputHostBuffer[threadId], bufferSize
+                    );
+
+                    Sample *s = (Sample*)absOutputPointer[0];
+                    absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
+                }
             }
             statistics.endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
 
             statistics.entries.back().pvsSize = pvsSize;
             statistics.update();
 
-            // Execute edge subdivision
-            if (GPU_SET_TYPE == 1) {
-                statistics.startOperation(GPU_HASH_SET_RESIZE);
-                int potentialNewTriangles = std::min(
-                    absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
-                    (size_t)MAX_TRIANGLE_COUNT - pvsSize
-                );
-                if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                    resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+            if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+                // Execute edge subdivision
+                if (GPU_SET_TYPE == 1) {
+                    statistics.startOperation(GPU_HASH_SET_RESIZE);
+                    int potentialNewTriangles = std::min(
+                        absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
+                        (size_t)MAX_TRIANGLE_COUNT - pvsSize
+                    );
+                    if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
+                        resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+                    }
+                    statistics.endOperation(GPU_HASH_SET_RESIZE);
                 }
-                statistics.endOperation(GPU_HASH_SET_RESIZE);
-            }
 
-            statistics.startOperation(EDGE_SUBDIVISION);
-            ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId, viewCellIndex);
-            statistics.endOperation(EDGE_SUBDIVISION);
+                statistics.startOperation(EDGE_SUBDIVISION);
+                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId, viewCellIndex);
+                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles * NUM_REVERSE_SAMPLING_SAMPLES, threadId, viewCellIndex);
+                ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
+                statistics.endOperation(EDGE_SUBDIVISION);
 
-            statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
-            statistics.entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
-            statistics.entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
-            statistics.entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
-            statistics.entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
+                statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
+                statistics.entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
+                statistics.entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
+                statistics.entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
+                statistics.entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
 
-            statistics.startOperation(EDGE_SUBDIVISION_INSERT);
-            {
-                /*
-                std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(
-                    pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
-                    edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
-                );
-                */
-                /*
-                pvsSize = CUDAUtil::work2(
-                    gpuHashSet, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
-                    edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
-                );
-                if (newSamples.size() > 0) {
-                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+                statistics.startOperation(EDGE_SUBDIVISION_INSERT);
+                {
+                    /*
+                    std::vector<Sample> newSamples;
+                    pvsSize = CUDAUtil::work(
+                        pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
+                        edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
+                    );
+                    */
+                    /*
+                    pvsSize = CUDAUtil::work2(
+                        gpuHashSet, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
+                        edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
+                    );
+                    if (newSamples.size() > 0) {
+                        absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+                    }
+                    */
                 }
-                */
+                if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
+                    // Copy intersected triangles from VRAM to CPU accessible buffer
+                    VkDeviceSize bufferSize = sizeof(Sample) * (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
+
+                    // Copy the intersected triangles GPU buffer to the host buffer
+                    VulkanUtil::copyBuffer(
+                        logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId],
+                        edgeSubdivOutputHostBuffer[threadId], bufferSize
+                    );
+
+                    Sample *s = (Sample*)edgeSubdivOutputPointer[0];
+                    absSampleQueue.insert(absSampleQueue.end(), s, s + edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
+                }
+                statistics.endOperation(EDGE_SUBDIVISION_INSERT);
+
+                statistics.entries.back().pvsSize = pvsSize;
+                statistics.update();
             }
-            if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
-                // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
-
-                // Copy the intersected triangles GPU buffer to the host buffer
-                VulkanUtil::copyBuffer(
-                    logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId],
-                    edgeSubdivOutputHostBuffer[threadId], bufferSize
-                );
-
-                Sample *s = (Sample*)edgeSubdivOutputPointer[0];
-                absSampleQueue.insert(absSampleQueue.end(), s, s + edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
-            }
-            statistics.endOperation(EDGE_SUBDIVISION_INSERT);
-
-            statistics.entries.back().pvsSize = pvsSize;
-            statistics.update();
         }
 
         if (USE_TERMINATION_CRITERION) {
@@ -2564,6 +2592,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
                 pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
+                std::cout << "hallo" << std::endl;
+                std::cout << pvsSize << std::endl;
                 statistics.endOperation(VISIBILITY_SAMPLING);
                 statistics.print();
                 break;
