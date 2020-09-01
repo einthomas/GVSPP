@@ -522,12 +522,11 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     pvsCapacityUniformMemory.resize(numThreads);
 
     // Random sampling buffers
-    //VkDeviceSize pvsSize = sizeof(int) * MAX_TRIANGLE_COUNT;
     VkDeviceSize pvsSize = sizeof(int) * pvsBufferCapacity;
 
     VkDeviceSize haltonSize = sizeof(float) * RANDOM_RAYS_PER_ITERATION * 4;
 
-    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
+    VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT);
     VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT;
     VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
 
@@ -2537,8 +2536,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 }
 
                 statistics.startOperation(EDGE_SUBDIVISION);
-                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absWorkingVector.size() * NUM_ABS_SAMPLES, threadId, viewCellIndex);
-                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles * NUM_REVERSE_SAMPLING_SAMPLES, threadId, viewCellIndex);
                 ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
                 statistics.endOperation(EDGE_SUBDIVISION);
 
