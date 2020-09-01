@@ -598,18 +598,20 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
         */
-        CUDAUtil::createExternalBuffer(
-            edgeSubdivOutputBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivOutputBuffer[i],
-            edgeSubdivOutputBufferMemory[i], logicalDevice, physicalDevice
-        );
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, edgeSubdivOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, edgeSubdivOutputHostBuffer[i], edgeSubdivOutputHostBufferMemory[i],
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-        vkMapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], 0, edgeSubdivOutputBufferSize, 0, &edgeSubdivOutputPointer[i]);
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            CUDAUtil::createExternalBuffer(
+                edgeSubdivOutputBufferSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivOutputBuffer[i],
+                edgeSubdivOutputBufferMemory[i], logicalDevice, physicalDevice
+            );
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, edgeSubdivOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, edgeSubdivOutputHostBuffer[i], edgeSubdivOutputHostBufferMemory[i],
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+            vkMapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], 0, edgeSubdivOutputBufferSize, 0, &edgeSubdivOutputPointer[i]);
+        }
 
         // Create halton points buffer using GPU memory
         /*
@@ -720,10 +722,12 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         (void**)&absOutputCuda, absOutputCudaMemory,
         absOutputBufferMemory[0], absOutputBufferSize, logicalDevice
     );
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&edgeSubdivOutputCuda, edgeSubdivOutputCudaMemory,
-        edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
-    );
+    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        CUDAUtil::importCudaExternalMemory(
+            (void**)&edgeSubdivOutputCuda, edgeSubdivOutputCudaMemory,
+            edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
+        );
+    }
 
     // Reset atomic counters
     {
@@ -1059,11 +1063,13 @@ void VisibilityManager::initRayTracing(
     createABSPipeline();
     createShaderBindingTable(shaderBindingTableABS, shaderBindingTableMemoryABS, pipelineABS);
 
-    for (int i = 0; i < numThreads; i++) {
-        createEdgeSubdivDescriptorSets(i);
+    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        for (int i = 0; i < numThreads; i++) {
+            createEdgeSubdivDescriptorSets(i);
+        }
+        createEdgeSubdivPipeline();
+        createShaderBindingTable(shaderBindingTableEdgeSubdiv, shaderBindingTableMemoryEdgeSubdiv, pipelineEdgeSubdiv);
     }
-    createEdgeSubdivPipeline();
-    createShaderBindingTable(shaderBindingTableEdgeSubdiv, shaderBindingTableMemoryEdgeSubdiv, pipelineEdgeSubdiv);
 
     for (int i = 0; i < numThreads; i++) {
         createHaltonComputeDescriptorSets(i);
@@ -2589,8 +2595,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
                 pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
-                std::cout << "hallo" << std::endl;
-                std::cout << pvsSize << std::endl;
                 statistics.endOperation(VISIBILITY_SAMPLING);
                 statistics.print();
                 break;
