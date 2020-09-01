@@ -98,7 +98,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     if (reverseSamplingMethod == 1) {
         numReverseSamplingSamples = 15;
     } else if (reverseSamplingMethod == 2) {
-        std::stoi(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 3;
+        numReverseSamplingSamples = std::stoi(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     }
     visibilityManager = new VisibilityManager(
         se.at("USE_TERMINATION_CRITERION") == "true",
