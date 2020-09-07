@@ -10,7 +10,10 @@
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "visibilitymanager.h"
+
 #include "viewcell.h"
+
+class NirensteinSampler;
 
 struct Settings {
     std::string modelName;
@@ -53,6 +56,7 @@ public:
 
 private:
     const int NUM_THREADS = 1;
+    bool USE_NIRENSTEIN_VISIBILITY_SAMPLING;
 
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
@@ -61,6 +65,7 @@ private:
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
     VkDescriptorSetLayout descriptorSetLayout;
+
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     VkPipeline rayVisualizationPipeline;
@@ -81,6 +86,8 @@ private:
     VkDeviceMemory indexBufferMemory;
     VkBuffer rayVertexBuffer;
     VkDeviceMemory rayVertexBufferMemory;
+    VkBuffer pvsBuffer;
+    VkDeviceMemory pvsBufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -96,6 +103,7 @@ private:
     void createGraphicsPipeline(
         VkPipeline &pipeline, VkPipelineLayout &pipelineLayout, std::string vertShaderPath,
         std::string fragShaderPath,
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo,
         VkPrimitiveTopology primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
     );
     void createVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
@@ -129,13 +137,14 @@ private:
     bool loadPVS;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
+    VkFramebuffer primitiveIDFramebuffer;
 
     VisibilityManager *visibilityManager;
-    VkDescriptorSet rtDescriptorSetsABS;
-    VkDescriptorSetLayout rtDescriptorSetLayoutABS;
     void initVisibilityManager();
     std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
+
+    NirensteinSampler *nirensteinSampler;
 };
 
 #endif // RENDERER_H

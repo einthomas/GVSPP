@@ -81,11 +81,14 @@ public:
     VkExtent2D swapChainImageSize;
     VkCommandPool graphicsCommandPool;
     VkSampleCountFlagBits msaaSamples;
+    std::vector<VkFramebuffer> swapChainFramebuffers;
+    VkExtent2D swapChainExtent;
 
     void initWindow();
     void initVulkan();
     void initRenderer();
     void mainLoop();
+    VkFormat findDepthFormat();
 
 private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -110,9 +113,8 @@ private:
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
+
     std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
     size_t currentFrame = 0;
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -152,7 +154,6 @@ private:
     void createDepthResources();
     void createColorResources();
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-    VkFormat findDepthFormat();
     void cleanup();
     static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);

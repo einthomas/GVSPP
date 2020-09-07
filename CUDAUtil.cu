@@ -44,6 +44,157 @@ struct isZero
   }
 };
 
+struct isPositive
+{
+    __host__ __device__
+    bool operator()(const char x)
+    {
+        return x >= 0;
+    }
+};
+
+struct isNegative
+{
+    __host__ __device__
+    bool operator()(const char x)
+    {
+        return x == -1;
+    }
+};
+
+int CUDAUtil::countNotZero(int *array, int size) {
+    thrust::device_ptr<int> dp(array);
+    return thrust::count(dp, dp + size, 4);
+}
+
+int CUDAUtil::calculateLargestSetSize(int *set, int size) {
+    thrust::device_ptr<int> devicePointerSet(set);
+    int largetSetSize = 0;
+    for (int i = 0; i < 4; i++) {
+        int result = thrust::count_if(devicePointerSet + size * i, devicePointerSet + size * (i + 1), isPositive());
+        largetSetSize = std::max(largetSetSize, result);
+    }
+    return largetSetSize;
+}
+
+int CUDAUtil::setIntersection(int *set, int size) {
+    thrust::device_ptr<int> devicePointerSet(set);
+    thrust::device_vector<int> resultA(size);
+    thrust::device_vector<int> resultB(size);
+
+    /*
+    thrust::device_vector<int> testa(8);
+    testa[0] = -1;
+    testa[1] = -1;
+    testa[2] = 3;
+    testa[3] = 4;
+    testa[4] = -1;
+    testa[5] = 0;
+    testa[6] = 1;
+    testa[7] = 3;
+
+    auto resultEnd = thrust::set_intersection(
+        testa.begin(),
+        testa.begin() + 4,
+        testa.begin() + 4,
+        testa.begin() + 8,
+        resultA.begin()
+    );
+    */
+
+    auto resultEnd = thrust::set_intersection(
+        devicePointerSet + size * 0,
+        thrust::remove_if(
+            devicePointerSet + size * 0,
+            devicePointerSet + size * 1,
+            isNegative()
+        ),
+        devicePointerSet + size * 1,
+        thrust::remove_if(
+            devicePointerSet + size * 1,
+            devicePointerSet + size * 2,
+            isNegative()
+        ),
+        resultA.begin()
+    );
+
+    resultEnd = thrust::set_intersection(
+        resultA.begin(),
+        resultEnd,
+        devicePointerSet + size * 2,
+        thrust::remove_if(
+            devicePointerSet + size * 2,
+            devicePointerSet + size * 3,
+            isNegative()
+        ),
+        resultB.begin()
+    );
+
+    resultEnd = thrust::set_intersection(
+        resultB.begin(),
+        resultEnd,
+        devicePointerSet + size * 3,
+        thrust::remove_if(
+            devicePointerSet + size * 3,
+            devicePointerSet + size * 4,
+            isNegative()
+        ),
+        resultA.begin()
+    );
+
+    /*
+    std::cout << "hallo " << size << std::endl;
+
+    for (int i = 0; i < size * 4; i++) {
+        std::cout << devicePointerSet[i] << " ";
+    }
+    std::cout << std::endl << std::endl;
+
+
+    for (int i = 0; i < resultEnd - resultA.begin(); i++) {
+        std::cout << resultA[i] << " ";
+    }
+    std::cout << std::endl;
+    */
+
+
+    /*
+    thrust::device_ptr<int> devicePointerSetA(setA);
+    thrust::device_ptr<int> devicePointerSetB(setB);
+    thrust::device_ptr<int> devicePointerSetC(setC);
+    thrust::device_ptr<int> devicePointerSetD(setD);
+    int resultSize = std::max(std::max(std::max(sizeA, sizeB), sizeC), sizeD);
+    thrust::device_vector<int> resultA(resultSize);
+    thrust::device_vector<int> resultB(resultSize);
+
+    auto resultEnd = thrust::set_intersection(
+        devicePointerSetA,
+        devicePointerSetA + sizeA,
+        devicePointerSetB,
+        devicePointerSetB + sizeB,
+        resultA.begin()
+    );
+
+    resultEnd = thrust::set_intersection(
+        resultA.begin(),
+        resultEnd,
+        devicePointerSetC,
+        devicePointerSetC + sizeC,
+        resultB.begin()
+    );
+
+    resultEnd = thrust::set_intersection(
+        resultB.begin(),
+        resultEnd,
+        devicePointerSetD,
+        devicePointerSetD + sizeD,
+        resultA.begin()
+    );
+    */
+
+    return resultEnd - resultA.begin();
+}
+
 int CUDAUtil::work2(
     GPUHashSet *gpuHashSet,
     int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize,

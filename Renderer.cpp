@@ -21,6 +21,8 @@
 
 #include "viewcell.h"
 
+#include "NirensteinSampler.h"
+
 struct UniformBufferObject {
     alignas(64) glm::mat4 model;
     alignas(64) glm::mat4 view;
@@ -61,14 +63,42 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     std::vector<glm::mat4> viewCellMatrices = loadSceneFile(settings);
 
     createDescriptorSetLayout();
-    createGraphicsPipeline(
-        pipeline, pipelineLayout, "shaders/shader.vert.spv", "shaders/shader.frag.spv"
-    );
-    createGraphicsPipeline(
-        rayVisualizationPipeline, rayVisualizationPipelineLayout,
-        "shaders/rayVisualizationShader.vert.spv", "shaders/rayVisualizationShader.frag.spv",
-        VK_PRIMITIVE_TOPOLOGY_LINE_LIST
-    );
+    {
+        // Specify shader uniforms
+        VkPushConstantRange pushConstantRangeModelMatrix = {};
+        pushConstantRangeModelMatrix.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRangeModelMatrix.size = sizeof(glm::mat4);
+        pushConstantRangeModelMatrix.offset = 0;
+        VkPushConstantRange pushConstantRangeShadedRendering = {};
+        pushConstantRangeShadedRendering.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantRangeShadedRendering.size = sizeof(VkBool32);
+        pushConstantRangeShadedRendering.offset = sizeof(glm::mat4);
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        std::array<VkPushConstantRange, 2> pushConstantRanges = { pushConstantRangeShadedRendering, pushConstantRangeModelMatrix };
+        pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
+        pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
+
+        createGraphicsPipeline(
+            pipeline, pipelineLayout, "shaders/shader.vert.spv", "shaders/shader.frag.spv",
+            pipelineLayoutInfo
+        );
+    }
+    {
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+
+        createGraphicsPipeline(
+            rayVisualizationPipeline, rayVisualizationPipelineLayout,
+            "shaders/rayVisualizationShader.vert.spv", "shaders/rayVisualizationShader.frag.spv",
+            pipelineLayoutInfo, VK_PRIMITIVE_TOPOLOGY_LINE_LIST
+        );
+    }
 
     createVertexBuffer(vertices, vertexBuffer, vertexBufferMemory);
     updateVertexBuffer(vertices, vertexBuffer, vertexBufferMemory);
@@ -126,10 +156,16 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
 
     nextCorner();
     alignCameraWithViewCellNormal();
+
+    nirensteinSampler = new NirensteinSampler(
+        window, visibilityManager->computeQueue, visibilityManager->commandPool[0], vertexBuffer,
+        vertices, indexBuffer, indices, indices.size() / 3.0f,
+        std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
+        std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS"))
+    );
 }
 
 void VulkanRenderer::initResources() {
-
 }
 
 void VulkanRenderer::initSwapChainResources() {
@@ -171,7 +207,8 @@ void VulkanRenderer::releaseResources() {
 
 void VulkanRenderer::createGraphicsPipeline(
     VkPipeline &pipeline, VkPipelineLayout &pipelineLayout, std::string vertShaderPath,
-    std::string fragShaderPath, VkPrimitiveTopology primitiveTopology
+    std::string fragShaderPath, VkPipelineLayoutCreateInfo pipelineLayoutInfo,
+    VkPrimitiveTopology primitiveTopology
 ) {
     VkShaderModule vertShaderModule = VulkanUtil::createShader(window->device, vertShaderPath);
     VkShaderModule fragShaderModule = VulkanUtil::createShader(window->device, fragShaderPath);
@@ -246,23 +283,6 @@ void VulkanRenderer::createGraphicsPipeline(
     colorBlendingInfo.attachmentCount = 1;
     colorBlendingInfo.pAttachments = &colorBlendAttachmentState;
 
-    // Specify shader uniforms
-    VkPushConstantRange pushConstantRangeModelMatrix = {};
-    pushConstantRangeModelMatrix.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstantRangeModelMatrix.size = sizeof(glm::mat4);
-    pushConstantRangeModelMatrix.offset = 0;
-    VkPushConstantRange pushConstantRangeShadedRendering = {};
-    pushConstantRangeShadedRendering.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    pushConstantRangeShadedRendering.size = sizeof(VkBool32);
-    pushConstantRangeShadedRendering.offset = sizeof(glm::mat4);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-    std::array<VkPushConstantRange, 2> pushConstantRanges = { pushConstantRangeShadedRendering, pushConstantRangeModelMatrix };
-    pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
-    pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
     if (vkCreatePipelineLayout(window->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout");
     }
@@ -675,7 +695,7 @@ void VulkanRenderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 2> poolSizes = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(window->imageCount);
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[1].descriptorCount = static_cast<uint32_t>(window->imageCount);
 
     VkDescriptorPoolCreateInfo poolInfo = {};
@@ -697,20 +717,26 @@ void VulkanRenderer::createDescriptorSets() {
     // specifies the actual image view). Descriptor sets are allocated from a descriptor pool
 
     std::vector<VkDescriptorSetLayout> layouts(window->imageCount, descriptorSetLayout);
+    //layouts.push_back(nirensteinDescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(window->imageCount);
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
     allocInfo.pSetLayouts = layouts.data();
 
     // Allocate descriptor sets (one descriptor set for each swap chain image)
-    descriptorSets.resize(window->imageCount);
+    std::vector<VkDescriptorSet> descriptorSets;
+    descriptorSets.resize(layouts.size());
     if (vkAllocateDescriptorSets(
             window->device, &allocInfo, descriptorSets.data()
         ) != VK_SUCCESS
     ) {
         throw std::runtime_error("failed to allocate descriptor sets");
     }
+    for (int i = 0; i < window->imageCount; i++) {
+        this->descriptorSets.push_back(descriptorSets[i]);
+    }
+    //nirensteinDescriptorSet = descriptorSets[descriptorSets.size() - 1];
 
     // Populate every descriptor
     for (int i = 0; i < window->imageCount; i++) {
@@ -730,7 +756,7 @@ void VulkanRenderer::createDescriptorSets() {
         std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstSet = this->descriptorSets[i];
         descriptorWrites[0].dstBinding = 0;     // layout location in the shader
         descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -880,6 +906,22 @@ void VulkanRenderer::startNextFrame(
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
     }
 
+    // Draw visibility cubes
+    if (USE_NIRENSTEIN_VISIBILITY_SAMPLING && viewCellRendering) {
+        for (auto pos : nirensteinSampler->cp) {
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, pos);
+            model = glm::scale(model, glm::vec3(2.0f));
+
+            vkCmdPushConstants(
+                commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
+                (std::array<glm::mat4, 1> { model }).data()
+            );
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &viewCellGeometry[currentViewCellIndex].vertexBuffer, offsets);
+            vkCmdDraw(commandBuffer, 36, 1, 0, 0);
+        }
+    }
+
     // Draw ray visualizations
     if (
         visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
@@ -891,6 +933,7 @@ void VulkanRenderer::startNextFrame(
             &descriptorSets[swapChainImageIndex], 0, nullptr
         );
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &rayVertexBuffer, offsets);
+        /*
         vkCmdPushConstants(
             commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
             (std::array<glm::mat4, 1> { glm::mat4(1.0f) }).data()
@@ -899,6 +942,7 @@ void VulkanRenderer::startNextFrame(
             commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
             (std::array<VkBool32, 1> { shadedRendering }).data()
         );
+        */
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices[currentViewCellIndex].size()), 1, 0, 0);
     }
 
@@ -926,6 +970,7 @@ void VulkanRenderer::nextCorner() {
     cameraPos = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
     //std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
+
 }
 
 void VulkanRenderer::nextViewCell() {
@@ -946,20 +991,6 @@ void VulkanRenderer::nextViewCell() {
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
-    /*
-    glm::vec3 viewCellNormal = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-    if (glm::length(viewCellNormal) == 0.0f) {
-        viewCellNormal = glm::cross(
-                    )
-    }
-    */
-    /*
-    cameraForward = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-    std::cout << glm::to_string((visibilityManager->viewCells[currentViewCellIndex].model)) << std::endl;
-    std::cout << glm::to_string(glm::cross(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0]),glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[1]))) << std::endl;
-    std::cout << "cf " << glm::to_string(cameraForward) << std::endl;
-    */
-
     cameraForward = glm::cross(
         glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0])),
         glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[1]))
@@ -1105,19 +1136,27 @@ Settings VulkanRenderer::loadSettingsFile() {
     }
     shaderDefinesFile.close();
 
+    USE_NIRENSTEIN_VISIBILITY_SAMPLING = se.at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
+
     return settings;
 }
 
 void VulkanRenderer::startVisibilityThread() {
+    // Calculate the PVS
     if (!loadPVS) {
         std::ofstream pvsFile;
         pvsFile.open(pvsStorageFile);
+        //for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
         for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
             std::cout << "View cell " << k << ":" << std::endl;
-            visibilityManager->rayTrace(indices, 0, k);
-
-            // Fetch the PVS from the GPU
-            visibilityManager->fetchPVS();
+            std::vector<int> pvs;
+            if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+                pvs = nirensteinSampler->run(visibilityManager->viewCells[k], cameraForward);
+            } else {
+                visibilityManager->rayTrace(indices, 0, k);
+                // Fetch the PVS from the GPU
+                visibilityManager->fetchPVS();
+            }
 
             // Write view cell model matrix to the PVS file
             for (int x = 0; x < 4; x++) {
@@ -1129,7 +1168,11 @@ void VulkanRenderer::startVisibilityThread() {
 
             // Write pvs to the PVS file
             std::ostringstream oss;
-            std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
+            if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+                std::copy(pvs.begin(), pvs.end(), std::ostream_iterator<int>(oss, ";"));
+            } else {
+                std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
+            }
             pvsFile << oss.str() << "\n";
         }
         pvsFile.close();
@@ -1148,16 +1191,7 @@ void VulkanRenderer::startVisibilityThread() {
         // Read view cell data from the PVS file
         std::string viewCellString = line.substr(0, line.find("|"));
         std::stringstream stringStream(viewCellString);
-        /*
-        std::array<float, 9> viewCellData;
-        int i = 0;
-        for (float f; stringStream >> f; i++) {
-            viewCellData[i] = f;
-            if (stringStream.peek() == ';') {
-                stringStream.ignore();
-            }
-        }
-        */
+
         std::array<float, 16> viewCellData;
         int i = 0;
         for (float f; stringStream >> f; i++) {
@@ -1191,9 +1225,9 @@ void VulkanRenderer::startVisibilityThread() {
         }
 
         {
+            // Load a box model for the current view cell
             std::vector<Vertex> viewCellGeomtryVertices;
 
-            // Load a box model for the current view cell
             tinyobj::attrib_t attrib;
             std::vector<tinyobj::shape_t> shapes;
             std::vector<tinyobj::material_t> materials;
@@ -1239,6 +1273,7 @@ void VulkanRenderer::startVisibilityThread() {
     createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
+    // Create and fill ray visualization buffers
     if (
         visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
         || visibilityManager->visualizeEdgeSubdivRays

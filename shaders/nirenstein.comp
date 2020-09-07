@@ -1,0 +1,29 @@
+#version 460
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) writeonly buffer pvsBuffer {
+    int pvs[];
+};
+layout(binding = 1, set = 0) writeonly buffer currentPvsBuffer {
+    int currentPvs[];
+};
+layout(binding = 2, set = 0) readonly buffer triangleIDFramebuffer {
+    int triangleIDs[];
+};
+layout(binding = 3, set = 0) uniform pvsSizeUniform {
+    int pvsSize;
+};
+layout(binding = 4, set = 0) uniform currentPvsIndexUniform {
+    int currentPvsIndex;
+};
+
+void main() {
+    int index = int(gl_GlobalInvocationID.x + (gl_NumWorkGroups.x * gl_WorkGroupSize.x) * gl_GlobalInvocationID.y);
+    int triangleID = triangleIDs[index];
+    pvs[triangleID] = triangleID;
+    currentPvs[currentPvsIndex * pvsSize + triangleID] = triangleID;
+
+    //pvs[triangleID] = triangleID;
+    //currentPvs[triangleID] = triangleID;
+}

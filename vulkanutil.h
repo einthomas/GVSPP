@@ -17,7 +17,7 @@ public:
     );
     static void copyBuffer(
         VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-        VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset = 0
+        VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0
     );
     static VkCommandBuffer beginSingleTimeCommands(
         VkDevice logicalDevice, VkCommandPool commandPool

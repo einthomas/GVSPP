@@ -51,8 +51,10 @@ public:
     PVS<int> pvs;
     std::vector<std::vector<Vertex>> rayVertices;
     bool visualizeRandomRays = false;
-    bool visualizeABSRays = false;
+    bool visualizeABSRays = true;
     bool visualizeEdgeSubdivRays = false;
+    VkQueue computeQueue;
+    std::vector<VkCommandPool> commandPool;
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
@@ -127,9 +129,7 @@ private:
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
     std::array<uint8_t, VK_UUID_SIZE> deviceUUID;
-    VkQueue computeQueue;
 
-    std::vector<VkCommandPool> commandPool;
     std::vector<VkCommandBuffer> commandBuffer;
     std::vector<VkCommandBuffer> commandBufferABS;
     std::vector<VkCommandBuffer> commandBufferEdgeSubdiv;

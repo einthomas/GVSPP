@@ -5,9 +5,7 @@
 #include <iterator>
 #include <algorithm>
 #include <random>
-
 #include <unordered_set>
-
 #include <glm/vec3.hpp>
 
 #include "vulkanutil.h"

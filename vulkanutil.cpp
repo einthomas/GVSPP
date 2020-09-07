@@ -42,7 +42,7 @@ void VulkanUtil::createBuffer(
 
 void VulkanUtil::copyBuffer(
     VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-    VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset
+    VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset
 ) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(logicalDevice, commandPool);
 
@@ -50,7 +50,7 @@ void VulkanUtil::copyBuffer(
     VkBufferCopy copyRegion = {};
     copyRegion.size = size;
     copyRegion.srcOffset = srcOffset;
-    copyRegion.dstOffset = 0;
+    copyRegion.dstOffset = dstOffset;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     endSingleTimeCommands(logicalDevice, commandBuffer, commandPool, queue);
@@ -224,7 +224,7 @@ void VulkanUtil::createImage(
     VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image,
     VkDeviceMemory &imageMemory
 ) {
-    VkImageCreateInfo imageInfo{};
+    VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent.width = width;
@@ -264,7 +264,7 @@ void VulkanUtil::createImage(
 VkImageView VulkanUtil::createImageView(
     VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags
 ) {
-    VkImageViewCreateInfo viewInfo{};
+    VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;

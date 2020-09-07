@@ -1,3 +1,8 @@
+QUAD2 models/quad2/quad2.obj
+0 0 0
+15 15 0
+0 180 0
+
 TESS models/tess_test/tess_test.obj
 0 0 0.1
 1 1 0
@@ -27,7 +32,7 @@ AAA models/quad/quad.obj
 40 1 0
 0 0 -1
 
-BBB models/quad/cube.obj
+BBB models/quad/cube_small.obj
 0 0 0.1
 1 1 0
 0 0 0
@@ -147,7 +152,7 @@ CITY_MODEL models/citymodel/citymodel.obj
 
 CANYON models/canyon/canyon_normals.obj
 2699.39 2045.44 2747.72
-200 100 0
+200 100 0.1
 0 180 0
 
 6598.41 2195.44 2997.27

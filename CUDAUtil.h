@@ -88,6 +88,9 @@ public:
 
 class CUDAUtil {
 public:
+    static int countNotZero(int *array, int size);
+    static int setIntersection(int *set, int size);
+    static int calculateLargestSetSize(int *set, int size);
     static void test();
     static int work(int *pvs, int *triangleIDKeys, Sample *sampleValues, std::vector<Sample> &result, int pvsSize, int triangleIDKeysSize);
     static int work2(

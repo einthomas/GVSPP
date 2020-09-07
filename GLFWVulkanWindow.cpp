@@ -31,6 +31,7 @@ void GLFWVulkanWindow::initVulkan() {
 void GLFWVulkanWindow::initRenderer() {
     renderer = new VulkanRenderer(this);
     renderer->startVisibilityThread();
+    //renderer->nirenstein();
 }
 
 void GLFWVulkanWindow::createSurface() {
@@ -229,6 +230,7 @@ void GLFWVulkanWindow::createLogicalDevice() {
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.fillModeNonSolid = VK_TRUE;      // WIREFRAME
     deviceFeatures.wideLines = VK_TRUE;
+    deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
 
     // Create logical device
     VkDeviceCreateInfo createInfo = {};
