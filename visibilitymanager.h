@@ -83,10 +83,6 @@ public:
     void generateHaltonPoints2d(int n, int threadId, int offset = 0);
     void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
-    VkBuffer getPVSIndexBuffer(
-        const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue,
-        bool inverted
-    );
     void fetchPVS();
 
 private:
@@ -213,9 +209,6 @@ private:
     cudaExternalMemory_t absOutputCudaMemory = {};
     Sample *edgeSubdivOutputCuda;
     cudaExternalMemory_t edgeSubdivOutputCudaMemory = {};
-
-    VkBuffer pvsVisualizationBuffer;
-    VkDeviceMemory pvsVisualizationBufferMemory;
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;

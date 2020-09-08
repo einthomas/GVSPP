@@ -669,13 +669,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         */
     }
 
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice, sizeof(indices[0]) * indices.size(),
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        pvsVisualizationBuffer, pvsVisualizationBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-
     {
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -2667,9 +2660,6 @@ void VisibilityManager::releaseResources() {
     cudaDestroyExternalMemory(absOutputCudaMemory);
     cudaDestroyExternalMemory(edgeSubdivOutputCudaMemory);
 
-    vkDestroyBuffer(logicalDevice, pvsVisualizationBuffer, nullptr);
-    vkFreeMemory(logicalDevice, pvsVisualizationBufferMemory, nullptr);
-
     vkDestroyBuffer(logicalDevice, shaderBindingTable, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemory, nullptr);
     vkDestroyBuffer(logicalDevice, shaderBindingTableABS, nullptr);
@@ -2694,62 +2684,6 @@ void VisibilityManager::releaseResources() {
     vkFreeMemory(logicalDevice, topLevelAS.deviceMemory, nullptr);
     vkDestroyAccelerationStructureNV(logicalDevice, bottomLevelAS.as, nullptr);
     vkFreeMemory(logicalDevice, bottomLevelAS.deviceMemory, nullptr);
-}
-
-VkBuffer VisibilityManager::getPVSIndexBuffer(
-    const std::vector<uint32_t> &indices, VkCommandPool commandPool, VkQueue queue, bool inverted
-) {
-    // Collect the vertex indices of the triangles in the PVS
-    std::vector<uint32_t> pvsIndices;
-    /*
-    pvsIndices.reserve(pvs.getSet().size() * 3);
-    if (inverted) {
-        for (int i = 0; i < int(indices.size() / 3.0f); i++) {
-            if (pvs.getSet().find(i) == pvs.getSet().end()) {
-                pvsIndices.emplace_back(indices[3 * i]);
-                pvsIndices.emplace_back(indices[3 * i + 1]);
-                pvsIndices.emplace_back(indices[3 * i + 2]);
-            }
-        }
-    } else {
-        for (auto triangleID : pvs.getSet()) {
-            if (triangleID != -1) {
-                pvsIndices.emplace_back(indices[3 * triangleID]);
-                pvsIndices.emplace_back(indices[3 * triangleID + 1]);
-                pvsIndices.emplace_back(indices[3 * triangleID + 2]);
-            }
-        }
-    }
-    */
-
-    // Copy PVS data to GPU accessible pvs visualization buffer (has the same size as the index vector)
-    VkDeviceSize bufferSize = sizeof(pvsIndices[0]) * pvsIndices.size();
-
-    // Create staging buffer using host-visible memory
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    // Copy PVS data to the staging buffer
-    void *data;
-    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-    memcpy(data, pvsIndices.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-    vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-    // Copy PVS data from the staging buffer to the GPU-visible PVS visualization buffer (used as an index buffer when drawing)
-    VulkanUtil::copyBuffer(
-        logicalDevice, commandPool, queue, stagingBuffer, pvsVisualizationBuffer,
-        bufferSize
-    );
-
-    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-
-    return pvsVisualizationBuffer;
 }
 
 void VisibilityManager::fetchPVS() {
