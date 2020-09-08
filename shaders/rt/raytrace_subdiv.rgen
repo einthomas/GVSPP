@@ -157,7 +157,7 @@ void main() {
 
         // Calculate the first sample in the middle of the edge
         vec3 samplePos = (samplesOutput[numSamplesPerEdge - 1].pos + samplesOutput[0].pos) / 2.0f;
-        traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
+        traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - rayOrigin), 100000.0, 0);
         tracedRays++;
         samplesOutput[index] = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
 
@@ -194,7 +194,7 @@ void main() {
                     #ifndef USE_3D_VIEW_CELL
                         if (dot(rayDir, viewCellNormal) > 0) {
                     #endif
-                    traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                    traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
                     if (int(hitInfo.w) != -1) {
@@ -236,7 +236,7 @@ void main() {
                     #ifndef USE_3D_VIEW_CELL
                         if (dot(rayDir, viewCellNormal) > 0) {
                     #endif
-                    traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
+                    traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
                     if (int(hitInfo.w) != -1) {

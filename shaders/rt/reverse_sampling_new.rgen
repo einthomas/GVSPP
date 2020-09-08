@@ -104,7 +104,7 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
                         const float w = (dot00 * dot21 - dot01 * dot20) / denom;
                         if (any(bvec3(w < 0.0f || w > 1.0f, v < 0.0f || v > 1.0f, w + v > 1.0f))) {
                             const vec3 rayOrigin = viewCellSamplePoint;
-                            traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
+                            traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
                             tracedRsRays++;
 
                             int triangleID = int(hitInfo.w);

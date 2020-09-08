@@ -101,7 +101,7 @@ bool reverseSampling(uint launchIndex, const vec3 rayOrigin, vec3 rayDir, int oc
 
         for (int i = 0; i < 16; i++) {
             vec3 rayDirNew = normalize((rayOrigin + (samplePos - rayOrigin)) - rayOrigins[i]);
-            traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV, 0xff, 0, 0, 0, rayOrigins[i], 0.001, rayDirNew, 100000.0, 0);
+            traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigins[i], 0.001, rayDirNew, 100000.0, 0);
             tracedRsRays++;
 
             int triangleID = int(hitInfo.w);
