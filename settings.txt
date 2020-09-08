@@ -23,13 +23,13 @@ NEW_TRIANGLE_TERMINATION_THRESHOLD 50
 */
 RANDOM_RAYS_PER_ITERATION 1000000
 ABS_DELTA 0.0001
-ABS_NUM_SAMPLES_PER_EDGE 10
+ABS_NUM_SAMPLES_PER_EDGE 15
 ABS_MAX_SUBDIVISION_STEPS 3
 REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE 5
 USE_RECURSIVE_EDGE_SUBDIVISION false
 
 /*
-    REVERSE_SAMPLING_METHOD 0       Reverse sampling method based on the old CPU implementation
+    REVERSE_SAMPLING_METHOD 0       Reverse sampling method based on the original CPU implementation
     REVERSE_SAMPLING_METHOD 1       Reverse sampling based on the GVS paper
     REVERSE_SAMPLING_METHOD 2       New reverse sampling
 */
@@ -56,5 +56,5 @@ USE_3D_VIEW_CELL false
 
 --- SCENE ---
 CALCPVS pvs.txt
-CANYON
+CITY_NEW
 0

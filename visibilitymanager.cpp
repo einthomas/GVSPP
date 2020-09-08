@@ -2113,11 +2113,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
         numRsTriangles = n[1];
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
-        } else {
-            numTriangles = n[0];
-        }
+        numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
         numRsRays = n[3];
         pvsSize = n[4];
 
