@@ -254,7 +254,7 @@ void VisibilityManager::resetPVSGPUBuffer() {
 
     VulkanUtil::copyBuffer(
         logicalDevice, commandPool[0], computeQueue, stagingBuffer,
-        testBuffer[0], bufferSize
+        pvsBuffer[0], bufferSize
     );
 
     vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
@@ -307,7 +307,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     );
 
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, testBuffer[0],
+        logicalDevice, commandPool[0], computeQueue, pvsBuffer[0],
         hostBuffer, bufferSize
     );
 
@@ -317,16 +317,16 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
 
 
     // Destroy small PVS buffer and free memory
-    vkDestroyBuffer(logicalDevice, testBuffer[0], nullptr);
-    vkFreeMemory(logicalDevice, testBufferMemory[0], nullptr);
+    vkDestroyBuffer(logicalDevice, pvsBuffer[0], nullptr);
+    vkFreeMemory(logicalDevice, pvsBufferMemory[0], nullptr);
 
 
     // Create larger PVS buffer
     CUDAUtil::createExternalBuffer(
         sizeof(int) * newSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, testBuffer[0],
-        testBufferMemory[0], logicalDevice, physicalDevice
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pvsBuffer[0],
+        pvsBufferMemory[0], logicalDevice, physicalDevice
     );
     int oldPVSBufferCapacity = pvsBufferCapacity;
     pvsBufferCapacity = newSize;
@@ -418,7 +418,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     // Update descriptor set
     std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
     VkDescriptorBufferInfo testBufferInfo = {};
-    testBufferInfo.buffer = testBuffer[0];
+    testBufferInfo.buffer = pvsBuffer[0];
     testBufferInfo.offset = 0;
     testBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -505,11 +505,11 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     absOutputPointer.resize(numThreads);
     edgeSubdivOutputPointer.resize(numThreads);
 
-    testBuffer.resize(numThreads);
-    testBufferMemory.resize(numThreads);
-    testHostBuffer.resize(numThreads);
-    testHostBufferMemory.resize(numThreads);
-    testPointer.resize(numThreads);
+    pvsBuffer.resize(numThreads);
+    pvsBufferMemory.resize(numThreads);
+    pvsHostBuffer.resize(numThreads);
+    pvsHostBufferMemory.resize(numThreads);
+    pvsPointer.resize(numThreads);
 
     viewCellBuffer.resize(numThreads);
     viewCellBufferMemory.resize(numThreads);
@@ -631,8 +631,8 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         CUDAUtil::createExternalBuffer(
             pvsSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, testBuffer[i],
-            testBufferMemory[i], logicalDevice, physicalDevice
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pvsBuffer[i],
+            pvsBufferMemory[i], logicalDevice, physicalDevice
         );
         /*
         VulkanUtil::createBuffer(
@@ -693,7 +693,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     */
     CUDAUtil::importCudaExternalMemory(
         (void**)&pvsCuda, pvsCudaMemory,
-        testBufferMemory[0], pvsSize, logicalDevice
+        pvsBufferMemory[0], pvsSize, logicalDevice
     );
     /*
     CUDAUtil::importCudaExternalMemory(
@@ -874,7 +874,7 @@ void VisibilityManager::createDescriptorSets(
     descriptorWrites[8].pBufferInfo = &triangleCounterBufferInfo;
 
     VkDescriptorBufferInfo testBufferInfo = {};
-    testBufferInfo.buffer = testBuffer[threadId];
+    testBufferInfo.buffer = pvsBuffer[threadId];
     testBufferInfo.offset = 0;
     testBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[9].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1770,7 +1770,7 @@ void VisibilityManager::createComputeDescriptorSets(int threadId) {
     descriptorWrites[0].pBufferInfo = &pvsBulkInsertBufferInfo;
 
     VkDescriptorBufferInfo testBufferInfo = {};
-    testBufferInfo.buffer = testBuffer[threadId];
+    testBufferInfo.buffer = pvsBuffer[threadId];
     testBufferInfo.offset = 0;
     testBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2633,11 +2633,11 @@ void VisibilityManager::releaseResources() {
         vkDestroyBuffer(logicalDevice, triangleCounterBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, triangleCounterBufferMemory[i], nullptr);
 
-        vkDestroyBuffer(logicalDevice, testBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, testBufferMemory[i], nullptr);
-        vkUnmapMemory(logicalDevice, testHostBufferMemory[i]);
-        vkDestroyBuffer(logicalDevice, testHostBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, testHostBufferMemory[i], nullptr);
+        vkDestroyBuffer(logicalDevice, pvsBuffer[i], nullptr);
+        vkFreeMemory(logicalDevice, pvsBufferMemory[i], nullptr);
+        vkUnmapMemory(logicalDevice, pvsHostBufferMemory[i]);
+        vkDestroyBuffer(logicalDevice, pvsHostBuffer[i], nullptr);
+        vkFreeMemory(logicalDevice, pvsHostBufferMemory[i], nullptr);
 
         vkDestroyFence(logicalDevice, commandBufferFence[i], nullptr);
 
@@ -2699,7 +2699,7 @@ void VisibilityManager::fetchPVS() {
     );
 
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, testBuffer[0],
+        logicalDevice, commandPool[0], computeQueue, pvsBuffer[0],
         hostBuffer, bufferSize
     );
 

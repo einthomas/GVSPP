@@ -191,11 +191,11 @@ private:
     std::vector<VkBuffer> pvsBulkInsertBuffer;
     std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
 
-    std::vector<VkBuffer> testBuffer;
-    std::vector<VkDeviceMemory> testBufferMemory;
-    std::vector<VkBuffer> testHostBuffer;
-    std::vector<VkDeviceMemory> testHostBufferMemory;
-    std::vector<void*> testPointer;
+    std::vector<VkBuffer> pvsBuffer;
+    std::vector<VkDeviceMemory> pvsBufferMemory;
+    std::vector<VkBuffer> pvsHostBuffer;
+    std::vector<VkDeviceMemory> pvsHostBufferMemory;
+    std::vector<void*> pvsPointer;
     std::vector<VkBuffer> pvsCapacityUniformBuffer;
     std::vector<VkDeviceMemory> pvsCapacityUniformMemory;
     int *pvsCuda;
