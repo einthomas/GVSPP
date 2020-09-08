@@ -113,7 +113,7 @@ void main() {
     rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
 
     // Trace ray
-    uint rayFlags = gl_RayFlagsOpaqueNV;
+    uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV; //gl_RayFlagsOpaqueNV;
     uint cullMask = 0xff;
     float tmin = 0.001;
     float tmax = 100000.0;

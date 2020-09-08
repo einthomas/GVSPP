@@ -111,6 +111,7 @@ VisibilityManager::VisibilityManager(
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
     generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, 0);
+
     //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
     //generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
 
@@ -983,7 +984,7 @@ void VisibilityManager::initRayTracing(
     geometryInstance.instanceId = 0;
     geometryInstance.mask = 0xff;
     geometryInstance.instanceOffset = 0;
-    geometryInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV;
+    //geometryInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV;
     geometryInstance.accelerationStructureHandle = bottomLevelAS.handle;
 
     // Upload instance descriptions to the device
@@ -2588,6 +2589,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
         }
 
+        //std::cout << pvsSize << std::endl;
         if (USE_TERMINATION_CRITERION) {
             if (
                 statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||

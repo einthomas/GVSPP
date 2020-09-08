@@ -159,7 +159,7 @@ void main() {
         if (dot(rayDir, viewCellNormal) > 0) {
     #endif
         // Trace ray
-        uint rayFlags = gl_RayFlagsOpaqueNV;
+        uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV; //gl_RayFlagsOpaqueNV;
         uint cullMask = 0xff;
         float tmin = 0.001;
         float tmax = 100000.0;

@@ -51,7 +51,7 @@ public:
     PVS<int> pvs;
     std::vector<std::vector<Vertex>> rayVertices;
     bool visualizeRandomRays = false;
-    bool visualizeABSRays = true;
+    bool visualizeABSRays = false;
     bool visualizeEdgeSubdivRays = false;
     VkQueue computeQueue;
     std::vector<VkCommandPool> commandPool;
