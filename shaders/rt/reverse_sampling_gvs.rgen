@@ -141,7 +141,7 @@ bool reverseSampling(uint launchIndex, Vertex v[3], Sample s, vec3 rayOrigin, ve
                         tracedRsRays++;
 
                         int triangleID = int(hitInfo.w);
-                        if (triangleID != -1) { // && isTriangleFrontFacing(viewCellNormal, viewCellPos, triangleID)) {
+                        if (triangleID != -1) {
                             bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                             if (targetSampleReached) {
                                 foundSample = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);

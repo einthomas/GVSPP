@@ -280,7 +280,7 @@ void main() {
                 }
             #else
                 // In case of a 2d view cell, also check if the found triangle is front-facing
-                if (samplesOutput[k + 1].triangleID >= 0 && isTriangleFrontFacing(viewCellNormal, viewCellPos, samplesOutput[k + 1].triangleID) && insert(samplesOutput[k + 1].triangleID)) {
+                if (samplesOutput[k + 1].triangleID >= 0 && insert(samplesOutput[k + 1].triangleID)) {
                     foundTriangles++;
                 } else {
                     samplesOutput[k + 1].triangleID = -1;

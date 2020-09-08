@@ -24,14 +24,3 @@ bool intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir, out vec
 
     return false;
 }
-
-/*
-    Returns true if at least one vertex of the triangle is in front of the view cell
-*/
-bool isTriangleFrontFacing(vec3 viewCellNormal, vec3 viewCellPos, int triangleID) {
-    return (
-        dot(viewCellNormal, unpackVertexData(indices.i[3 * triangleID]).worldPos - viewCellPos) > 0
-        || dot(viewCellNormal, unpackVertexData(indices.i[3 * triangleID + 1]).worldPos - viewCellPos) > 0
-        || dot(viewCellNormal, unpackVertexData(indices.i[3 * triangleID + 2]).worldPos - viewCellPos) > 0
-    );
-}
