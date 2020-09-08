@@ -54,7 +54,7 @@ VisibilityManager::VisibilityManager(
     NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
-    MAX_TRIANGLE_COUNT(indices.size()),
+    MAX_TRIANGLE_COUNT(indices.size() / 3.0f),
     statistics(1000000)
 {
     this->logicalDevice = logicalDevice;
@@ -69,11 +69,11 @@ VisibilityManager::VisibilityManager(
 
     if (GPU_SET_TYPE == 0) {
         // PVS size when a GPU SET is used. Has to be equal to the number of triangles in the scene
-        pvsBufferCapacity = indices.size();
+        pvsBufferCapacity = MAX_TRIANGLE_COUNT;
     } else {
         if (INITIAL_HASH_SET_SIZE == 0) {
             // Initial PVS size when a GPU HASH SET is used. Has to be a power of 2
-            pvsBufferCapacity = 1 << int(std::ceil(std::log2(indices.size() / 2.0f)));
+            pvsBufferCapacity = 1 << int(std::ceil(std::log2(MAX_TRIANGLE_COUNT / 2.0f)));
         } else {
             pvsBufferCapacity = INITIAL_HASH_SET_SIZE;
         }
