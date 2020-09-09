@@ -1,5 +1,7 @@
 #version 460
 
+#include "rt/defines.glsl"
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(binding = 0, set = 0) writeonly buffer pvsBuffer {
@@ -17,20 +19,20 @@ layout(binding = 3, set = 0) uniform pvsSizeUniform {
 layout(binding = 4, set = 0) uniform currentPvsIndexUniform {
     int currentPvsIndex;
 };
-layout(binding = 5, set = 0) uniform isampler2DArray ids;
+#ifdef NIRENSTEIN_USE_MULTI_VIEW_RENDERING
+    layout(binding = 5, set = 0) uniform isampler2DArray ids;
+#else
+    layout(binding = 5, set = 0) uniform isampler2D ids;
+#endif
 
 void main() {
-    /*
-    int index = int(gl_GlobalInvocationID.x + (gl_NumWorkGroups.x * gl_WorkGroupSize.x) * gl_GlobalInvocationID.y);
-    int triangleID = triangleIDs[index];
-    pvs[triangleID] = triangleID;
-    currentPvs[currentPvsIndex * pvsSize + triangleID] = triangleID;
-    */
-
-    // todo: test manual unroll
-    // todo: remove loop and instead launch additional shaders
-    for (int i = 0; i < 5; i++) {
-        int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
+    #ifdef NIRENSTEIN_USE_MULTI_VIEW_RENDERING
+        for (int i = 0; i < 5; i++) {
+            int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
+            pvs[triangleID] = triangleID;
+        }
+    #else
+        int triangleID = int(texelFetch(ids, ivec2(gl_GlobalInvocationID.xy), 0).x);
         pvs[triangleID] = triangleID;
-    }
+    #endif
 }

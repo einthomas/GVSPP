@@ -15,7 +15,7 @@
 #include "Vertex.h"
 #include "gpuHashTable/linearprobing.h"
 
-struct UniformBufferObject {
+struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
     alignas(64) glm::mat4 view;
     alignas(64) glm::mat4 projection;
@@ -757,7 +757,7 @@ void VisibilityManager::createDescriptorSets(
     VkDescriptorBufferInfo uniformBufferInfo = {};
     uniformBufferInfo.buffer = uniformBuffers[0];
     uniformBufferInfo.offset = 0;
-    uniformBufferInfo.range = sizeof(UniformBufferObject);
+    uniformBufferInfo.range = sizeof(UniformBufferObjectMultiView);
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet = descriptorSet[threadId];
     descriptorWrites[1].dstBinding = 1;

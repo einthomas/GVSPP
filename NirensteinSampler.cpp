@@ -13,9 +13,14 @@
 #include <vector>
 #include <unordered_set>
 
-struct UniformBufferObject {
+struct UniformBufferObjectMultiView {
     glm::mat4 model;
     glm::mat4 view[5];
+    glm::mat4 projection;
+};
+struct UniformBufferObject {
+    glm::mat4 model;
+    glm::mat4 view;
     glm::mat4 projection;
 };
 
@@ -29,7 +34,8 @@ NirensteinSampler::NirensteinSampler(
     const std::vector<uint32_t> indices,
     const int numTriangles,
     const float ERROR_THRESHOLD,
-    const int MAX_SUBDIVISIONS
+    const int MAX_SUBDIVISIONS,
+    const bool USE_MULTI_VIEW_RENDERING
 ) :
     computeQueue(computeQueue),
     computeCommandPool(computeCommandPool),
@@ -39,7 +45,8 @@ NirensteinSampler::NirensteinSampler(
     FRAME_BUFFER_WIDTH(window->swapChainImageSize.width),
     FRAME_BUFFER_HEIGHT(window->swapChainImageSize.height),
     ERROR_THRESHOLD(ERROR_THRESHOLD),
-    MAX_SUBDIVISIONS(MAX_SUBDIVISIONS)
+    MAX_SUBDIVISIONS(MAX_SUBDIVISIONS),
+    USE_MULTI_VIEW_RENDERING(USE_MULTI_VIEW_RENDERING)
 {
     const VkFormat depthFormat = window->findDepthFormat();
     createRenderPass(depthFormat);
@@ -104,51 +111,108 @@ void NirensteinSampler::renderVisibilityCube(
     computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffer;
 
     // Update uniform buffer
-    UniformBufferObject ubo;
-    ubo.model = glm::mat4(1.0f);
-    ubo.projection = glm::perspective(
-        glm::radians(90.0f),
-        FRAME_BUFFER_WIDTH / (float) FRAME_BUFFER_HEIGHT,
-        0.1f,
-        100000.0f
-    );
-    ubo.projection[1][1] *= -1; // Flip y axis
-    for (int k = 0; k < cameraForwards.size(); k++) {
-        ubo.view[k] = glm::lookAt(pos, pos + cameraForwards[k], cameraUps[k]);
-    }
-    void *data;
-    vkMapMemory(logicalDevice, uniformBufferMemory, 0, sizeof(ubo), 0, &data);
-    memcpy(data, &ubo, sizeof(UniformBufferObject));
-    vkUnmapMemory(logicalDevice, uniformBufferMemory);
+    if (USE_MULTI_VIEW_RENDERING) {
+        UniformBufferObjectMultiView ubo;
+        ubo.model = glm::mat4(1.0f);
+        ubo.projection = glm::perspective(
+            glm::radians(90.0f),
+            FRAME_BUFFER_WIDTH / (float) FRAME_BUFFER_HEIGHT,
+            0.1f,
+            100000.0f
+        );
+        ubo.projection[1][1] *= -1; // Flip y axis
+        for (int k = 0; k < cameraForwards.size(); k++) {
+            ubo.view[k] = glm::lookAt(pos, pos + cameraForwards[k], cameraUps[k]);
+        }
+        void *data;
+        vkMapMemory(logicalDevice, uniformBufferMemory, 0, sizeof(ubo), 0, &data);
+        memcpy(data, &ubo, sizeof(UniformBufferObjectMultiView));
+        vkUnmapMemory(logicalDevice, uniformBufferMemory);
 
+        // Submit command buffer
+        auto startTotal = std::chrono::steady_clock::now();
+        VkSubmitInfo renderCommandBufferSubmitInfo = {};
+        renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        renderCommandBufferSubmitInfo.commandBufferCount = 1;
+        renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderFront;
 
-    // Submit command buffer
-    auto startTotal = std::chrono::steady_clock::now();
-    VkSubmitInfo renderCommandBufferSubmitInfo = {};
-    renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    renderCommandBufferSubmitInfo.commandBufferCount = 1;
-    renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderFront;
-
-    vkQueueSubmit(graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
-    VkResult result;
-    do {
-        result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
-    } while(result == VK_TIMEOUT);
-    vkResetFences(logicalDevice, 1, &fence);
-
-    renderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
-
-    // Dispatch compute shader to collect triangle IDs
-    startTotal = std::chrono::steady_clock::now();
-    {
-        vkQueueSubmit(computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+        vkQueueSubmit(graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
         VkResult result;
         do {
             result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
         } while(result == VK_TIMEOUT);
         vkResetFences(logicalDevice, 1, &fence);
+
+        renderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+
+        // Dispatch compute shader to collect triangle IDs
+        startTotal = std::chrono::steady_clock::now();
+        {
+            vkQueueSubmit(computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+            VkResult result;
+            do {
+                result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+            } while(result == VK_TIMEOUT);
+            vkResetFences(logicalDevice, 1, &fence);
+        }
+        computeShaderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+    } else {
+        for (int k = 0; k < cameraForwards.size(); k++) {
+            // Update uniform buffer
+            {
+                UniformBufferObject ubo;
+                ubo.model = glm::mat4(1.0f);
+                ubo.view = glm::lookAt(pos, pos + cameraForwards[k], cameraUps[k]);
+                ubo.projection = glm::perspective(
+                    glm::radians(90.0f),
+                    FRAME_BUFFER_WIDTH / (float) FRAME_BUFFER_HEIGHT,
+                    0.1f,
+                    100000.0f
+                );
+                ubo.projection[1][1] *= -1; // Flip y axis
+
+                // Copy data in the uniform buffer object to the uniform buffer
+                void *data;
+                vkMapMemory(
+                    logicalDevice, uniformBufferMemory, 0, sizeof(ubo), 0, &data
+                );
+                memcpy(data, &ubo, sizeof(UniformBufferObject));
+                vkUnmapMemory(logicalDevice, uniformBufferMemory);
+            }
+
+            // Submit command buffer
+            auto startTotal = std::chrono::steady_clock::now();
+            VkSubmitInfo renderCommandBufferSubmitInfo = {};
+            renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            renderCommandBufferSubmitInfo.commandBufferCount = 1;
+            if (k == 0) {
+                renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderFront;
+            } else if (k == 1 || k == 2) {
+                renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderSides;
+            } else {
+                renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderTopBottom;
+            }
+            vkQueueSubmit(graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
+            VkResult result;
+            do {
+                result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+            } while(result == VK_TIMEOUT);
+            vkResetFences(logicalDevice, 1, &fence);
+            renderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+
+            // Dispatch compute shader to collect triangle IDs
+            startTotal = std::chrono::steady_clock::now();
+            {
+                vkQueueSubmit(computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+                VkResult result;
+                do {
+                    result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+                } while(result == VK_TIMEOUT);
+                vkResetFences(logicalDevice, 1, &fence);
+            }
+            computeShaderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+        }
     }
-    computeShaderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
 
     /*
     for (int k = 0; k < cameraForwards.size(); k++) {
@@ -365,7 +429,7 @@ void NirensteinSampler::divideAdaptive(
             // Copy data in the uniform buffer object to the uniform buffer
             void *data;
             vkMapMemory(logicalDevice, currentPvsIndexUniformBufferMemory, 0, sizeof(int), 0, &data);
-            memcpy(data, &i, sizeof(UniformBufferObject));
+            memcpy(data, &i, sizeof(UniformBufferObjectMultiView));
             vkUnmapMemory(logicalDevice, currentPvsIndexUniformBufferMemory);
 
             //pvss[i] = renderVisibilityCube(cameraForwards, cameraUps, positions[i]);
@@ -610,14 +674,16 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     */
 
+    VkRenderPassMultiviewCreateInfo renderPassMultiviewCI = {};
     const uint32_t viewMask = 0b00011111;
     const uint32_t correlationMask = 0b00000000;
-    VkRenderPassMultiviewCreateInfo renderPassMultiviewCI = {};
-    renderPassMultiviewCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
-    renderPassMultiviewCI.subpassCount = 1;
-    renderPassMultiviewCI.pViewMasks = &viewMask;
-    renderPassMultiviewCI.correlationMaskCount = 1;
-    renderPassMultiviewCI.pCorrelationMasks = &correlationMask;
+    if (USE_MULTI_VIEW_RENDERING) {
+        renderPassMultiviewCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+        renderPassMultiviewCI.subpassCount = 1;
+        renderPassMultiviewCI.pViewMasks = &viewMask;
+        renderPassMultiviewCI.correlationMaskCount = 1;
+        renderPassMultiviewCI.pCorrelationMasks = &correlationMask;
+    }
 
     std::array<VkAttachmentDescription, 2> attachments = {
         colorAttachment, depthAttachment
@@ -630,7 +696,9 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     renderPassInfo.pSubpasses = &subpassDescription;
     renderPassInfo.dependencyCount = dependencies.size();
     renderPassInfo.pDependencies = dependencies.data();
-    renderPassInfo.pNext = &renderPassMultiviewCI;
+    if (USE_MULTI_VIEW_RENDERING) {
+        renderPassInfo.pNext = &renderPassMultiviewCI;
+    }
 
     if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
         throw std::runtime_error("failed to create nirenstein render pass");
@@ -666,7 +734,11 @@ void NirensteinSampler::createDescriptorSet() {
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniformBuffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = sizeof(UniformBufferObject);
+    if (USE_MULTI_VIEW_RENDERING) {
+        bufferInfo.range = sizeof(UniformBufferObjectMultiView);
+    } else {
+        bufferInfo.range = sizeof(UniformBufferObject);
+    }
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet = nirensteinDescriptorSet;
     descriptorWrites[0].dstBinding = 0;
@@ -877,15 +949,27 @@ void NirensteinSampler::createComputePipeline() {
 }
 
 void NirensteinSampler::createBuffers(const int numTriangles) {
-    VulkanUtil::createBuffer(
-        physicalDevice,
-        logicalDevice,
-        sizeof(UniformBufferObject),
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        uniformBuffer,
-        uniformBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
+    if (USE_MULTI_VIEW_RENDERING) {
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof(UniformBufferObjectMultiView),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            uniformBuffer,
+            uniformBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+    } else {
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof(UniformBufferObject),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            uniformBuffer,
+            uniformBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+    }
 
     VulkanUtil::createBuffer(
         physicalDevice,
@@ -978,19 +1062,19 @@ void NirensteinSampler::createFramebuffer(VkFormat depthFormat) {
         physicalDevice, logicalDevice, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R32_SINT,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, //VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory, MULTI_VIEW_LAYER_COUNT
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory, USE_MULTI_VIEW_RENDERING ? MULTI_VIEW_LAYER_COUNT : 1
     );
     colorImageView = VulkanUtil::createImageView(
-        logicalDevice, colorImage, VK_FORMAT_R32_SINT, VK_IMAGE_ASPECT_COLOR_BIT, MULTI_VIEW_LAYER_COUNT
+        logicalDevice, colorImage, VK_FORMAT_R32_SINT, VK_IMAGE_ASPECT_COLOR_BIT, USE_MULTI_VIEW_RENDERING ? MULTI_VIEW_LAYER_COUNT : 1
     );
 
     VulkanUtil::createImage(
         physicalDevice, logicalDevice, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT, VK_SAMPLE_COUNT_1_BIT, depthFormat,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory, MULTI_VIEW_LAYER_COUNT
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory, USE_MULTI_VIEW_RENDERING ? MULTI_VIEW_LAYER_COUNT : 1
     );
     depthImageView = VulkanUtil::createImageView(
-        logicalDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, MULTI_VIEW_LAYER_COUNT
+        logicalDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, USE_MULTI_VIEW_RENDERING ? MULTI_VIEW_LAYER_COUNT : 1
     );
 
     VkSamplerCreateInfo samplerInfo = {};
@@ -1038,16 +1122,16 @@ void NirensteinSampler::createCommandBuffers(
         commandBufferRenderFront, vertexBuffer, vertices, indexBuffer, indices,
         { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)FRAME_BUFFER_HEIGHT } }
     );
-    /*
-    createCommandBuffer(
-        commandBufferRenderSides, vertexBuffer, vertices, indexBuffer, indices,
-        { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } }
-    );
-    createCommandBuffer(
-        commandBufferRenderTopBottom, vertexBuffer, vertices, indexBuffer, indices,
-        { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } }
-    );
-    */
+    if (!USE_MULTI_VIEW_RENDERING) {
+        createCommandBuffer(
+            commandBufferRenderSides, vertexBuffer, vertices, indexBuffer, indices,
+            { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } }
+        );
+        createCommandBuffer(
+            commandBufferRenderTopBottom, vertexBuffer, vertices, indexBuffer, indices,
+            { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } }
+        );
+    }
 }
 
 void NirensteinSampler::createCommandBuffer(
@@ -1134,7 +1218,11 @@ void NirensteinSampler::createCommandBuffer(
 
     void *data;
     vkMapMemory(logicalDevice, pvsSizeUniformBufferMemory, 0, sizeof(int), 0, &data);
-    memcpy(data, &MAX_NUM_TRIANGLES, sizeof(UniformBufferObject));
+    if (USE_MULTI_VIEW_RENDERING) {
+        memcpy(data, &MAX_NUM_TRIANGLES, sizeof(UniformBufferObjectMultiView));
+    } else {
+        memcpy(data, &MAX_NUM_TRIANGLES, sizeof(UniformBufferObject));
+    }
     vkUnmapMemory(logicalDevice, pvsSizeUniformBufferMemory);
 }
 

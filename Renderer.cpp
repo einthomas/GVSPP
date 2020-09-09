@@ -23,7 +23,7 @@
 
 #include "NirensteinSampler.h"
 
-struct UniformBufferObject {
+struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
     alignas(64) glm::mat4 view;
     alignas(64) glm::mat4 projection;
@@ -161,7 +161,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         window, visibilityManager->computeQueue, visibilityManager->commandPool[0], vertexBuffer,
         vertices, indexBuffer, indices, indices.size() / 3.0f,
         std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
-        std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS"))
+        std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),
+        USE_NIRENSTEIN_MULTI_VIEW_RENDERING
     );
 }
 
@@ -743,7 +744,7 @@ void VulkanRenderer::createDescriptorSets() {
         VkDescriptorBufferInfo bufferInfo = {};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
+        bufferInfo.range = sizeof(UniformBufferObjectMultiView);
 
         /*
         VkDescriptorImageInfo imageInfo = {};
@@ -789,7 +790,7 @@ void VulkanRenderer::createUniformBuffers() {
     uniformBuffers.resize(window->imageCount);
     uniformBuffersMemory.resize(window->imageCount);
 
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    VkDeviceSize bufferSize = sizeof(UniformBufferObjectMultiView);
     for (int i = 0; i < window->imageCount; i++) {
         VulkanUtil::createBuffer(
             window->physicalDevice,
@@ -804,7 +805,7 @@ void VulkanRenderer::createUniformBuffers() {
 }
 
 void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
-    UniformBufferObject ubo;
+    UniformBufferObjectMultiView ubo;
 
     ubo.model = glm::mat4(1.0f);
 
@@ -1134,9 +1135,13 @@ Settings VulkanRenderer::loadSettingsFile() {
     if (se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
         shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
     }
+    if (se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true") {
+        shaderDefinesFile << "#define NIRENSTEIN_USE_MULTI_VIEW_RENDERING\n";
+    }
     shaderDefinesFile.close();
 
     USE_NIRENSTEIN_VISIBILITY_SAMPLING = se.at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
+    USE_NIRENSTEIN_MULTI_VIEW_RENDERING = se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true";
 
     return settings;
 }
@@ -1152,7 +1157,7 @@ void VulkanRenderer::startVisibilityThread() {
             if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
                 pvs = nirensteinSampler->run(
                     visibilityManager->viewCells[k], cameraForward,
-                    visibilityManager->generateHaltonPoints2d<2>({2, 3}, 10)
+                    visibilityManager->generateHaltonPoints2d<2>({2, 3}, 20)
                 );
             } else {
                 visibilityManager->rayTrace(indices, 0, k);

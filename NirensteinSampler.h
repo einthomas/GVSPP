@@ -22,7 +22,8 @@ public:
         const std::vector<uint32_t> indices,
         const int numTriangles,
         const float ERROR_THRESHOLD,
-        const int MAX_SUBDIVISIONS
+        const int MAX_SUBDIVISIONS,
+        const bool USE_MULTI_VIEW_RENDERING
     );
     std::vector<int> run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints);
     std::vector<glm::vec3> renderCubePositions;
@@ -37,6 +38,7 @@ private:
     const int MAX_NUM_TRIANGLES;
     const float ERROR_THRESHOLD;
     const int MAX_SUBDIVISIONS;
+    const bool USE_MULTI_VIEW_RENDERING;
     const int MULTI_VIEW_LAYER_COUNT = 5;
 
     VkCommandPool graphicsCommandPool;

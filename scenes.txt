@@ -155,9 +155,9 @@ CITY_MODEL models/citymodel/citymodel.obj
 0 0 -1
 
 CANYON models/canyon/canyon_normals.obj
-2699.39 2045.44 2747.72
-200 100 0
-0 180 0
+4998.78 2120.44 1600
+100 100 0
+0 90 0
 
 6598.41 2195.44 2997.27
 100 80 0

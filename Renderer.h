@@ -57,6 +57,7 @@ public:
 private:
     const int NUM_THREADS = 1;
     bool USE_NIRENSTEIN_VISIBILITY_SAMPLING;
+    bool USE_NIRENSTEIN_MULTI_VIEW_RENDERING;
 
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
