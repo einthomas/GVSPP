@@ -80,7 +80,41 @@ public:
         std::vector<glm::mat4> viewCellMatrices
     );
     void addViewCell(glm::mat4 model);
-    void generateHaltonPoints2d(int n, int threadId, int offset = 0);
+    //template<int T> std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, int offset = 0);
+    template<int T>
+    std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, int offset = 0) {
+        std::vector<glm::vec<T, float, glm::defaultp>> haltonPoints;
+
+        //int bases[4] = { 2, 3, 5, 7 };
+
+        //haltonPoints.clear();
+        haltonPoints.resize(n);
+
+        for (int k = 0; k < bases.size(); k++) {
+            double inverseBase = 1.0 / bases[k];
+            double value = offset;
+
+            for (int i = 0; i < n; i++) {
+                double r = 1.0 - value - 1e-10;
+
+                if (inverseBase < r) {
+                    value += inverseBase;
+                } else {
+                    double h = inverseBase * inverseBase;
+                    double hh = inverseBase;
+                    while (h >= r) {
+                        hh = h;
+                        h *= inverseBase;
+                    }
+                    value += hh + h - 1.0;
+                }
+
+                haltonPoints[i][k] = value;
+            }
+        }
+
+        return haltonPoints;
+    }
     void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
     void fetchPVS();

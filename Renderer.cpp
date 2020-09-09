@@ -908,7 +908,7 @@ void VulkanRenderer::startNextFrame(
 
     // Draw visibility cubes
     if (USE_NIRENSTEIN_VISIBILITY_SAMPLING && viewCellRendering) {
-        for (auto pos : nirensteinSampler->cp) {
+        for (auto pos : nirensteinSampler->renderCubePositions) {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, pos);
             model = glm::scale(model, glm::vec3(2.0f));
@@ -1146,12 +1146,14 @@ void VulkanRenderer::startVisibilityThread() {
     if (!loadPVS) {
         std::ofstream pvsFile;
         pvsFile.open(pvsStorageFile);
-        //for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
         for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
             std::cout << "View cell " << k << ":" << std::endl;
             std::vector<int> pvs;
             if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
-                pvs = nirensteinSampler->run(visibilityManager->viewCells[k], cameraForward);
+                pvs = nirensteinSampler->run(
+                    visibilityManager->viewCells[k], cameraForward,
+                    visibilityManager->generateHaltonPoints2d<2>({2, 3}, 10)
+                );
             } else {
                 visibilityManager->rayTrace(indices, 0, k);
                 // Fetch the PVS from the GPU

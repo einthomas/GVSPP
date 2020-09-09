@@ -142,37 +142,7 @@ void VisibilityManager::addViewCell(glm::mat4 model) {
     In Computer Graphics (SIGGRAPH 97 Conference Proceedings),
     pp. 49--56, August 1997.
 */
-void VisibilityManager::generateHaltonPoints2d(int n, int threadId, int offset) {
-    std::vector<glm::vec4> haltonPoints;
 
-    int bases[4] = { 2, 3, 5, 7 };
-
-    haltonPoints.clear();
-    haltonPoints.resize(n);
-
-    for (int k = 0; k < 4; k++) {
-        double inverseBase = 1.0 / bases[k];
-        double value = offset;
-
-        for (int i = 0; i < n; i++) {
-            double r = 1.0 - value - 1e-10;
-
-            if (inverseBase < r) {
-                value += inverseBase;
-            } else {
-                double h = inverseBase * inverseBase;
-                double hh = inverseBase;
-                while (h >= r) {
-                    hh = h;
-                    h *= inverseBase;
-                }
-                value += hh + h - 1.0;
-            }
-
-            haltonPoints[i][k] = value;
-        }
-    }
-}
 
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
     VkDeviceSize bufferSize;
@@ -232,7 +202,6 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
 
 void VisibilityManager::resetPVSGPUBuffer() {
     VkDeviceSize pvsSize = sizeof(int) * pvsBufferCapacity;
-    std::cout << "pvsBufferCapacity " << pvsBufferCapacity << std::endl;
 
     VkDeviceSize bufferSize = pvsSize;
 

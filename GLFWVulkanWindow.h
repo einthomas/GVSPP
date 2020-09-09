@@ -43,6 +43,7 @@ const std::vector<const char*> deviceExtensions = {
     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+    VK_KHR_MULTIVIEW_EXTENSION_NAME,
 #ifdef _WIN64
     VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
@@ -68,7 +69,7 @@ struct QueueFamilyIndices {
     }
 };
 
-const bool enableValidationLayers = false;
+const bool enableValidationLayers = true;
 
 class GLFWVulkanWindow {
 public:

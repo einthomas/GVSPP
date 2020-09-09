@@ -24,8 +24,8 @@ public:
         const float ERROR_THRESHOLD,
         const int MAX_SUBDIVISIONS
     );
-    std::vector<int> run(const ViewCell &viewCell, glm::vec3 cameraForward);
-    std::vector<glm::vec3> cp;
+    std::vector<int> run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints);
+    std::vector<glm::vec3> renderCubePositions;
     int numSubdivisions = 0;
     std::unordered_map<uint64_t, std::vector<int>> pvsCache;
 
@@ -37,6 +37,7 @@ private:
     const int MAX_NUM_TRIANGLES;
     const float ERROR_THRESHOLD;
     const int MAX_SUBDIVISIONS;
+    const int MULTI_VIEW_LAYER_COUNT = 5;
 
     VkCommandPool graphicsCommandPool;
     VkCommandPool computeCommandPool;
@@ -118,9 +119,17 @@ private:
         const std::array<glm::vec3, 5> &cameraUps,
         const glm::vec3 &pos
     );
-    void divide(
+    void divideAdaptive(
         const ViewCell &viewCell, glm::vec3 cameraForward,
         const std::array<glm::vec3, 4> &positions
+    );
+    void divideUniform(
+        const ViewCell &viewCell, glm::vec3 cameraForward,
+        const std::array<glm::vec3, 4> &positions
+    );
+    void divideHaltonRandom(
+        const ViewCell &viewCell, glm::vec3 cameraForward,
+        const std::vector<glm::vec2> &haltonPoints
     );
 };
 

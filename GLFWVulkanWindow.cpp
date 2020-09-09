@@ -230,7 +230,7 @@ void GLFWVulkanWindow::createLogicalDevice() {
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.fillModeNonSolid = VK_TRUE;      // WIREFRAME
     deviceFeatures.wideLines = VK_TRUE;
-    deviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+    deviceFeatures.multiViewport = VK_TRUE;
 
     // Create logical device
     VkDeviceCreateInfo createInfo = {};

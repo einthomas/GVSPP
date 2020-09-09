@@ -39,10 +39,11 @@ public:
         VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
         VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
         VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image,
-        VkDeviceMemory &imageMemory
+        VkDeviceMemory &imageMemory, uint32_t arrayLayers = 1
     );
     static VkImageView createImageView(
-        VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags
+        VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,
+        uint32_t layerCount = 1
     );
     static VkSampleCountFlagBits getMaxUsableMSAASampleCount(VkPhysicalDevice physicalDevice);
 

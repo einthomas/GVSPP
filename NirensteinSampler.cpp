@@ -14,9 +14,9 @@
 #include <unordered_set>
 
 struct UniformBufferObject {
-    alignas(64) glm::mat4 model;
-    alignas(64) glm::mat4 view;
-    alignas(64) glm::mat4 projection;
+    glm::mat4 model;
+    glm::mat4 view[5];
+    glm::mat4 projection;
 };
 
 NirensteinSampler::NirensteinSampler(
@@ -103,6 +103,54 @@ void NirensteinSampler::renderVisibilityCube(
     computeCommandBufferSubmitInfo.commandBufferCount = 1;
     computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffer;
 
+    // Update uniform buffer
+    UniformBufferObject ubo;
+    ubo.model = glm::mat4(1.0f);
+    ubo.projection = glm::perspective(
+        glm::radians(90.0f),
+        FRAME_BUFFER_WIDTH / (float) FRAME_BUFFER_HEIGHT,
+        0.1f,
+        100000.0f
+    );
+    ubo.projection[1][1] *= -1; // Flip y axis
+    for (int k = 0; k < cameraForwards.size(); k++) {
+        ubo.view[k] = glm::lookAt(pos, pos + cameraForwards[k], cameraUps[k]);
+    }
+    void *data;
+    vkMapMemory(logicalDevice, uniformBufferMemory, 0, sizeof(ubo), 0, &data);
+    memcpy(data, &ubo, sizeof(UniformBufferObject));
+    vkUnmapMemory(logicalDevice, uniformBufferMemory);
+
+
+    // Submit command buffer
+    auto startTotal = std::chrono::steady_clock::now();
+    VkSubmitInfo renderCommandBufferSubmitInfo = {};
+    renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    renderCommandBufferSubmitInfo.commandBufferCount = 1;
+    renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderFront;
+
+    vkQueueSubmit(graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
+    VkResult result;
+    do {
+        result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+    } while(result == VK_TIMEOUT);
+    vkResetFences(logicalDevice, 1, &fence);
+
+    renderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+
+    // Dispatch compute shader to collect triangle IDs
+    startTotal = std::chrono::steady_clock::now();
+    {
+        vkQueueSubmit(computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+        VkResult result;
+        do {
+            result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+        } while(result == VK_TIMEOUT);
+        vkResetFences(logicalDevice, 1, &fence);
+    }
+    computeShaderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+
+    /*
     for (int k = 0; k < cameraForwards.size(); k++) {
         // Update uniform buffer
         {
@@ -188,9 +236,10 @@ void NirensteinSampler::renderVisibilityCube(
         computeShaderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
         //std::cout << "render time 2 " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - startTotal).count() << std::endl;
     }
+    */
 }
 
-std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 cameraForward) {
+std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints) {
     auto startTotal = std::chrono::steady_clock::now();
 
     std::array<glm::vec3, 4> cornerPositions;
@@ -198,15 +247,12 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
         glm::vec3 offset;
         offset.x = i % 2 == 0 ? -1.0f : 1.0f;
         offset.y = int(i / 2) % 2 == 0 ? -1.0f : 1.0f;
-        offset.z = int(i / 4) % 4 == 0 ? -1.0f : 1.0f;
+        offset.z = 0.0f;
         cornerPositions[i] = viewCell.model * glm::vec4(offset, 1.0f);
     }
 
-    for (auto a : cornerPositions) {
-        cp.push_back(a);
-    }
-
-    divide(viewCell, cameraForward, cornerPositions);
+    //divideAdaptive(viewCell, cameraForward, cornerPositions);
+    divideHaltonRandom(viewCell, cameraForward, haltonPoints);
 
     // Copy current pvs to host
     std::vector<int> pvs;
@@ -242,22 +288,20 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
     std::cout << "Image -> buffer copy time: " << copyTime / 1000000.0f << "ms" << std::endl;
     std::cout << "CUDA time: " << cudaTime / 1000000.0f << "ms" << std::endl;
     std::cout << "Fill cache time: " << fillCacheTime / 1000000.0f << "ms" << std::endl;
-
     std::cout << "# cubes rendered: " << pvsCache.size() << std::endl;
-    std::cout << "~ render time per cube: " << renderTime / 1000000.0f / pvsCache.size() << "ms" << std::endl;
-
+    //std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / pvsCache.size() << "ms" << std::endl;
+    std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / haltonPoints.size() << "ms" << std::endl;
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count() / 1000000.0f << "ms " << std::endl;
-
-    std::cout << pvs.size() << std::endl;
+    std::cout << "PVS size: " << pvs.size() << std::endl;
 
     return pvs;
 }
 
-void NirensteinSampler::divide(
+void NirensteinSampler::divideAdaptive(
     const ViewCell &viewCell, glm::vec3 cameraForward, const std::array<glm::vec3, 4> &positions
 ) {
     for (auto a : positions) {
-        cp.push_back(a);
+        renderCubePositions.push_back(a);
     }
 
     const glm::vec3 cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -425,26 +469,70 @@ void NirensteinSampler::divide(
             positions[0] + (positions[3] - positions[0]) / 2.0f
         };
 
-        divide(
+        divideAdaptive(
             viewCell,
             cameraForward,
             { positions[0], newPositions[0], newPositions[1], newPositions[4] }
         );
-        divide(
+        divideAdaptive(
             viewCell,
             cameraForward,
             { newPositions[0], positions[1], newPositions[4], newPositions[2] }
         );
-        divide(
+        divideAdaptive(
             viewCell,
             cameraForward,
             { newPositions[1], newPositions[4], positions[2], newPositions[3] }
         );
-        divide(
+        divideAdaptive(
             viewCell,
             cameraForward,
             { newPositions[4], newPositions[2], newPositions[3], positions[3] }
         );
+    }
+}
+
+void NirensteinSampler::divideUniform(
+    const ViewCell &viewCell, glm::vec3 cameraForward, const std::array<glm::vec3, 4> &positions
+) {
+}
+
+void NirensteinSampler::divideHaltonRandom(
+    const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints
+) {
+    const glm::vec3 cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    const glm::vec3 cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
+
+    std::array<glm::vec3, 5> cameraForwards = {
+        cameraForward,
+        cameraRight,
+        -cameraRight,
+        cameraUp,
+        -cameraUp
+    };
+    std::array<glm::vec3, 5> cameraUps = {
+        cameraUp,
+        -cameraUp,
+        cameraUp,
+        cameraForward,
+        cameraForward
+    };
+
+    std::array<glm::vec2, 4> corners = {
+        glm::vec2(-1.0f, -1.0f),
+        glm::vec2(-1.0f, 1.0f),
+        glm::vec2(1.0f, -1.0f),
+        glm::vec2(1.0f, 1.0f)
+    };
+    for (int i = 0; i < haltonPoints.size() + 4; i++) {
+        glm::vec4 position;
+        if (i < 4) {
+            position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+        } else {
+            position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+        }
+        renderCubePositions.push_back({ position.x, position.y, position.z });
+        renderVisibilityCube(cameraForwards, cameraUps, position);
     }
 }
 
@@ -457,8 +545,8 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;    // No stencil buffer is used
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;   // No stencil buffer is used
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;      // We don't care about the layout before rendering
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; //VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; //VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; //VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    // Describe subpasses (may be used for multiple post-processing subpasses during a single render pass)
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; //VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; //VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; //VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; //VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
     VkAttachmentReference colorAttachmentReference = {};
     colorAttachmentReference.attachment = 0;
     colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -472,6 +560,7 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkAttachmentReference depthAttachmentReference = {};
     depthAttachmentReference.attachment = 1;
     depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -521,6 +610,15 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     */
 
+    const uint32_t viewMask = 0b00011111;
+    const uint32_t correlationMask = 0b00000000;
+    VkRenderPassMultiviewCreateInfo renderPassMultiviewCI = {};
+    renderPassMultiviewCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO;
+    renderPassMultiviewCI.subpassCount = 1;
+    renderPassMultiviewCI.pViewMasks = &viewMask;
+    renderPassMultiviewCI.correlationMaskCount = 1;
+    renderPassMultiviewCI.pCorrelationMasks = &correlationMask;
+
     std::array<VkAttachmentDescription, 2> attachments = {
         colorAttachment, depthAttachment
     };
@@ -532,6 +630,7 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
     renderPassInfo.pSubpasses = &subpassDescription;
     renderPassInfo.dependencyCount = dependencies.size();
     renderPassInfo.pDependencies = dependencies.data();
+    renderPassInfo.pNext = &renderPassMultiviewCI;
 
     if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
         throw std::runtime_error("failed to create nirenstein render pass");
@@ -539,13 +638,13 @@ void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
 }
 
 void NirensteinSampler::createDescriptorPool() {
-    std::array<VkDescriptorPoolSize, 2> poolSizes = {};
+    std::array<VkDescriptorPoolSize, 3> poolSizes = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[1].descriptorCount = 3;
-    //poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    //poolSizes[2].descriptorCount = 1;
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[2].descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -609,7 +708,7 @@ void NirensteinSampler::createDescriptorSetLayout() {
 }
 
 void NirensteinSampler::createComputeDescriptorSet() {
-    std::array<VkWriteDescriptorSet, 5> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 6> descriptorWrites = {};
 
     VkDescriptorBufferInfo pvsBufferInfo = {};
     pvsBufferInfo.buffer = pvsBuffer;
@@ -668,18 +767,16 @@ void NirensteinSampler::createComputeDescriptorSet() {
     descriptorWrites[4].descriptorCount = 1;
     descriptorWrites[4].pBufferInfo = &currentPvsIndexUniformBufferInfo;
 
-    /*
     VkDescriptorImageInfo framebufferInfo = {};
     framebufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     framebufferInfo.imageView = colorImageView;
     framebufferInfo.sampler = colorImageSampler;
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = computeDescriptorSet;
-    descriptorWrites[1].dstBinding = 1;
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].pImageInfo = &framebufferInfo;
-    */
+    descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[5].dstSet = computeDescriptorSet;
+    descriptorWrites[5].dstBinding = 5;
+    descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[5].descriptorCount = 1;
+    descriptorWrites[5].pImageInfo = &framebufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -721,20 +818,19 @@ void NirensteinSampler::createComputeDescriptorSetLayout() {
     currentPvsIndexUniformBuffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     currentPvsIndexUniformBuffer.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    /*
     VkDescriptorSetLayoutBinding framebufferBinding = {};
-    framebufferBinding.binding = 1;
+    framebufferBinding.binding = 5;
     framebufferBinding.descriptorCount = 1;
     framebufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     framebufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    */
 
-    std::array<VkDescriptorSetLayoutBinding, 5> bindings = {
+    std::array<VkDescriptorSetLayoutBinding, 6> bindings = {
         pvsBufferBinding,
         currentPvsBufferBinding,
         triangleIDFramebufferBinding,
         pvsSizeUniformBufferBinding,
-        currentPvsIndexUniformBuffer
+        currentPvsIndexUniformBuffer,
+        framebufferBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -881,32 +977,32 @@ void NirensteinSampler::createFramebuffer(VkFormat depthFormat) {
     VulkanUtil::createImage(
         physicalDevice, logicalDevice, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R32_SINT,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,//VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, //VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory, MULTI_VIEW_LAYER_COUNT
     );
     colorImageView = VulkanUtil::createImageView(
-        logicalDevice, colorImage, VK_FORMAT_R32_SINT, VK_IMAGE_ASPECT_COLOR_BIT
+        logicalDevice, colorImage, VK_FORMAT_R32_SINT, VK_IMAGE_ASPECT_COLOR_BIT, MULTI_VIEW_LAYER_COUNT
     );
 
     VulkanUtil::createImage(
         physicalDevice, logicalDevice, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT, VK_SAMPLE_COUNT_1_BIT, depthFormat,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory, MULTI_VIEW_LAYER_COUNT
     );
     depthImageView = VulkanUtil::createImageView(
-        logicalDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT
+        logicalDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, MULTI_VIEW_LAYER_COUNT
     );
 
     VkSamplerCreateInfo samplerInfo = {};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.anisotropyEnable = VK_FALSE;
     samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -942,6 +1038,7 @@ void NirensteinSampler::createCommandBuffers(
         commandBufferRenderFront, vertexBuffer, vertices, indexBuffer, indices,
         { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)FRAME_BUFFER_HEIGHT } }
     );
+    /*
     createCommandBuffer(
         commandBufferRenderSides, vertexBuffer, vertices, indexBuffer, indices,
         { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } }
@@ -950,6 +1047,7 @@ void NirensteinSampler::createCommandBuffers(
         commandBufferRenderTopBottom, vertexBuffer, vertices, indexBuffer, indices,
         { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } }
     );
+    */
 }
 
 void NirensteinSampler::createCommandBuffer(
@@ -978,7 +1076,7 @@ void NirensteinSampler::createCommandBuffer(
     renderPassInfo.renderArea.extent.height = FRAME_BUFFER_HEIGHT;
 
     std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
+    clearValues[0].color = {{ 0 }}; //clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
     clearValues[1].depthStencil = { 1.0f, 0 };
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
@@ -987,6 +1085,29 @@ void NirensteinSampler::createCommandBuffer(
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, nirensteinPipeline);
 
     // Define viewport
+    /*
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float) FRAME_BUFFER_WIDTH;
+    viewport.height = (float) FRAME_BUFFER_HEIGHT;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    std::array<VkViewport, 5> viewports = {viewport,viewport,viewport,viewport,viewport};
+    vkCmdSetViewport(commandBuffer, 0, viewports.size(), viewports.data());
+
+    std::array<VkRect2D, 5> scissors;
+    scissors[0] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)FRAME_BUFFER_HEIGHT } };
+    scissors[1] = { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } };
+    scissors[2] = { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } };
+    scissors[3] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } };
+    scissors[4] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } };
+    std::cout << scissors[0].extent.width << std::endl;
+    std::cout << scissors[1].extent.width << std::endl;
+    std::cout << scissors[2].extent.width << std::endl;
+    vkCmdSetScissor(commandBuffer, 0, scissors.size(), scissors.data());
+    */
+
     VkViewport viewport = {};
     viewport.x = 0.0f;
     viewport.y = 0.0f;

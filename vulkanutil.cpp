@@ -222,7 +222,7 @@ void VulkanUtil::createImage(
     VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
     VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
     VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image,
-    VkDeviceMemory &imageMemory
+    VkDeviceMemory &imageMemory, uint32_t arrayLayers
 ) {
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -231,7 +231,7 @@ void VulkanUtil::createImage(
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = arrayLayers;
     imageInfo.format = format;
     imageInfo.tiling = tiling;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -262,18 +262,23 @@ void VulkanUtil::createImage(
 
 // https://vulkan-tutorial.com/Depth_buffering
 VkImageView VulkanUtil::createImageView(
-    VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags
+    VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,
+    uint32_t layerCount
 ) {
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    if (layerCount > 1) {
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    } else {
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    }
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.layerCount = layerCount;
 
     VkImageView imageView;
     if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
