@@ -22,6 +22,7 @@ enum OPERATION_TYPE {
 class Statistics {
 public:
     std::vector<StatisticsEntry> entries;
+    std::array<uint64_t, 9> elapsedTimes;
 
     Statistics(int samplesPerLine);
     void update();
@@ -29,11 +30,16 @@ public:
     void startOperation(OPERATION_TYPE operationType);
     void endOperation(OPERATION_TYPE operationType);
     int getTotalTracedRays();
+    float getTotalRayTime();
+    float getTotalInsertTime();
+    float getTotalTime();
     void reset();
+    static void printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes);
+    static void printAverageStatistics(const std::vector<Statistics> &statistics);
 
 private:
+    static const float div;
     int samplesPerLine;
-    std::array<uint64_t, 9> elapsedTimes;
     std::array<std::chrono::steady_clock::time_point, 9> startTimes;
 };
 

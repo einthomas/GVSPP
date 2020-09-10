@@ -118,6 +118,7 @@ public:
     void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
     void fetchPVS();
+    void printAverageStatistics();
 
 private:
     int pvsSize = 0;
@@ -149,7 +150,7 @@ private:
     //char *device_inserted;
     int hashTableCapacity;
 
-    Statistics statistics;
+    std::vector<Statistics> statistics;
     std::vector<std::vector<float>> haltonPoints;
     std::random_device rd;
     std::mt19937 gen;

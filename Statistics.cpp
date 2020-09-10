@@ -6,6 +6,8 @@
 #include <iostream>
 #include <array>
 
+const float Statistics::div = 1000000.0f;
+
 Statistics::Statistics(int samplesPerLine)
     : samplesPerLine(samplesPerLine)
 {
@@ -102,7 +104,49 @@ void Statistics::print() {
     );
     printf("\n\n");
 
-    const float div = 1000000.0f;
+    printElapsedTimes(elapsedTimes);
+
+    setlocale(LC_NUMERIC, "en_US");
+}
+
+void Statistics::startOperation(OPERATION_TYPE operationType) {
+    startTimes[operationType] = std::chrono::steady_clock::now();
+}
+
+void Statistics::endOperation(OPERATION_TYPE operationType) {
+    auto end = std::chrono::steady_clock::now();
+    elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::nanoseconds>(end - startTimes[operationType]).count();
+}
+
+int Statistics::getTotalTracedRays() {
+    int sum = 0;
+    for (auto e : entries) {
+        sum += e.totalRays();
+    }
+    return sum;
+}
+
+float Statistics::getTotalRayTime() {
+    return (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION]) / div;
+}
+
+float Statistics::getTotalInsertTime() {
+    return (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
+}
+
+float Statistics::getTotalTime() {
+    return elapsedTimes[VISIBILITY_SAMPLING] / div;
+}
+
+void Statistics::reset() {
+    entries.clear();
+    entries.push_back(StatisticsEntry());
+    for (int i = 0; i < elapsedTimes.size(); i++) {
+        elapsedTimes[i] = 0;
+    }
+}
+
+void Statistics::printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes) {
     auto randSum = (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT]) / div;
     auto absSum = (elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT]) / div;
     auto esSum = (elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
@@ -136,31 +180,24 @@ void Statistics::print() {
     printf("GPU hash set resize: %.2fms\n", elapsedTimes[GPU_HASH_SET_RESIZE] / div);
     printf("Total time: %.2fms\n", elapsedTimes[VISIBILITY_SAMPLING] / div);
     printf("\n\n");
-
-    setlocale(LC_NUMERIC, "en_US");
 }
 
-void Statistics::startOperation(OPERATION_TYPE operationType) {
-    startTimes[operationType] = std::chrono::steady_clock::now();
-}
-
-void Statistics::endOperation(OPERATION_TYPE operationType) {
-    auto end = std::chrono::steady_clock::now();
-    elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::nanoseconds>(end - startTimes[operationType]).count();
-}
-
-int Statistics::getTotalTracedRays() {
-    int sum = 0;
-    for (auto e : entries) {
-        sum += e.totalRays();
+void Statistics::printAverageStatistics(const std::vector<Statistics> &statistics) {
+    printf("================== AVERAGE ==================\n");
+    std::array<uint64_t, 9> avgElapsedTimes;
+    for (int i = 0; i < avgElapsedTimes.size(); i++) {
+        avgElapsedTimes[i] = 0;
     }
-    return sum;
-}
 
-void Statistics::reset() {
-    entries.clear();
-    entries.push_back(StatisticsEntry());
-    for (int i = 0; i < elapsedTimes.size(); i++) {
-        elapsedTimes[i] = 0;
+    for (auto s : statistics) {
+        for (int i = 0; i < s.elapsedTimes.size(); i++) {
+            avgElapsedTimes[i] += s.elapsedTimes[i];
+        }
     }
+
+    for (int i = 0; i < avgElapsedTimes.size(); i++) {
+        avgElapsedTimes[i] /= float(statistics.size());
+    }
+
+    Statistics::printElapsedTimes(avgElapsedTimes);
 }

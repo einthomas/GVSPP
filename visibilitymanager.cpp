@@ -54,8 +54,7 @@ VisibilityManager::VisibilityManager(
     NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
-    MAX_TRIANGLE_COUNT(indices.size() / 3.0f),
-    statistics(1000000)
+    MAX_TRIANGLE_COUNT(indices.size() / 3.0f)
 {
     this->logicalDevice = logicalDevice;
     this->physicalDevice = physicalDevice;
@@ -443,6 +442,10 @@ void VisibilityManager::generateHaltonSequence(int n, int startIndex) {
         logicalDevice, computeQueue, commandBufferHaltonCompute[0], commandBufferFence[0],
         queueSubmitMutex
     );
+}
+
+void VisibilityManager::printAverageStatistics() {
+    Statistics::printAverageStatistics(statistics);
 }
 
 void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
@@ -2324,34 +2327,34 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     resetPVSGPUBuffer();
     resetAtomicBuffers();
     //gpuHashSet->reset();
-    statistics.reset();
+    statistics.push_back(Statistics(1000000));
 
     std::vector<Sample> absSampleQueue;
     size_t previousPVSSize;
-    statistics.startOperation(VISIBILITY_SAMPLING);
+    statistics.back().startOperation(VISIBILITY_SAMPLING);
     for (int i = 0; true; i++) {
         previousPVSSize = pvsSize;
 
         // Check GPU hash set size
         if (GPU_SET_TYPE == 1) {
-            statistics.startOperation(GPU_HASH_SET_RESIZE);
+            statistics.back().startOperation(GPU_HASH_SET_RESIZE);
             int potentialNewTriangles = std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT - pvsSize);
             if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
                 resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
             }
-            statistics.endOperation(GPU_HASH_SET_RESIZE);
+            statistics.back().endOperation(GPU_HASH_SET_RESIZE);
         }
 
         // Execute random sampling
-        statistics.startOperation(RANDOM_SAMPLING);
+        statistics.back().startOperation(RANDOM_SAMPLING);
         ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
-        statistics.endOperation(RANDOM_SAMPLING);
+        statistics.back().endOperation(RANDOM_SAMPLING);
 
-        statistics.entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
-        statistics.entries.back().rnsTris += randomSampleInfo.numTriangles;
-        statistics.entries.back().rnsRays += randomSampleInfo.numRays;
+        statistics.back().entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
+        statistics.back().entries.back().rnsTris += randomSampleInfo.numTriangles;
+        statistics.back().entries.back().rnsRays += randomSampleInfo.numRays;
 
-        statistics.startOperation(RANDOM_SAMPLING_INSERT);
+        statistics.back().startOperation(RANDOM_SAMPLING_INSERT);
         {
             /*
             std::vector<Sample> newSamples;
@@ -2383,10 +2386,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             Sample *s = (Sample*)randomSamplingOutputPointer[0];
             absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
         }
-        statistics.endOperation(RANDOM_SAMPLING_INSERT);
+        statistics.back().endOperation(RANDOM_SAMPLING_INSERT);
 
-        statistics.entries.back().pvsSize = pvsSize;
-        statistics.update();
+        statistics.back().entries.back().pvsSize = pvsSize;
+        statistics.back().update();
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
@@ -2408,7 +2411,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             // Execute ABS
             if (GPU_SET_TYPE == 1) {
-                statistics.startOperation(GPU_HASH_SET_RESIZE);
+                statistics.back().startOperation(GPU_HASH_SET_RESIZE);
                 int potentialNewTriangles = std::min(
                     absWorkingVector.size() * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES,
                     (size_t)MAX_TRIANGLE_COUNT - pvsSize
@@ -2416,20 +2419,20 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
                     resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
                 }
-                statistics.endOperation(GPU_HASH_SET_RESIZE);
+                statistics.back().endOperation(GPU_HASH_SET_RESIZE);
             }
 
-            statistics.startOperation(ADAPTIVE_BORDER_SAMPLING);
+            statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING);
             ShaderExecutionInfo absInfo = adaptiveBorderSample(absWorkingVector, threadId, viewCellIndex);
-            statistics.endOperation(ADAPTIVE_BORDER_SAMPLING);
+            statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING);
 
-            statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
-            statistics.entries.back().absRays += absInfo.numRays; //absWorkingVector.size() * NUM_ABS_SAMPLES;
-            statistics.entries.back().absRsRays += absInfo.numRsRays;
-            statistics.entries.back().absTris += absInfo.numTriangles;
-            statistics.entries.back().absRsTris += absInfo.numRsTriangles;
+            statistics.back().entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
+            statistics.back().entries.back().absRays += absInfo.numRays; //absWorkingVector.size() * NUM_ABS_SAMPLES;
+            statistics.back().entries.back().absRsRays += absInfo.numRsRays;
+            statistics.back().entries.back().absTris += absInfo.numTriangles;
+            statistics.back().entries.back().absRsTris += absInfo.numRsTriangles;
 
-            statistics.startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
+            statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             {
                 /*
                 std::vector<Sample> newSamples;
@@ -2479,15 +2482,15 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
                 }
             }
-            statistics.endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
+            statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
 
-            statistics.entries.back().pvsSize = pvsSize;
-            statistics.update();
+            statistics.back().entries.back().pvsSize = pvsSize;
+            statistics.back().update();
 
             if (USE_RECURSIVE_EDGE_SUBDIVISION) {
                 // Execute edge subdivision
                 if (GPU_SET_TYPE == 1) {
-                    statistics.startOperation(GPU_HASH_SET_RESIZE);
+                    statistics.back().startOperation(GPU_HASH_SET_RESIZE);
                     int potentialNewTriangles = std::min(
                         absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
                         (size_t)MAX_TRIANGLE_COUNT - pvsSize
@@ -2495,20 +2498,20 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
                         resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
                     }
-                    statistics.endOperation(GPU_HASH_SET_RESIZE);
+                    statistics.back().endOperation(GPU_HASH_SET_RESIZE);
                 }
 
-                statistics.startOperation(EDGE_SUBDIVISION);
+                statistics.back().startOperation(EDGE_SUBDIVISION);
                 ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
-                statistics.endOperation(EDGE_SUBDIVISION);
+                statistics.back().endOperation(EDGE_SUBDIVISION);
 
-                statistics.entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
-                statistics.entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
-                statistics.entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
-                statistics.entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
-                statistics.entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
+                statistics.back().entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
+                statistics.back().entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
+                statistics.back().entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
+                statistics.back().entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
+                statistics.back().entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
 
-                statistics.startOperation(EDGE_SUBDIVISION_INSERT);
+                statistics.back().startOperation(EDGE_SUBDIVISION_INSERT);
                 {
                     /*
                     std::vector<Sample> newSamples;
@@ -2540,32 +2543,32 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     Sample *s = (Sample*)edgeSubdivOutputPointer[0];
                     absSampleQueue.insert(absSampleQueue.end(), s, s + edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
                 }
-                statistics.endOperation(EDGE_SUBDIVISION_INSERT);
+                statistics.back().endOperation(EDGE_SUBDIVISION_INSERT);
 
-                statistics.entries.back().pvsSize = pvsSize;
-                statistics.update();
+                statistics.back().entries.back().pvsSize = pvsSize;
+                statistics.back().update();
             }
         }
 
         //std::cout << pvsSize << std::endl;
         if (USE_TERMINATION_CRITERION) {
             if (
-                statistics.getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
+                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
                 pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
-                statistics.endOperation(VISIBILITY_SAMPLING);
-                statistics.print();
+                statistics.back().endOperation(VISIBILITY_SAMPLING);
+                statistics.back().print();
                 break;
             }
 
             // Generate new Halton points
             //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
-            statistics.startOperation(HALTON_GENERATION);
+            statistics.back().startOperation(HALTON_GENERATION);
             generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, RANDOM_RAYS_PER_ITERATION * (i + 1));
-            statistics.endOperation(HALTON_GENERATION);
+            statistics.back().endOperation(HALTON_GENERATION);
         } else {
-            statistics.endOperation(VISIBILITY_SAMPLING);
-            statistics.print();
+            statistics.back().endOperation(VISIBILITY_SAMPLING);
+            statistics.back().print();
             break;
         }
     }

@@ -1288,4 +1288,8 @@ void VulkanRenderer::startVisibilityThread() {
         createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
         updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
     }
+
+    if (!USE_NIRENSTEIN_VISIBILITY_SAMPLING && visibilityManager->viewCells.size() > 1) {
+        visibilityManager->printAverageStatistics();
+    }
 }
