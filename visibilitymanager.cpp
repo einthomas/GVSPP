@@ -92,6 +92,14 @@ VisibilityManager::VisibilityManager(
     );
     vkGetDeviceQueue(logicalDevice, computeQueueFamilyIndex, 0, &computeQueue);
 
+    uint32_t transferQueueFamilyIndex = VulkanUtil::findQueueFamilies(
+        physicalDevice, VK_QUEUE_TRANSFER_BIT, 0
+    );
+
+    std::cout << computeQueueFamilyIndex << " " << transferQueueFamilyIndex << std::endl;
+
+    vkGetDeviceQueue(logicalDevice, transferQueueFamilyIndex, 0, &transferQueue);
+
     commandPool.resize(numThreads);
     VkCommandPoolCreateInfo cmdPoolInfo = {};
     cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -100,6 +108,18 @@ VisibilityManager::VisibilityManager(
     for (int i = 0; i < numThreads; i++) {
         if (vkCreateCommandPool(logicalDevice, &cmdPoolInfo, nullptr, &commandPool[i])) {
             throw std::runtime_error("failed to create visibility manager command pool!");
+        }
+    }
+
+    {
+        VkCommandPoolCreateInfo cmdPoolInfo = {};
+        cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        cmdPoolInfo.queueFamilyIndex = transferQueueFamilyIndex;
+        cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;    // Has to be set otherwise the command buffers can't be re-recorded
+        for (int i = 0; i < numThreads; i++) {
+            if (vkCreateCommandPool(logicalDevice, &cmdPoolInfo, nullptr, &transferCommandPool)) {
+                throw std::runtime_error("failed to create visibility manager transfer command pool!");
+            }
         }
     }
 
@@ -163,7 +183,7 @@ void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
 
     // Copy halton points from the staging buffer to the halton points buffer
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[threadId], computeQueue, stagingBuffer, haltonPointsBuffer[threadId],
+        logicalDevice, transferCommandPool, transferQueue, stagingBuffer, haltonPointsBuffer[threadId],
         bufferSize
     );
 
@@ -191,7 +211,7 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[i], computeQueue, stagingBuffer, viewCellBuffer[i], viewCellBufferSize
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer, viewCellBuffer[i], viewCellBufferSize
         );
 
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
@@ -221,7 +241,7 @@ void VisibilityManager::resetPVSGPUBuffer() {
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, stagingBuffer,
+        logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
         pvsBuffer[0], bufferSize
     );
 
@@ -252,7 +272,7 @@ void VisibilityManager::resetAtomicBuffers() {
 
     // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, stagingBuffer,
+        logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
         triangleCounterBuffer[0], bufferSize
     );
 
@@ -275,7 +295,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     );
 
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, pvsBuffer[0],
+        logicalDevice, transferCommandPool, transferQueue, pvsBuffer[0],
         hostBuffer, bufferSize
     );
 
@@ -347,7 +367,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
             pvsArray += bufferSize;
 
             VulkanUtil::copyBuffer(
-                logicalDevice, commandPool[0], computeQueue, stagingBuffer, pvsBulkInsertBuffer[0],
+                logicalDevice, transferCommandPool, transferQueue, stagingBuffer, pvsBulkInsertBuffer[0],
                 bufferSizeDeviceSize
             );
 
@@ -715,7 +735,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[0], computeQueue, stagingBuffer,
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
             triangleCounterBuffer[0], bufferSize
         );
 
@@ -1882,7 +1902,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer,
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
             triangleCounterBuffer[threadId], bufferSize
         );
 
@@ -1930,7 +1950,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
         );
 
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, triangleCounterBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, triangleCounterBuffer[threadId],
             hostBuffer, bufferSize
         );
 
@@ -1950,7 +1970,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
             randomSamplingOutputHostBuffer[threadId], bufferSize
         );
 
@@ -1986,7 +2006,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer, absWorkingBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer, absWorkingBuffer[threadId],
             bufferSize
         );
 
@@ -2016,7 +2036,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer,
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
             triangleCounterBuffer[threadId], bufferSize
         );
 
@@ -2070,7 +2090,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         );
 
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, triangleCounterBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, triangleCounterBuffer[threadId],
             hostBuffer, bufferSize
         );
 
@@ -2093,7 +2113,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, absOutputBuffer[threadId],
             absOutputHostBuffer[threadId], bufferSize
         );
 
@@ -2164,7 +2184,7 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
 
         // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, stagingBuffer,
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
             triangleCounterBuffer[threadId], bufferSize
         );
 
@@ -2222,7 +2242,7 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
         );
 
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, triangleCounterBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, triangleCounterBuffer[threadId],
             hostBuffer, bufferSize
         );
 
@@ -2246,7 +2266,7 @@ ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadI
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId],
+            logicalDevice, transferCommandPool, transferQueue, edgeSubdivOutputBuffer[threadId],
             edgeSubdivOutputHostBuffer[threadId], bufferSize
         );
 
@@ -2379,7 +2399,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
             // Copy the intersected triangles GPU buffer to the host buffer
             VulkanUtil::copyBuffer(
-                logicalDevice, commandPool[threadId], computeQueue, randomSamplingOutputBuffer[threadId],
+                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
                 randomSamplingOutputHostBuffer[threadId], bufferSize
             );
 
@@ -2432,7 +2452,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().entries.back().absTris += absInfo.numTriangles;
             statistics.back().entries.back().absRsTris += absInfo.numRsTriangles;
 
-            statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
+
             {
                 /*
                 std::vector<Sample> newSamples;
@@ -2460,7 +2480,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
                     // Copy the intersected triangles GPU buffer to the host buffer
                     VulkanUtil::copyBuffer(
-                        logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
+                        logicalDevice, transferCommandPool, transferQueue, absOutputBuffer[threadId],
                         absOutputHostBuffer[threadId], bufferSize, srcBufferOffset
                     );
 
@@ -2473,16 +2493,17 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     VkDeviceSize bufferSize = sizeof(Sample) * (absInfo.numTriangles + absInfo.numRsTriangles);
 
                     // Copy the intersected triangles GPU buffer to the host buffer
+                    statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
                     VulkanUtil::copyBuffer(
-                        logicalDevice, commandPool[threadId], computeQueue, absOutputBuffer[threadId],
+                        logicalDevice, transferCommandPool, transferQueue, absOutputBuffer[threadId],
                         absOutputHostBuffer[threadId], bufferSize
                     );
+                    statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
 
                     Sample *s = (Sample*)absOutputPointer[0];
                     absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
                 }
             }
-            statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
 
             statistics.back().entries.back().pvsSize = pvsSize;
             statistics.back().update();
@@ -2536,7 +2557,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
                     // Copy the intersected triangles GPU buffer to the host buffer
                     VulkanUtil::copyBuffer(
-                        logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId],
+                        logicalDevice, transferCommandPool, transferQueue, edgeSubdivOutputBuffer[threadId],
                         edgeSubdivOutputHostBuffer[threadId], bufferSize
                     );
 
@@ -2671,7 +2692,7 @@ void VisibilityManager::fetchPVS() {
     );
 
     VulkanUtil::copyBuffer(
-        logicalDevice, commandPool[0], computeQueue, pvsBuffer[0],
+        logicalDevice, transferCommandPool, transferQueue, pvsBuffer[0],
         hostBuffer, bufferSize
     );
 

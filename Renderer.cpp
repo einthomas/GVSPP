@@ -158,7 +158,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     alignCameraWithViewCellNormal();
 
     nirensteinSampler = new NirensteinSampler(
-        window, visibilityManager->computeQueue, visibilityManager->commandPool[0], vertexBuffer,
+        window, visibilityManager->computeQueue, visibilityManager->commandPool[0],
+        visibilityManager->transferQueue, visibilityManager->transferCommandPool, vertexBuffer,
         vertices, indexBuffer, indices, indices.size() / 3.0f,
         std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
         std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),

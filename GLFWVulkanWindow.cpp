@@ -196,10 +196,17 @@ QueueFamilyIndices GLFWVulkanWindow::findQueueFamilies(VkPhysicalDevice device) 
         }
 
         // Find a separate compute queue family
-        if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT  && !indices.computeFamily.has_value() &&
+        if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT && !indices.computeFamily.has_value() &&
             i != indices.graphicsFamily && i != indices.presentFamily
         ) {
             indices.computeFamily = i;
+        }
+
+        // Find a separate transfer queue family
+        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT && !indices.transferFamily.has_value() &&
+            i != indices.graphicsFamily && i != indices.presentFamily && i != indices.computeFamily
+        ) {
+            indices.transferFamily = i;
         }
 
         if (indices.isComplete()) {
@@ -215,7 +222,7 @@ void GLFWVulkanWindow::createLogicalDevice() {
     // Create a queue for all queue families
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value(), indices.computeFamily.value() };
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value(), indices.computeFamily.value(), indices.transferFamily.value() };
     for (uint32_t queueFamily : uniqueQueueFamilies) {
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

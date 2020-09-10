@@ -54,7 +54,9 @@ public:
     bool visualizeABSRays = false;
     bool visualizeEdgeSubdivRays = false;
     VkQueue computeQueue;
+    VkQueue transferQueue;
     std::vector<VkCommandPool> commandPool;
+    VkCommandPool transferCommandPool;
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,

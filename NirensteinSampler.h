@@ -16,6 +16,8 @@ public:
         GLFWVulkanWindow *window,
         VkQueue computeQueue,
         VkCommandPool computeCommandPool,
+        VkQueue transferQueue,
+        VkCommandPool transferCommandPool,
         VkBuffer vertexBuffer,
         const std::vector<Vertex> &vertices,
         VkBuffer indexBuffer,
@@ -43,8 +45,10 @@ private:
 
     VkCommandPool graphicsCommandPool;
     VkCommandPool computeCommandPool;
+    VkCommandPool transferCommandPool;
     VkQueue graphicsQueue;
     VkQueue computeQueue;
+    VkQueue transferQueue;
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
 
@@ -125,14 +129,12 @@ private:
         const ViewCell &viewCell, glm::vec3 cameraForward,
         const std::array<glm::vec3, 4> &positions
     );
-    void divideUniform(
-        const ViewCell &viewCell, glm::vec3 cameraForward,
-        const std::array<glm::vec3, 4> &positions
-    );
     void divideHaltonRandom(
         const ViewCell &viewCell, glm::vec3 cameraForward,
         const std::vector<glm::vec2> &haltonPoints
     );
+    void resetPVS();
+    void printAverage();
 };
 
 #endif // NIRENSTEINSAMPLER_H

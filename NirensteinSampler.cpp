@@ -28,6 +28,8 @@ NirensteinSampler::NirensteinSampler(
     GLFWVulkanWindow *window,
     VkQueue computeQueue,
     VkCommandPool computeCommandPool,
+    VkQueue transferQueue,
+    VkCommandPool transferCommandPool,
     VkBuffer vertexBuffer,
     const std::vector<Vertex> &vertices,
     VkBuffer indexBuffer,
@@ -39,6 +41,8 @@ NirensteinSampler::NirensteinSampler(
 ) :
     computeQueue(computeQueue),
     computeCommandPool(computeCommandPool),
+    transferQueue(transferQueue),
+    transferCommandPool(transferCommandPool),
     MAX_NUM_TRIANGLES(numTriangles),
     physicalDevice(window->physicalDevice), logicalDevice(window->device),
     graphicsCommandPool(window->graphicsCommandPool), graphicsQueue(window->graphicsQueue),
@@ -304,6 +308,14 @@ void NirensteinSampler::renderVisibilityCube(
 }
 
 std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints) {
+    pvsCache.clear();
+    renderTime = 0;
+    computeShaderTime = 0;
+    copyTime = 0;
+    cudaTime = 0;
+    fillCacheTime = 0;
+    resetPVS();
+
     auto startTotal = std::chrono::steady_clock::now();
 
     std::array<glm::vec3, 4> cornerPositions;
@@ -332,7 +344,7 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
         );
 
         VulkanUtil::copyBuffer(
-            logicalDevice, computeCommandPool, computeQueue, pvsBuffer,
+            logicalDevice, transferCommandPool, transferQueue, pvsBuffer,
             hostBuffer, bufferSize
         );
 
@@ -357,6 +369,7 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
     std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / haltonPoints.size() << "ms" << std::endl;
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count() / 1000000.0f << "ms " << std::endl;
     std::cout << "PVS size: " << pvs.size() << std::endl;
+    std::cout << std::endl;
 
     return pvs;
 }
@@ -410,7 +423,7 @@ void NirensteinSampler::divideAdaptive(
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer,
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
             currentPvsBuffer, bufferSize
         );
 
@@ -463,7 +476,7 @@ void NirensteinSampler::divideAdaptive(
                 );
 
                 VulkanUtil::copyBuffer(
-                    logicalDevice, computeCommandPool, computeQueue, currentPvsBuffer,
+                    logicalDevice, transferCommandPool, transferQueue, currentPvsBuffer,
                     hostBuffer, bufferSize, sizeof(int) * MAX_NUM_TRIANGLES * i
                 );
 
@@ -500,7 +513,7 @@ void NirensteinSampler::divideAdaptive(
 
                 // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
                 VulkanUtil::copyBuffer(
-                    logicalDevice, computeCommandPool, computeQueue, stagingBuffer,
+                    logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
                     currentPvsBuffer, bufferSize, 0, sizeof(int) * MAX_NUM_TRIANGLES * i
                 );
             }
@@ -556,11 +569,6 @@ void NirensteinSampler::divideAdaptive(
     }
 }
 
-void NirensteinSampler::divideUniform(
-    const ViewCell &viewCell, glm::vec3 cameraForward, const std::array<glm::vec3, 4> &positions
-) {
-}
-
 void NirensteinSampler::divideHaltonRandom(
     const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints
 ) {
@@ -598,6 +606,42 @@ void NirensteinSampler::divideHaltonRandom(
         renderCubePositions.push_back({ position.x, position.y, position.z });
         renderVisibilityCube(cameraForwards, cameraUps, position);
     }
+}
+
+void NirensteinSampler::resetPVS() {
+    // Fill PVS buffer with -1
+    VkDeviceSize pvsSize = sizeof(int) * MAX_NUM_TRIANGLES;
+
+    VkDeviceSize bufferSize = pvsSize;
+
+    // Create staging buffer using host-visible memory
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        stagingBuffer, stagingBufferMemory,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+    );
+
+    std::vector<int> vec(MAX_NUM_TRIANGLES);
+    std::fill(vec.begin(), vec.end(), -1);
+    void *data;
+    vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+    memcpy(data, vec.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+    vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    VulkanUtil::copyBuffer(
+        logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
+        pvsBuffer, bufferSize
+    );
+
+    vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+}
+
+void NirensteinSampler::printAverage() {
+
 }
 
 void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
@@ -1024,37 +1068,7 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
         currentPvsBufferMemory, sizeof(int) * numTriangles * 4, logicalDevice
     );
 
-    // Fill PVS buffer with -1
-    {
-        VkDeviceSize pvsSize = sizeof(int) * numTriangles;
-
-        VkDeviceSize bufferSize = pvsSize;
-
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        std::vector<int> vec(numTriangles);
-        std::fill(vec.begin(), vec.end(), -1);
-        void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        memcpy(data, vec.data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        VulkanUtil::copyBuffer(
-            logicalDevice, graphicsCommandPool, graphicsQueue, stagingBuffer,
-            pvsBuffer, bufferSize
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-    }
+    resetPVS();
 }
 
 void NirensteinSampler::createFramebuffer(VkFormat depthFormat) {
