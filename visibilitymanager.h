@@ -192,7 +192,6 @@ private:
     VkDescriptorSetLayout descriptorSetLayoutCompute;
     std::vector<VkDescriptorSet> descriptorSetHaltonCompute;
     VkDescriptorSetLayout descriptorSetLayoutHaltonCompute;
-    VkPushConstantRange pushConstantRange;
 
     VkImageView storageImageView;
     VkBuffer shaderBindingTable;

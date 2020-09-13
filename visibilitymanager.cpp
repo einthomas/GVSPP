@@ -619,7 +619,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             haltonPointsBufferMemory[i], logicalDevice, physicalDevice
         );
 
-        // TODO: Rename to PVS buffer
+
         CUDAUtil::createExternalBuffer(
             pvsSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -1318,20 +1318,13 @@ void VisibilityManager::createDescriptorSetLayout() {
     testBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     testBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    // Random sampling sample output ID buffer binding
-    VkDescriptorSetLayoutBinding randomSamplingOutputIDBinding = {};
-    randomSamplingOutputIDBinding.binding = 10;
-    randomSamplingOutputIDBinding.descriptorCount = 1;
-    randomSamplingOutputIDBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    randomSamplingOutputIDBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
+    VkDescriptorSetLayoutBinding pvsBufferCapacityBinding = {};
+    pvsBufferCapacityBinding.binding = 10;
+    pvsBufferCapacityBinding.descriptorCount = 1;
+    pvsBufferCapacityBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pvsBufferCapacityBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    VkDescriptorSetLayoutBinding pvsCapacityUniformBufferLayoutBinding = {};
-    pvsCapacityUniformBufferLayoutBinding.binding = 11;
-    pvsCapacityUniformBufferLayoutBinding.descriptorCount = 1;
-    pvsCapacityUniformBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pvsCapacityUniformBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-
-    std::array<VkDescriptorSetLayoutBinding, 12> bindings = {
+    std::array<VkDescriptorSetLayoutBinding, 11> bindings = {
         aslayoutBinding,
         uniformLayoutBinding,
         vertexLayoutBinding,
@@ -1342,8 +1335,7 @@ void VisibilityManager::createDescriptorSetLayout() {
         triangleBufferBinding,
         triangleCounterBufferBinding,
         testBufferBinding,
-        randomSamplingOutputIDBinding,
-        pvsCapacityUniformBufferLayoutBinding
+        pvsBufferCapacityBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1356,11 +1348,6 @@ void VisibilityManager::createDescriptorSetLayout() {
     ) {
         throw std::runtime_error("failed to create rt descriptor set layout");
     }
-
-    pushConstantRange = {};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    pushConstantRange.size = sizeof(int) * 7;
-    pushConstantRange.offset = 0;
 }
 
 void VisibilityManager::createDescriptorPool() {
@@ -1462,7 +1449,7 @@ void VisibilityManager::createRandomSamplingPipeline() {
     shaderStages[RT_SHADER_INDEX_CLOSEST_HIT] = rayClosestHitShaderStageInfo;
     shaderStages[RT_SHADER_INDEX_MISS] = rayMissShaderStageInfo;
 
-    createPipeline(shaderStages, &pipelineLayout, &pipeline, { descriptorSetLayout }, { pushConstantRange });
+    createPipeline(shaderStages, &pipelineLayout, &pipeline, { descriptorSetLayout }, { });
 
     vkDestroyShaderModule(logicalDevice, rayGenShaderStageInfo.module, nullptr);
     vkDestroyShaderModule(logicalDevice, rayClosestHitShaderStageInfo.module, nullptr);
@@ -1623,6 +1610,7 @@ void VisibilityManager::createHaltonComputePipeline() {
     pipelineShaderStageCreateInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/halton.comp.spv");
     pipelineShaderStageCreateInfo.pName = "main";
 
+    /*
     std::array<VkPushConstantRange, 2> pushConstantRanges = {};
     pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstantRanges[0].size = sizeof(int);
@@ -1630,6 +1618,11 @@ void VisibilityManager::createHaltonComputePipeline() {
     pushConstantRanges[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstantRanges[1].size = sizeof(int);
     pushConstantRanges[1].offset = sizeof(int);
+    */
+    std::array<VkPushConstantRange, 1> pushConstantRanges = {};
+    pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRanges[0].size = sizeof(int) * 2;
+    pushConstantRanges[0].offset = 0;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

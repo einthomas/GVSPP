@@ -43,10 +43,6 @@ layout(binding = 10, set = 0) uniform pvsBufferCapacity {
 
 layout(location = 0) rayPayloadNV vec4 hitInfo;
 
-layout(push_constant) uniform PushConstants {
-	int faceIndices[7];  // faceIndices[0] stores the number of faces
-} pushConstants;
-
 #include "gpuHashSet.glsl"
 
 void main() {

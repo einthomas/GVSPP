@@ -238,6 +238,7 @@ void GLFWVulkanWindow::createLogicalDevice() {
     deviceFeatures.fillModeNonSolid = VK_TRUE;      // WIREFRAME
     deviceFeatures.wideLines = VK_TRUE;
     deviceFeatures.multiViewport = VK_TRUE;
+    deviceFeatures.geometryShader = VK_TRUE;
 
     // Create logical device
     VkDeviceCreateInfo createInfo = {};
