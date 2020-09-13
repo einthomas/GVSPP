@@ -310,11 +310,10 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
 
 
     // Create larger PVS buffer
-    CUDAUtil::createExternalBuffer(
-        sizeof(int) * newSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pvsBuffer[0],
-        pvsBufferMemory[0], logicalDevice, physicalDevice
+    VulkanUtil::createBuffer(
+        physicalDevice, logicalDevice, sizeof(int) * newSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        pvsBuffer[0], pvsBufferMemory[0], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
     int oldPVSBufferCapacity = pvsBufferCapacity;
     pvsBufferCapacity = newSize;
@@ -523,20 +522,20 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
-        /*
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, randomSamplingOutputBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        */
+        /*
         CUDAUtil::createExternalBuffer(
             randomSamplingOutputBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, randomSamplingOutputBuffer[i],
             randomSamplingOutputBufferMemory[i], logicalDevice, physicalDevice
         );
+        */
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, randomSamplingOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, randomSamplingOutputHostBuffer[i], randomSamplingOutputHostBufferMemory[i],
@@ -552,20 +551,20 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         );
 
         // ABS buffers
-        /*
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, absOutputBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             absOutputBuffer[i], absOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        */
+        /*
         CUDAUtil::createExternalBuffer(
             absOutputBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, absOutputBuffer[i],
             absOutputBufferMemory[i], logicalDevice, physicalDevice
         );
+        */
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, absOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, absOutputHostBuffer[i], absOutputHostBufferMemory[i],
@@ -605,35 +604,36 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         }
 
         // Create halton points buffer using GPU memory
-        /*
         VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, sizeof(haltonPoints[0][0]) * RAYS_PER_ITERATION,
-            VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            physicalDevice, logicalDevice, haltonSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        */
+        /*
         CUDAUtil::createExternalBuffer(
             haltonSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, haltonPointsBuffer[i],
             haltonPointsBufferMemory[i], logicalDevice, physicalDevice
         );
+        */
 
-
+        /*
         CUDAUtil::createExternalBuffer(
             pvsSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pvsBuffer[i],
             pvsBufferMemory[i], logicalDevice, physicalDevice
         );
-        /*
+        */
+
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, pvsSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, testHostBuffer[i], testHostBufferMemory[i],
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            logicalDevice, pvsSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, pvsBuffer[i], pvsBufferMemory[i],
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        vkMapMemory(logicalDevice, testHostBufferMemory[i], 0, pvsSize, 0, &testPointer[i]);
-        */
+        vkMapMemory(logicalDevice, pvsBufferMemory[i], 0, pvsSize, 0, &pvsPointer[i]);
+
         resetPVSGPUBuffer();
         resetAtomicBuffers();
 

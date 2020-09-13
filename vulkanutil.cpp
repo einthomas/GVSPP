@@ -6,7 +6,7 @@
 void VulkanUtil::createBuffer(
     VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize size,
     VkBufferUsageFlags usageFlags, VkBuffer &buffer, VkDeviceMemory &bufferMemory,
-    VkMemoryPropertyFlags properties
+    VkMemoryPropertyFlags properties, bool allocateDedicatedMemory
 ) {
     // Create buffer
     VkBufferCreateInfo bufferInfo = {};
@@ -29,6 +29,11 @@ void VulkanUtil::createBuffer(
     memoryAllocInfo.memoryTypeIndex = findMemoryType(
         physicalDevice, memoryReq.memoryTypeBits, properties
     );
+    if (allocateDedicatedMemory) {
+        VkMemoryDedicatedAllocateInfoKHR dedicatedAllocateInfo = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR };
+        dedicatedAllocateInfo.buffer = buffer;
+        memoryAllocInfo.pNext = &dedicatedAllocateInfo;
+    }
     if (vkAllocateMemory(
             logicalDevice, &memoryAllocInfo, nullptr, &bufferMemory
         ) != VK_SUCCESS

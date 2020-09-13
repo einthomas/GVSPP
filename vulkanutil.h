@@ -13,7 +13,7 @@ public:
     static void createBuffer(
         VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize size,
         VkBufferUsageFlags usageFlags, VkBuffer &buffer, VkDeviceMemory &bufferMemory,
-        VkMemoryPropertyFlags properties
+        VkMemoryPropertyFlags properties, bool allocateDedicatedMemory = false
     );
     static void copyBuffer(
         VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
