@@ -517,7 +517,12 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VkDeviceSize haltonSize = sizeof(float) * RANDOM_RAYS_PER_ITERATION * 4;
 
     VkDeviceSize randomSamplingOutputBufferSize = sizeof(Sample) * std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT);
-    VkDeviceSize absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT;
+    VkDeviceSize absOutputBufferSize;
+    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT;
+    } else {
+        absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
+    }
     VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();

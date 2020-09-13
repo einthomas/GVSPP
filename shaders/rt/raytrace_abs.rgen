@@ -107,19 +107,14 @@ void main() {
     const uint currentVertexSamplePosIndex = uint(mod(launchIndex, ABS_NUM_SAMPLES_PER_EDGE));
     const uint nextVertexSamplePosIndex = uint(mod(currentVertexSamplePosIndex + 1, ABS_NUM_SAMPLES_PER_EDGE));
 
-    Sample s = absWorking[currentTriangleIndex];
-    Vertex v[3];
-    v[0] = unpackVertexData(indices.i[3 * s.triangleID]);
-    v[1] = unpackVertexData(indices.i[3 * s.triangleID + 1]);
-    v[2] = unpackVertexData(indices.i[3 * s.triangleID + 2]);
+    const Sample s = absWorking[currentTriangleIndex];
+    const Vertex v[3] = {
+        unpackVertexData(indices.i[3 * s.triangleID]),
+        unpackVertexData(indices.i[3 * s.triangleID + 1]),
+        unpackVertexData(indices.i[3 * s.triangleID + 2])
+    };
     
-    vec3 rayOrigin = s.rayOrigin;
-
-    // Vectors from ray origin to the triangle's vertices
-    vec3 vectors[3];
-    vectors[0] = v[0].worldPos - rayOrigin;
-    vectors[1] = v[1].worldPos - rayOrigin;
-    vectors[2] = v[2].worldPos - rayOrigin;
+    const vec3 rayOrigin = s.rayOrigin;
 
     const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
     vec3 offsetA = -normalize(

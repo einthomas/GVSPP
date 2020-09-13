@@ -105,6 +105,7 @@ void Statistics::print() {
     printf("\n\n");
 
     printElapsedTimes(elapsedTimes);
+    printf("\n\n");
 
     setlocale(LC_NUMERIC, "en_US");
 }
@@ -126,16 +127,12 @@ int Statistics::getTotalTracedRays() {
     return sum;
 }
 
-float Statistics::getTotalRayTime() {
-    return (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION]) / div;
-}
-
-float Statistics::getTotalInsertTime() {
-    return (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
-}
-
-float Statistics::getTotalTime() {
-    return elapsedTimes[VISIBILITY_SAMPLING] / div;
+int Statistics::getPVSSize() {
+    int sum = 0;
+    for (auto e : entries) {
+        sum += e.pvsSize;
+    }
+    return sum;
 }
 
 void Statistics::reset() {
@@ -179,7 +176,6 @@ void Statistics::printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes) 
     printf("Halton sequence generation time: %.2fms\n", elapsedTimes[HALTON_GENERATION] / div);
     printf("GPU hash set resize: %.2fms\n", elapsedTimes[GPU_HASH_SET_RESIZE] / div);
     printf("Total time: %.2fms\n", elapsedTimes[VISIBILITY_SAMPLING] / div);
-    printf("\n\n");
 }
 
 void Statistics::printAverageStatistics(const std::vector<Statistics> &statistics) {
@@ -200,4 +196,12 @@ void Statistics::printAverageStatistics(const std::vector<Statistics> &statistic
     }
 
     Statistics::printElapsedTimes(avgElapsedTimes);
+
+    int pvsSize = 0;
+    for (auto s : statistics) {
+        pvsSize += s.entries.back().pvsSize;
+    }
+    pvsSize /= statistics.size();
+    printf("PVS size: %i\n", pvsSize);
+    printf("\n\n");
 }

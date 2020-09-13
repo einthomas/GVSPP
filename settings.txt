@@ -34,7 +34,7 @@ USE_RECURSIVE_EDGE_SUBDIVISION false
     REVERSE_SAMPLING_METHOD 1       Reverse sampling based on the GVS paper
     REVERSE_SAMPLING_METHOD 2       New reverse sampling
 */
-REVERSE_SAMPLING_METHOD 2
+REVERSE_SAMPLING_METHOD 1
 
 /*
     SET_TYPE 0      Set implemented as an array that's as big as there are triangles
@@ -57,5 +57,5 @@ USE_3D_VIEW_CELL false
 
 --- SCENE ---
 CALCPVS pvs.txt
-CANYON
+CITY_NEW
 0

@@ -30,9 +30,7 @@ public:
     void startOperation(OPERATION_TYPE operationType);
     void endOperation(OPERATION_TYPE operationType);
     int getTotalTracedRays();
-    float getTotalRayTime();
-    float getTotalInsertTime();
-    float getTotalTime();
+    int getPVSSize();
     void reset();
     static void printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes);
     static void printAverageStatistics(const std::vector<Statistics> &statistics);
