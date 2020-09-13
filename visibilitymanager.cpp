@@ -606,7 +606,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         // Create halton points buffer using GPU memory
         VulkanUtil::createBuffer(
             physicalDevice, logicalDevice, haltonSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
         /*
@@ -629,10 +629,10 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, pvsSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, pvsBuffer[i], pvsBufferMemory[i],
+            logicalDevice, pvsSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, pvsBuffer[i], pvsBufferMemory[i],
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        vkMapMemory(logicalDevice, pvsBufferMemory[i], 0, pvsSize, 0, &pvsPointer[i]);
+        //vkMapMemory(logicalDevice, pvsBufferMemory[i], 0, pvsSize, 0, &pvsPointer[i]);
 
         resetPVSGPUBuffer();
         resetAtomicBuffers();
@@ -683,35 +683,40 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         randomSamplingOutputBufferMemory[0], logicalDevice, physicalDevice
     );
     */
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&pvsCuda, pvsCudaMemory,
-        pvsBufferMemory[0], pvsSize, logicalDevice
-    );
+        /*
+        CUDAUtil::importCudaExternalMemory(
+            (void**)&pvsCuda, pvsCudaMemory,
+            pvsBufferMemory[0], pvsSize, logicalDevice
+        );
+        */
     /*
     CUDAUtil::importCudaExternalMemory(
         (void**)&triangleIDTempCuda, triangleIDTempCudaMemory,
         triangleIDTempBufferMemory[0], pvsSize, logicalDevice
     );
     */
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&haltonCuda, haltonCudaMemory,
-        haltonPointsBufferMemory[0], haltonSize, logicalDevice
-    );
 
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&randomSamplingOutputCuda, randomSamplingOutputCudaMemory,
-        randomSamplingOutputBufferMemory[0], randomSamplingOutputBufferSize, logicalDevice
-    );
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&absOutputCuda, absOutputCudaMemory,
-        absOutputBufferMemory[0], absOutputBufferSize, logicalDevice
-    );
-    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        /*
         CUDAUtil::importCudaExternalMemory(
-            (void**)&edgeSubdivOutputCuda, edgeSubdivOutputCudaMemory,
-            edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
+            (void**)&haltonCuda, haltonCudaMemory,
+            haltonPointsBufferMemory[0], haltonSize, logicalDevice
         );
-    }
+
+        CUDAUtil::importCudaExternalMemory(
+            (void**)&randomSamplingOutputCuda, randomSamplingOutputCudaMemory,
+            randomSamplingOutputBufferMemory[0], randomSamplingOutputBufferSize, logicalDevice
+        );
+        CUDAUtil::importCudaExternalMemory(
+            (void**)&absOutputCuda, absOutputCudaMemory,
+            absOutputBufferMemory[0], absOutputBufferSize, logicalDevice
+        );
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            CUDAUtil::importCudaExternalMemory(
+                (void**)&edgeSubdivOutputCuda, edgeSubdivOutputCudaMemory,
+                edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
+            );
+        }
+        */
 
     // Reset atomic counters
     {
