@@ -4,6 +4,7 @@
 #include "viewcell.h"
 #include "CUDAUtil.h"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
@@ -228,8 +229,8 @@ void NirensteinSampler::renderVisibilityCube(
             ubo.projection = glm::perspective(
                 glm::radians(90.0f),
                 FRAME_BUFFER_WIDTH / (float) FRAME_BUFFER_HEIGHT,
-                0.1f,
-                100000.0f
+                100000.0f,
+                0.1f
             );
             ubo.projection[1][1] *= -1; // Flip y axis
 
@@ -1132,7 +1133,7 @@ void NirensteinSampler::createCommandBuffer(
     renderPassInfo.renderArea.extent.width = FRAME_BUFFER_WIDTH;
     renderPassInfo.renderArea.extent.height = FRAME_BUFFER_HEIGHT;
 
-    std::array<VkClearValue, 2> clearValues{};
+    std::array<VkClearValue, 2> clearValues = {};
     clearValues[0].color = {{ 0 }}; //clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
     clearValues[1].depthStencil = { 1.0f, 0 };
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -1142,29 +1143,6 @@ void NirensteinSampler::createCommandBuffer(
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, nirensteinPipeline);
 
     // Define viewport
-    /*
-    VkViewport viewport = {};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float) FRAME_BUFFER_WIDTH;
-    viewport.height = (float) FRAME_BUFFER_HEIGHT;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    std::array<VkViewport, 5> viewports = {viewport,viewport,viewport,viewport,viewport};
-    vkCmdSetViewport(commandBuffer, 0, viewports.size(), viewports.data());
-
-    std::array<VkRect2D, 5> scissors;
-    scissors[0] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)FRAME_BUFFER_HEIGHT } };
-    scissors[1] = { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } };
-    scissors[2] = { { 0, 0 }, { (uint32_t)(FRAME_BUFFER_WIDTH * 0.5f), (uint32_t)FRAME_BUFFER_HEIGHT } };
-    scissors[3] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } };
-    scissors[4] = { { 0, 0 }, { (uint32_t)FRAME_BUFFER_WIDTH, (uint32_t)(FRAME_BUFFER_HEIGHT * 0.5f) } };
-    std::cout << scissors[0].extent.width << std::endl;
-    std::cout << scissors[1].extent.width << std::endl;
-    std::cout << scissors[2].extent.width << std::endl;
-    vkCmdSetScissor(commandBuffer, 0, scissors.size(), scissors.data());
-    */
-
     VkViewport viewport = {};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1218,15 +1196,8 @@ void NirensteinSampler::createComputeCommandBuffer() {
         computeCommandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout,
         0, 1, &computeDescriptorSet, 0, nullptr
     );
-    std::cout << MAX_NUM_TRIANGLES << std::endl;
     vkCmdDispatch(computeCommandBuffer, std::ceil(FRAME_BUFFER_WIDTH / 8.0f), std::ceil(FRAME_BUFFER_HEIGHT / 8.0f), 1);
     vkEndCommandBuffer(computeCommandBuffer);
-
-    /*
-    VulkanUtil::executeCommandBuffer(
-        logicalDevice, computeQueue, computeCommandBuffer, fence
-    );
-    */
 }
 
 void NirensteinSampler::releaseRessources() {
@@ -1291,8 +1262,7 @@ void NirensteinSampler::createPipeline(
     //rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerInfo.lineWidth = 10.0f;
-    //rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
+    rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizerInfo.depthClampEnable = VK_FALSE;
@@ -1329,7 +1299,7 @@ void NirensteinSampler::createPipeline(
     depthStencilStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilStateInfo.depthTestEnable = VK_TRUE;
     depthStencilStateInfo.depthWriteEnable = VK_TRUE;
-    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; //VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencilStateInfo.stencilTestEnable = VK_FALSE;
     depthStencilStateInfo.depthBoundsTestEnable = VK_FALSE;
     //depthStencil.minDepthBounds = 0.0f; // Optional
