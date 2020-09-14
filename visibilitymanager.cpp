@@ -1883,36 +1883,6 @@ void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer, int threa
 }
 
 ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, int viewCellIndex) {
-    // Reset atomic triangle counter
-    {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
-
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy triangles data to the staging buffer
-        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
-        void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
-            triangleCounterBuffer[threadId], bufferSize
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-    }
-
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1948,7 +1918,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
         VkDeviceMemory hostBufferMemory;
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
+            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
@@ -1962,6 +1932,16 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
         unsigned int *n = (unsigned int*) data;
         numTriangles += n[0];
         pvsSize = n[4];
+
+        // Reset atomic counters
+        for (int i = 0; i < 4; i++) {
+            n[i] = 0;
+        }
+
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, hostBuffer,
+            triangleCounterBuffer[threadId], bufferSize
+        );
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
@@ -2017,36 +1997,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
 
-    // Reset atomic triangle counter
-    {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
-
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy triangles data to the staging buffer
-        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
-        void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
-            triangleCounterBuffer[threadId], bufferSize
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-    }
-
     // Record and execute a command buffer for running the actual ABS on the GPU
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -2088,7 +2038,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         VkDeviceMemory hostBufferMemory;
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
+            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
@@ -2104,6 +2054,16 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
         numRsRays = n[3];
         pvsSize = n[4];
+
+        // Reset atomic counters
+        for (int i = 0; i < 4; i++) {
+            n[i] = 0;
+        }
+
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, hostBuffer,
+            triangleCounterBuffer[threadId], bufferSize
+        );
 
         vkUnmapMemory(logicalDevice, hostBufferMemory);
         vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
