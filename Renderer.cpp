@@ -310,8 +310,8 @@ void VulkanRenderer::createGraphicsPipeline(
     //rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerInfo.lineWidth = 10.0f;
-    //rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
+    rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    //rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizerInfo.depthClampEnable = VK_FALSE;
@@ -1470,6 +1470,10 @@ void VulkanRenderer::startVisibilityThread() {
             std::cout << "View cell " << k << ":" << std::endl;
             std::vector<int> pvs;
             if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+                glm::vec3 cameraForward = glm::cross(
+                    glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[0])),
+                    glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[1]))
+                );
                 pvs = nirensteinSampler->run(
                     visibilityManager->viewCells[k], cameraForward,
                     visibilityManager->generateHaltonPoints2d<2>({2, 3}, 20)
@@ -1608,22 +1612,39 @@ void VulkanRenderer::startVisibilityThread() {
         visibilityManager->printAverageStatistics();
     }
 
+    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000);
+    totalError = 0.0f;
+    maxError = 0.0f;
     for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
-        float error = calculateError(visibilityManager->viewCells[i]);
+        float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
         std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
         totalError += error / visibilityManager->viewCells.size();
 
         currentViewCellIndex++;
         currentViewCellIndex %= visibilityManager->viewCells.size();
         currentViewCellCornerView = 0;
+        cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
         updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
         alignCameraWithViewCellNormal();
+
+        std::cout << currentViewCellIndex << " " << glm::to_string(cameraForward) << std::endl;
     }
     std::cout << "Average total pixel error: " << totalError << std::endl;
+    std::cout << "Max. pixel error: " << maxError << std::endl;
+
+    for (auto s : visibilityManager->statistics) {
+        long a = 0;
+        for (auto e : s.entries) {
+            a += e.totalRays();
+            //std::cout << e.totalRays() << ";" << a << ";" << a / 1000000.0f << ";" << e.pvsSize << std::endl;
+            std::cout << a / 1000000.0f << ";" << e.pvsSize << std::endl;
+        }
+        std::cout << std::endl;
+    }
 }
 
-float VulkanRenderer::calculateError(const ViewCell &viewCell) {
+float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints) {
     float error = 0;
 
     VkCommandBuffer cb;
@@ -1641,13 +1662,12 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell) {
         glm::vec2(1.0f, -1.0f),
         glm::vec2(1.0f, 1.0f)
     };
-    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000);
     for (int i = 0; i < haltonPoints.size() + 4; i++) {
         glm::vec4 position;
         if (i < 4) {
-            position = visibilityManager->viewCells[0].model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+            position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
         } else {
-            position = visibilityManager->viewCells[0].model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+            position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
         }
 
         cameraPos = position;
@@ -1708,6 +1728,7 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell) {
             vkMapMemory(window->device, hostBufferMemory, 0, bufferSize, 0, &data);
             unsigned int *n = (unsigned int*) data;
             error += n[0];
+            maxError = std::max(maxError, float(n[0]));
 
             n[0] = 0;       // Reset error counter
 

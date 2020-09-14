@@ -164,13 +164,14 @@ private:
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
-    float totalError = 0.0f;
+    float totalError;
+    float maxError;
 
     VisibilityManager *visibilityManager;
     void initVisibilityManager();
     std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
-    float calculateError(const ViewCell &viewCell);
+    float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
 
     NirensteinSampler *nirensteinSampler;
 };
