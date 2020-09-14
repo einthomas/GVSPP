@@ -132,7 +132,8 @@ void GLFWVulkanWindow::pickPhysicalDevice() {
     for (const auto& device : devices) {
         if (isDeviceSuitable(device)) {
             physicalDevice = device;
-            msaaSamples = VulkanUtil::getMaxUsableMSAASampleCount(physicalDevice);
+            //msaaSamples = VulkanUtil::getMaxUsableMSAASampleCount(physicalDevice);
+            msaaSamples = VK_SAMPLE_COUNT_1_BIT;
             break;
         }
     }
@@ -304,7 +305,7 @@ void GLFWVulkanWindow::createSwapChain() {
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
     createInfo.imageExtent = swapChainImageSize;
     createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
     uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
@@ -612,7 +613,7 @@ void GLFWVulkanWindow::mainLoop() {
         if (vkBeginCommandBuffer(commandBuffers[imageIndex], &beginInfo) != VK_SUCCESS) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
-        renderer->startNextFrame(imageIndex, swapChainFramebuffers[imageIndex], commandBuffers[imageIndex]);
+        renderer->startNextFrame(imageIndex, swapChainFramebuffers[imageIndex], commandBuffers[imageIndex], renderPass);
         if (vkEndCommandBuffer(commandBuffers[imageIndex]) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
         }

@@ -86,6 +86,8 @@ public:
     VkSampleCountFlagBits msaaSamples;
     std::vector<VkFramebuffer> swapChainFramebuffers;
     VkExtent2D swapChainExtent;
+    std::vector<VkImage> swapChainImages;
+    std::vector<VkImageView> swapChainImageViews;
 
     void initWindow();
     void initVulkan();
@@ -114,10 +116,8 @@ private:
     VkImageView colorImageView;
 
     VkSwapchainKHR swapChain;
-    std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
 
-    std::vector<VkImageView> swapChainImageViews;
     size_t currentFrame = 0;
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;

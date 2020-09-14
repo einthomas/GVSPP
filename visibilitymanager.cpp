@@ -2574,7 +2574,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
         }
 
-        //std::cout << pvsSize << std::endl;
         if (USE_TERMINATION_CRITERION) {
             if (
                 statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||

@@ -2,6 +2,7 @@
 #include <vulkan/vulkan_core.h>
 
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define STB_IMAGE_IMPLEMENTATION
 
 #include <chrono>
@@ -112,6 +113,42 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     createIndexBuffer();
     createUniformBuffers();
     createDescriptorPool();
+
+    createErrorBuffer();
+    createComputeDescriptorLayout();
+    {
+        std::vector<VkDescriptorSetLayout> layouts;//(window->imageCount, descriptorSetLayout);
+        for (int i = 0; i < window->imageCount; i++) {
+            layouts.push_back(descriptorSetLayout);
+        }
+        for (int i = 0; i < window->imageCount; i++) {
+            layouts.push_back(computeDescriptorSetLayout);
+        }
+
+        //layouts.push_back(nirensteinDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+        allocInfo.pSetLayouts = layouts.data();
+
+        // Allocate descriptor sets (one descriptor set for each swap chain image)
+        std::vector<VkDescriptorSet> descriptorSets;
+        descriptorSets.resize(layouts.size());
+        if (vkAllocateDescriptorSets(
+                window->device, &allocInfo, descriptorSets.data()
+            ) != VK_SUCCESS
+        ) {
+            throw std::runtime_error("failed to allocate descriptor sets");
+        }
+        for (int i = 0; i < window->imageCount; i++) {
+            this->descriptorSets.push_back(descriptorSets[i]);
+        }
+        for (int i = window->imageCount; i < window->imageCount * 2; i++) {
+            this->computeDescriptorSet.push_back(descriptorSets[i]);
+        }
+    }
+
     createDescriptorSets();
 
     cameraPos = glm::vec3(0.0f, 0.0f, 12.0f);
@@ -165,6 +202,16 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),
         USE_NIRENSTEIN_MULTI_VIEW_RENDERING
     );
+
+    VkFenceCreateInfo fenceInfo;
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.pNext = NULL;
+    fenceInfo.flags = 0;
+    vkCreateFence(window->device, &fenceInfo, NULL, &fence);
+
+    createComputePipeline();
+    createComputeDescriptorSets();
+    createComputeCommandBuffer();
 }
 
 void VulkanRenderer::initResources() {
@@ -301,7 +348,7 @@ void VulkanRenderer::createGraphicsPipeline(
     depthStencilStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilStateInfo.depthTestEnable = VK_TRUE;
     depthStencilStateInfo.depthWriteEnable = VK_TRUE;
-    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL; //VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencilStateInfo.stencilTestEnable = VK_FALSE;
     depthStencilStateInfo.depthBoundsTestEnable = VK_FALSE;
     //depthStencil.minDepthBounds = 0.0f; // Optional
@@ -396,6 +443,270 @@ void VulkanRenderer::createIndexBuffer() {
 
     vkDestroyBuffer(window->device, stagingBuffer, nullptr);
     vkFreeMemory(window->device, stagingBufferMemory, nullptr);
+}
+
+void VulkanRenderer::createErrorBuffer() {
+    VulkanUtil::createBuffer(
+        window->physicalDevice,
+        window->device, sizeof(unsigned int),
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        errorBuffer, errorBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VulkanUtil::createBuffer(
+        window->physicalDevice,
+        window->device, sizeof(glm::vec4) * window->swapChainImageSize.width * window->swapChainImageSize.height,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        renderedBuffer, renderedBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VulkanUtil::createImage(
+        window->physicalDevice,
+        window->device, window->swapChainImageSize.width, window->swapChainImageSize.height, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_B8G8R8A8_SRGB,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, //VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, errorColorImage, errorColorImageMemory, 1
+    );
+    errorColorImageView = VulkanUtil::createImageView(
+        window->device, errorColorImage, VK_FORMAT_B8G8R8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1
+    );
+
+    VulkanUtil::createImage(
+        window->physicalDevice, window->device, window->swapChainImageSize.width, window->swapChainImageSize.height, VK_SAMPLE_COUNT_1_BIT, window->findDepthFormat(),
+        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, errorDepthImage, errorDepthImageMemory, 1
+    );
+    errorDepthImageView = VulkanUtil::createImageView(
+        window->device, errorDepthImage, window->findDepthFormat(), VK_IMAGE_ASPECT_DEPTH_BIT, 1
+    );
+
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (vkCreateSampler(window->device, &samplerInfo, nullptr, &errorColorImageSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create nirenstein color image sampler!");
+    }
+
+    std::array<VkImageView, 2> attachments = {
+        errorColorImageView,
+        errorDepthImageView
+    };
+
+    {
+        VkAttachmentDescription colorAttachment = {};
+        colorAttachment.format = VK_FORMAT_B8G8R8A8_SRGB; //VK_FORMAT_R32_SINT
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;   // Clear framebuffer before rendering
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;    // No stencil buffer is used
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;   // No stencil buffer is used
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;      // We don't care about the layout before rendering
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentReference colorAttachmentReference = {};
+        colorAttachmentReference.attachment = 0;
+        colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentDescription depthAttachment = {};
+        depthAttachment.format = window->findDepthFormat();
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentReference = {};
+        depthAttachmentReference.attachment = 1;
+        depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpassDescription = {};
+        subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpassDescription.colorAttachmentCount = 1;
+        subpassDescription.pColorAttachments = &colorAttachmentReference;
+        subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+
+        std::array<VkAttachmentDescription, 2> attachments = {
+            colorAttachment, depthAttachment
+        };
+        VkRenderPassCreateInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpassDescription;
+
+        if (vkCreateRenderPass(window->device, &renderPassInfo, nullptr, &errorRenderPass) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create error render pass");
+        }
+    }
+
+    VkFramebufferCreateInfo framebufferInfo = {};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = errorRenderPass;
+    framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
+    framebufferInfo.pAttachments = attachments.data();
+    framebufferInfo.width = window->swapChainImageSize.width;
+    framebufferInfo.height = window->swapChainImageSize.height;
+    framebufferInfo.layers = 1;
+
+    if (vkCreateFramebuffer(window->device, &framebufferInfo, nullptr, &errorFramebuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create error framebuffer");
+    }
+}
+
+void VulkanRenderer::createComputePipeline() {
+    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
+    pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    pipelineShaderStageCreateInfo.module = VulkanUtil::createShader(window->device, "shaders/errorCalculation.comp.spv");
+    pipelineShaderStageCreateInfo.pName = "main";
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &computeDescriptorSetLayout;
+    if (vkCreatePipelineLayout(
+            window->device, &pipelineLayoutInfo, nullptr, &computePipelineLayout
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create halton compute pipeline layout");
+    }
+
+    VkComputePipelineCreateInfo computePipelineCreateInfo = {};
+    computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    computePipelineCreateInfo.stage = pipelineShaderStageCreateInfo;
+    computePipelineCreateInfo.layout = computePipelineLayout;
+
+    if (vkCreateComputePipelines(
+            window->device, 0, 1, &computePipelineCreateInfo, nullptr, &computePipeline
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create error calculation compute pipeline");
+    }
+}
+
+void VulkanRenderer::createComputeDescriptorSets() {
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (vkCreateSampler(window->device, &samplerInfo, nullptr, &framebufferSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create framebuffer sampler!");
+    }
+
+    for (int i = 0; i < window->imageCount; i++) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+
+        VkDescriptorImageInfo framebufferInfo = {};
+        framebufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        framebufferInfo.imageView = errorColorImageView;
+        framebufferInfo.sampler = errorColorImageSampler;
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = computeDescriptorSet[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &framebufferInfo;
+
+        VkDescriptorBufferInfo errorBufferInfo = {};
+        errorBufferInfo.buffer = errorBuffer;
+        errorBufferInfo.offset = 0;
+        errorBufferInfo.range = sizeof(unsigned int);
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = computeDescriptorSet[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &errorBufferInfo;
+
+        vkUpdateDescriptorSets(
+            window->device,
+            static_cast<uint32_t>(descriptorWrites.size()),
+            descriptorWrites.data(),
+            0,
+            VK_NULL_HANDLE
+        );
+    }
+}
+
+void VulkanRenderer::createComputeDescriptorLayout() {
+    VkDescriptorSetLayoutBinding framebufferBinding = {};
+    framebufferBinding.binding = 0;
+    framebufferBinding.descriptorCount = 1;
+    framebufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    framebufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding errorBufferBinding = {};
+    errorBufferBinding.binding = 1;
+    errorBufferBinding.descriptorCount = 1;
+    errorBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    errorBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
+        framebufferBinding,
+        errorBufferBinding
+    };
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(
+            window->device, &layoutInfo, nullptr, &computeDescriptorSetLayout
+        ) != VK_SUCCESS
+    ) {
+        throw std::runtime_error("failed to create nirenstein compute descriptor set layout");
+    }
+}
+
+void VulkanRenderer::createComputeCommandBuffer() {
+    computeCommandBuffers.resize(window->imageCount);
+
+    for (int i = 0; i < window->imageCount; i++) {
+        // Allocate command buffer
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = visibilityManager->commandPool[0];
+        allocInfo.commandBufferCount = 1;
+        vkAllocateCommandBuffers(window->device, &allocInfo, &computeCommandBuffers[i]);
+
+        // Begin recording commands
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        vkBeginCommandBuffer(computeCommandBuffers[i], &beginInfo);
+
+        vkCmdBindPipeline(computeCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        vkCmdBindDescriptorSets(
+            computeCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout,
+            0, 1, &computeDescriptorSet[i], 0, nullptr
+        );
+        vkCmdDispatch(computeCommandBuffers[i], std::ceil(window->swapChainImageSize.width / 8.0f), std::ceil(window->swapChainImageSize.height / 8.0f), 1);
+        vkEndCommandBuffer(computeCommandBuffers[i]);
+    }
 }
 
 void VulkanRenderer::loadModel(std::string modelPath) {
@@ -704,7 +1015,7 @@ void VulkanRenderer::createDescriptorPool() {
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(window->imageCount);
+    poolInfo.maxSets = static_cast<uint32_t>(window->imageCount * 2);
 
     if (vkCreateDescriptorPool(
             window->device, &poolInfo, nullptr, &descriptorPool
@@ -718,6 +1029,7 @@ void VulkanRenderer::createDescriptorSets() {
     // A descriptor set specifies the actual buffer or image resource (just like a framebuffer
     // specifies the actual image view). Descriptor sets are allocated from a descriptor pool
 
+    /*
     std::vector<VkDescriptorSetLayout> layouts(window->imageCount, descriptorSetLayout);
     //layouts.push_back(nirensteinDescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo = {};
@@ -738,6 +1050,7 @@ void VulkanRenderer::createDescriptorSets() {
     for (int i = 0; i < window->imageCount; i++) {
         this->descriptorSets.push_back(descriptorSets[i]);
     }
+    */
     //nirensteinDescriptorSet = descriptorSets[descriptorSets.size() - 1];
 
     // Populate every descriptor
@@ -815,8 +1128,8 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
     ubo.projection = glm::perspective(
         glm::radians(45.0f),
         window->swapChainImageSize.width / (float) window->swapChainImageSize.height,
-        0.1f,
-        100000.0f
+        100000.0f,
+        0.1f
     );
     ubo.projection[1][1] *= -1; // Flip y axis
 
@@ -830,7 +1143,8 @@ void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
 }
 
 void VulkanRenderer::startNextFrame(
-    uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
+    uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer,
+    VkRenderPass renderPass
 ) {
     cameraRight = glm::normalize(glm::cross(cameraForward, glm::vec3(0.0f, 1.0f, 0.0f)));
     cameraUp = glm::normalize(glm::cross(cameraForward, cameraRight));
@@ -840,7 +1154,7 @@ void VulkanRenderer::startNextFrame(
     // Rasterization
     VkRenderPassBeginInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = window->renderPass;
+    renderPassInfo.renderPass = renderPass;
     renderPassInfo.framebuffer = framebuffer;
     renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
     renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
@@ -857,7 +1171,7 @@ void VulkanRenderer::startNextFrame(
 
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    clearValues[1].depthStencil = { 1.0f, 0 };
+    clearValues[1].depthStencil = { 0.0f, 0 }; //1.0f, 0 };
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
@@ -1293,4 +1607,120 @@ void VulkanRenderer::startVisibilityThread() {
     if (!USE_NIRENSTEIN_VISIBILITY_SAMPLING && visibilityManager->viewCells.size() > 1) {
         visibilityManager->printAverageStatistics();
     }
+
+    for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+        float error = calculateError(visibilityManager->viewCells[i]);
+        std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
+        totalError += error / visibilityManager->viewCells.size();
+
+        currentViewCellIndex++;
+        currentViewCellIndex %= visibilityManager->viewCells.size();
+        currentViewCellCornerView = 0;
+        updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+
+        alignCameraWithViewCellNormal();
+    }
+    std::cout << "Average total pixel error: " << totalError << std::endl;
+}
+
+float VulkanRenderer::calculateError(const ViewCell &viewCell) {
+    float error = 0;
+
+    VkCommandBuffer cb;
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = window->graphicsCommandPool;
+    allocInfo.commandBufferCount = 1;
+    vkAllocateCommandBuffers(window->device, &allocInfo, &cb);
+
+    // Calculate average pixel error (average number of red pixels) from 1004 view points
+    std::array<glm::vec2, 4> corners = {
+        glm::vec2(-1.0f, -1.0f),
+        glm::vec2(-1.0f, 1.0f),
+        glm::vec2(1.0f, -1.0f),
+        glm::vec2(1.0f, 1.0f)
+    };
+    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000);
+    for (int i = 0; i < haltonPoints.size() + 4; i++) {
+        glm::vec4 position;
+        if (i < 4) {
+            position = visibilityManager->viewCells[0].model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+        } else {
+            position = visibilityManager->viewCells[0].model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+        }
+
+        cameraPos = position;
+
+        {
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
+                throw std::runtime_error("failed to begin recording command buffer!");
+            }
+            startNextFrame(0, errorFramebuffer, cb, errorRenderPass);
+            if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
+                throw std::runtime_error("failed to record command buffer!");
+            }
+
+            VkSubmitInfo renderCommandBufferSubmitInfo = {};
+            renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            renderCommandBufferSubmitInfo.commandBufferCount = 1;
+            renderCommandBufferSubmitInfo.pCommandBuffers = &cb;
+
+            vkQueueSubmit(window->graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
+            VkResult result;
+            do {
+                result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);
+            } while(result == VK_TIMEOUT);
+            vkResetFences(window->device, 1, &fence);
+        }
+
+        VkSubmitInfo computeCommandBufferSubmitInfo = {};
+        computeCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        computeCommandBufferSubmitInfo.commandBufferCount = 1;
+        computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffers[0];
+
+        vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+        VkResult result;
+        do {
+            result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);
+        } while(result == VK_TIMEOUT);
+        vkResetFences(window->device, 1, &fence);
+
+        {
+            VkDeviceSize bufferSize = sizeof(unsigned int);
+
+            VkBuffer hostBuffer;
+            VkDeviceMemory hostBufferMemory;
+            VulkanUtil::createBuffer(
+                window->physicalDevice,
+                window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+
+            VulkanUtil::copyBuffer(
+                window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, errorBuffer,
+                hostBuffer, bufferSize
+            );
+
+            void *data;
+            vkMapMemory(window->device, hostBufferMemory, 0, bufferSize, 0, &data);
+            unsigned int *n = (unsigned int*) data;
+            error += n[0];
+
+            n[0] = 0;       // Reset error counter
+
+            VulkanUtil::copyBuffer(
+                window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, hostBuffer, errorBuffer, bufferSize
+            );
+
+            vkUnmapMemory(window->device, hostBufferMemory);
+            vkDestroyBuffer(window->device, hostBuffer, nullptr);
+            vkFreeMemory(window->device, hostBufferMemory, nullptr);
+        }
+    }
+    error /= float(haltonPoints.size() + 4);
+
+    return error;
 }

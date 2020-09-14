@@ -44,7 +44,8 @@ public:
     void releaseSwapChainResources();
     void releaseResources();
     void startNextFrame(
-        uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer
+        uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer,
+        VkRenderPass renderPass
     );
     void toggleShadedRendering();
     void toggleViewCellRendering();
@@ -66,11 +67,20 @@ private:
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
     VkDescriptorSetLayout descriptorSetLayout;
+    std::vector<VkDescriptorSet> computeDescriptorSet;
+    VkDescriptorSetLayout computeDescriptorSetLayout;
+    VkSampler framebufferSampler;
 
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     VkPipeline rayVisualizationPipeline;
     VkPipelineLayout rayVisualizationPipelineLayout;
+    VkPipeline computePipeline;
+    VkPipelineLayout computePipelineLayout;
+    std::vector<VkCommandBuffer> computeCommandBuffers;
+    VkFence fence;
+    VkBuffer renderedBuffer;
+    VkDeviceMemory renderedBufferMemory;
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
@@ -87,8 +97,18 @@ private:
     VkDeviceMemory indexBufferMemory;
     VkBuffer rayVertexBuffer;
     VkDeviceMemory rayVertexBufferMemory;
-    VkBuffer pvsBuffer;
-    VkDeviceMemory pvsBufferMemory;
+    VkBuffer errorBuffer;
+    VkDeviceMemory errorBufferMemory;
+
+    VkImage errorDepthImage;
+    VkDeviceMemory errorDepthImageMemory;
+    VkImageView errorDepthImageView;
+    VkImage errorColorImage;
+    VkDeviceMemory errorColorImageMemory;
+    VkImageView errorColorImageView;
+    VkSampler errorColorImageSampler;
+    VkFramebuffer errorFramebuffer;
+    VkRenderPass errorRenderPass;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -111,6 +131,12 @@ private:
     void updateVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
     void createShadedVertexBuffer();
     void createIndexBuffer();
+    void createErrorBuffer();
+
+    void createComputePipeline();
+    void createComputeDescriptorSets();
+    void createComputeDescriptorLayout();
+    void createComputeCommandBuffer();
 
     void loadModel(std::string modelPath);
     void createTextureImage();
@@ -131,19 +157,20 @@ private:
     void updateUniformBuffer(uint32_t swapChainImageIndex);
 
     // Visibility
-    bool shadedRendering = true;
-    bool viewCellRendering = true;
-    bool renderWholeModel = false;
+    bool shadedRendering = false;
+    bool viewCellRendering = false;
     std::string pvsStorageFile;
     bool loadPVS;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
+    float totalError = 0.0f;
 
     VisibilityManager *visibilityManager;
     void initVisibilityManager();
     std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
+    float calculateError(const ViewCell &viewCell);
 
     NirensteinSampler *nirensteinSampler;
 };
