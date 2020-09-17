@@ -12,6 +12,10 @@
 
 class NirensteinSampler {
 public:
+    std::vector<glm::vec3> renderCubePositions;
+    int numSubdivisions = 0;
+    std::unordered_map<uint64_t, std::vector<int>> pvsCache;
+
     NirensteinSampler(
         GLFWVulkanWindow *window,
         VkQueue computeQueue,
@@ -25,15 +29,17 @@ public:
         const int numTriangles,
         const float ERROR_THRESHOLD,
         const int MAX_SUBDIVISIONS,
-        const bool USE_MULTI_VIEW_RENDERING
+        const bool USE_MULTI_VIEW_RENDERING,
+        const bool USE_ADAPTIVE_DIVIDE
     );
-    std::vector<int> run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints);
-    std::vector<glm::vec3> renderCubePositions;
-    int numSubdivisions = 0;
-    std::unordered_map<uint64_t, std::vector<int>> pvsCache;
+    std::vector<int> run(const ViewCell &viewCell, glm::vec3 viewCellSize, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints);
+    void printAverageStatistics();
 
 private:
     uint32_t renderTime = 0, computeShaderTime = 0, copyTime = 0, cudaTime = 0, cacheAccesses = 0, fillCacheTime = 0;
+    std::vector<uint32_t> avgRenderTimes;
+    std::vector<uint32_t> avgTotalRenderTimes;
+    std::vector<long> pvsSizes;
 
     const int FRAME_BUFFER_WIDTH;
     const int FRAME_BUFFER_HEIGHT;
@@ -41,6 +47,7 @@ private:
     const float ERROR_THRESHOLD;
     const int MAX_SUBDIVISIONS;
     const bool USE_MULTI_VIEW_RENDERING;
+    const bool USE_ADAPTIVE_DIVIDE;
     const int MULTI_VIEW_LAYER_COUNT = 5;
 
     VkCommandPool graphicsCommandPool;
@@ -126,15 +133,14 @@ private:
         const glm::vec3 &pos
     );
     void divideAdaptive(
-        const ViewCell &viewCell, glm::vec3 cameraForward,
-        const std::array<glm::vec3, 4> &positions
+        const ViewCell &viewCell, glm::vec3 viewCellSize, glm::vec3 cameraForward,
+        std::array<glm::vec3, 4> positions
     );
     void divideHaltonRandom(
         const ViewCell &viewCell, glm::vec3 cameraForward,
         const std::vector<glm::vec2> &haltonPoints
     );
     void resetPVS();
-    void printAverage();
 };
 
 #endif // NIRENSTEINSAMPLER_H

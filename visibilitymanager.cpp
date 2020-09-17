@@ -96,8 +96,6 @@ VisibilityManager::VisibilityManager(
         physicalDevice, VK_QUEUE_TRANSFER_BIT, 0
     );
 
-    std::cout << computeQueueFamilyIndex << " " << transferQueueFamilyIndex << std::endl;
-
     vkGetDeviceQueue(logicalDevice, transferQueueFamilyIndex, 0, &transferQueue);
 
     commandPool.resize(numThreads);
@@ -2536,8 +2534,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         if (USE_TERMINATION_CRITERION) {
             if (
-                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
-                pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
+                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD
+                    //||
+                //pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
                 statistics.back().endOperation(VISIBILITY_SAMPLING);
                 statistics.back().print();

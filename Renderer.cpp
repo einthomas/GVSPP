@@ -12,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/rotate_vector.hpp>
 #include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
@@ -49,6 +50,8 @@ VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
 VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     : window(w), visibilityManager()
 {
+    srand(time(NULL));
+
     Settings settings = loadSettingsFile();
 
     std::cout << "compiling shaders..." << std::endl;
@@ -200,7 +203,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         vertices, indexBuffer, indices, indices.size() / 3.0f,
         std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
         std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),
-        USE_NIRENSTEIN_MULTI_VIEW_RENDERING
+        USE_NIRENSTEIN_MULTI_VIEW_RENDERING,
+        USE_NIRENSTEIN_ADAPTIVE_DIVIDE
     );
 
     VkFenceCreateInfo fenceInfo;
@@ -1349,6 +1353,8 @@ std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
             model = glm::translate(model, size * glm::vec3(1.0f, 1.0f, 1.0f)); // translate such that the bottom left corner is at the position read from scenes.txt
             model = glm::scale(model, size);
 
+            viewCellSizes.push_back(size * 2.0f);
+
             std::cout << "View cell " << viewCellCounter++ << ":" << std::endl;
             std::cout << "    Position (bottom left corner): " << glm::to_string(pos) << std::endl;
             std::cout << "    Rotation around axes (radiant): " << glm::to_string(rotation) << std::endl;
@@ -1453,10 +1459,14 @@ Settings VulkanRenderer::loadSettingsFile() {
     if (se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true") {
         shaderDefinesFile << "#define NIRENSTEIN_USE_MULTI_VIEW_RENDERING\n";
     }
+    if (se.at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
+        shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
+    }
     shaderDefinesFile.close();
 
     USE_NIRENSTEIN_VISIBILITY_SAMPLING = se.at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
     USE_NIRENSTEIN_MULTI_VIEW_RENDERING = se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true";
+    USE_NIRENSTEIN_ADAPTIVE_DIVIDE = se.at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true";
 
     return settings;
 }
@@ -1475,8 +1485,8 @@ void VulkanRenderer::startVisibilityThread() {
                     glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[1]))
                 );
                 pvs = nirensteinSampler->run(
-                    visibilityManager->viewCells[k], cameraForward,
-                    visibilityManager->generateHaltonPoints2d<2>({2, 3}, 20)
+                    visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
+                    visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300)
                 );
             } else {
                 visibilityManager->rayTrace(indices, 0, k);
@@ -1608,10 +1618,16 @@ void VulkanRenderer::startVisibilityThread() {
         updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
     }
 
-    if (!USE_NIRENSTEIN_VISIBILITY_SAMPLING && visibilityManager->viewCells.size() > 1) {
-        visibilityManager->printAverageStatistics();
+    // Print average statistics across view cells
+    if (visibilityManager->viewCells.size() > 1) {
+        if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+            nirensteinSampler->printAverageStatistics();
+        } else {
+            visibilityManager->printAverageStatistics();
+        }
     }
 
+    // Calculate avg. and max. pixel error across all view cells
     auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000);
     totalError = 0.0f;
     maxError = 0.0f;
@@ -1627,12 +1643,12 @@ void VulkanRenderer::startVisibilityThread() {
         updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
         alignCameraWithViewCellNormal();
-
-        std::cout << currentViewCellIndex << " " << glm::to_string(cameraForward) << std::endl;
     }
     std::cout << "Average total pixel error: " << totalError << std::endl;
     std::cout << "Max. pixel error: " << maxError << std::endl;
 
+    // Temporary
+    std::cout << std::endl << std::endl;
     for (auto s : visibilityManager->statistics) {
         long a = 0;
         for (auto e : s.entries) {
@@ -1640,7 +1656,7 @@ void VulkanRenderer::startVisibilityThread() {
             //std::cout << e.totalRays() << ";" << a << ";" << a / 1000000.0f << ";" << e.pvsSize << std::endl;
             std::cout << a / 1000000.0f << ";" << e.pvsSize << std::endl;
         }
-        std::cout << std::endl;
+        std::cout << std::endl << std::endl;
     }
 }
 
@@ -1671,6 +1687,8 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         }
 
         cameraPos = position;
+        glm::vec3 originalCameraForward = cameraForward;
+        cameraForward = glm::rotate(cameraForward, glm::radians(-65.0f + (rand() / float(RAND_MAX)) * 130.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
         {
             VkCommandBufferBeginInfo beginInfo = {};
@@ -1695,6 +1713,8 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
             } while(result == VK_TIMEOUT);
             vkResetFences(window->device, 1, &fence);
         }
+
+        cameraForward = originalCameraForward;
 
         VkSubmitInfo computeCommandBufferSubmitInfo = {};
         computeCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

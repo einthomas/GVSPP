@@ -59,6 +59,7 @@ private:
     const int NUM_THREADS = 1;
     bool USE_NIRENSTEIN_VISIBILITY_SAMPLING;
     bool USE_NIRENSTEIN_MULTI_VIEW_RENDERING;
+    bool USE_NIRENSTEIN_ADAPTIVE_DIVIDE;
 
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
@@ -174,6 +175,7 @@ private:
     float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
 
     NirensteinSampler *nirensteinSampler;
+    std::vector<glm::vec3> viewCellSizes;
 };
 
 #endif // RENDERER_H

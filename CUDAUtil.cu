@@ -70,7 +70,7 @@ int CUDAUtil::countNotZero(int *array, int size) {
 int CUDAUtil::calculateLargestSetSize(int *set, int size) {
     thrust::device_ptr<int> devicePointerSet(set);
     int largetSetSize = 0;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         int result = thrust::count_if(devicePointerSet + size * i, devicePointerSet + size * (i + 1), isPositive());
         largetSetSize = std::max(largetSetSize, result);
     }

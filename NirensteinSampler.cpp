@@ -38,7 +38,8 @@ NirensteinSampler::NirensteinSampler(
     const int numTriangles,
     const float ERROR_THRESHOLD,
     const int MAX_SUBDIVISIONS,
-    const bool USE_MULTI_VIEW_RENDERING
+    const bool USE_MULTI_VIEW_RENDERING,
+    const bool USE_ADAPTIVE_DIVIDE
 ) :
     computeQueue(computeQueue),
     computeCommandPool(computeCommandPool),
@@ -51,7 +52,8 @@ NirensteinSampler::NirensteinSampler(
     FRAME_BUFFER_HEIGHT(window->swapChainImageSize.height),
     ERROR_THRESHOLD(ERROR_THRESHOLD),
     MAX_SUBDIVISIONS(MAX_SUBDIVISIONS),
-    USE_MULTI_VIEW_RENDERING(USE_MULTI_VIEW_RENDERING)
+    USE_MULTI_VIEW_RENDERING(USE_MULTI_VIEW_RENDERING),
+    USE_ADAPTIVE_DIVIDE(USE_ADAPTIVE_DIVIDE)
 {
     const VkFormat depthFormat = window->findDepthFormat();
     createRenderPass(depthFormat);
@@ -103,6 +105,8 @@ NirensteinSampler::NirensteinSampler(
     fenceInfo.pNext = NULL;
     fenceInfo.flags = 0;
     vkCreateFence(logicalDevice, &fenceInfo, NULL, &fence);
+
+    srand (time(NULL));
 }
 
 void NirensteinSampler::renderVisibilityCube(
@@ -135,19 +139,18 @@ void NirensteinSampler::renderVisibilityCube(
         vkUnmapMemory(logicalDevice, uniformBufferMemory);
 
         // Submit command buffer
-        auto startTotal = std::chrono::steady_clock::now();
         VkSubmitInfo renderCommandBufferSubmitInfo = {};
         renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         renderCommandBufferSubmitInfo.commandBufferCount = 1;
         renderCommandBufferSubmitInfo.pCommandBuffers = &commandBufferRenderFront;
 
+        auto startTotal = std::chrono::steady_clock::now();
         vkQueueSubmit(graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
         VkResult result;
         do {
             result = vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, UINT64_MAX);
         } while(result == VK_TIMEOUT);
         vkResetFences(logicalDevice, 1, &fence);
-
         renderTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
 
         // Dispatch compute shader to collect triangle IDs
@@ -308,13 +311,14 @@ void NirensteinSampler::renderVisibilityCube(
     */
 }
 
-std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints) {
+std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 viewCellSize, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints) {
     pvsCache.clear();
     renderTime = 0;
     computeShaderTime = 0;
     copyTime = 0;
     cudaTime = 0;
     fillCacheTime = 0;
+    numSubdivisions = 0;
     resetPVS();
 
     auto startTotal = std::chrono::steady_clock::now();
@@ -328,8 +332,11 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
         cornerPositions[i] = viewCell.model * glm::vec4(offset, 1.0f);
     }
 
-    //divideAdaptive(viewCell, cameraForward, cornerPositions);
-    divideHaltonRandom(viewCell, cameraForward, haltonPoints);
+    if (USE_ADAPTIVE_DIVIDE) {
+        divideAdaptive(viewCell, viewCellSize, cameraForward, cornerPositions);
+    } else {
+        divideHaltonRandom(viewCell, cameraForward, haltonPoints);
+    }
 
     // Copy current pvs to host
     std::vector<int> pvs;
@@ -360,24 +367,38 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 came
         }
     }
 
-    std::cout << "Render time: " << renderTime / 1000000.0f << "ms" << std::endl;
+    float avgRenderTime = renderTime / 1000000.0f / pvsCache.size();
+    avgRenderTimes.push_back(avgRenderTime);
+    avgTotalRenderTimes.push_back(renderTime / 1000000.0f);
+    pvsSizes.push_back(pvs.size());
+
+    std::cout << "Total render time: " << renderTime / 1000000.0f << "ms" << std::endl;
+    std::cout << "Avg render time per hemicube: " << avgRenderTime << "ms" << std::endl;
+    std::cout << "# cubes rendered: " << pvsCache.size() << std::endl;
+    std::cout << "PVS size: " << pvs.size() << "/" << MAX_NUM_TRIANGLES << "(" << pvs.size() / float(MAX_NUM_TRIANGLES) * 100.0f << "%)" << std::endl;
+
     std::cout << "Compute shader time: " << computeShaderTime / 1000000.0f << "ms" << std::endl;
-    std::cout << "Image -> buffer copy time: " << copyTime / 1000000.0f << "ms" << std::endl;
     std::cout << "CUDA time: " << cudaTime / 1000000.0f << "ms" << std::endl;
     std::cout << "Fill cache time: " << fillCacheTime / 1000000.0f << "ms" << std::endl;
-    std::cout << "# cubes rendered: " << pvsCache.size() << std::endl;
-    //std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / pvsCache.size() << "ms" << std::endl;
-    std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / haltonPoints.size() << "ms" << std::endl;
+    //std::cout << "Avg render time per cube: " << renderTime / 1000000.0f / haltonPoints.size() << "ms" << std::endl;
     std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count() / 1000000.0f << "ms " << std::endl;
-    std::cout << "PVS size: " << pvs.size() << std::endl;
     std::cout << std::endl;
 
     return pvs;
 }
 
 void NirensteinSampler::divideAdaptive(
-    const ViewCell &viewCell, glm::vec3 cameraForward, const std::array<glm::vec3, 4> &positions
+    const ViewCell &viewCell, glm::vec3 viewCellSize, glm::vec3 cameraForward, std::array<glm::vec3, 4> positions
 ) {
+    for (int i = 0; i < positions.size(); i++) {
+    }
+
+    if (glm::length(positions[0] - positions[1]) / viewCellSize.x <= 0.01f ||
+        glm::length(positions[0] - positions[2]) / viewCellSize.y <= 0.01f
+    ) {
+        return;
+    }
+
     for (auto a : positions) {
         renderCubePositions.push_back(a);
     }
@@ -402,7 +423,7 @@ void NirensteinSampler::divideAdaptive(
 
     // Fill PVS buffer with -1
     {
-        VkDeviceSize pvsSize = sizeof(int) * MAX_NUM_TRIANGLES * 4;
+        VkDeviceSize pvsSize = sizeof(int) * MAX_NUM_TRIANGLES * 5;
 
         VkDeviceSize bufferSize = pvsSize;
 
@@ -416,7 +437,7 @@ void NirensteinSampler::divideAdaptive(
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
-        std::vector<int> vec(MAX_NUM_TRIANGLES * 4);
+        std::vector<int> vec(MAX_NUM_TRIANGLES * 5);
         std::fill(vec.begin(), vec.end(), -1);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
@@ -443,7 +464,7 @@ void NirensteinSampler::divideAdaptive(
             // Copy data in the uniform buffer object to the uniform buffer
             void *data;
             vkMapMemory(logicalDevice, currentPvsIndexUniformBufferMemory, 0, sizeof(int), 0, &data);
-            memcpy(data, &i, sizeof(UniformBufferObjectMultiView));
+            memcpy(data, &i, sizeof(int));
             vkUnmapMemory(logicalDevice, currentPvsIndexUniformBufferMemory);
 
             //pvss[i] = renderVisibilityCube(cameraForwards, cameraUps, positions[i]);
@@ -484,9 +505,10 @@ void NirensteinSampler::divideAdaptive(
                 void *data;
                 vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
 
-
                 int* pvsArray = (int*)data;
                 pvsCache[hash].insert(pvsCache[hash].end(), pvsArray, pvsArray + MAX_NUM_TRIANGLES);
+
+                vkUnmapMemory(logicalDevice, hostBufferMemory);
             }
         }
     }
@@ -512,7 +534,6 @@ void NirensteinSampler::divideAdaptive(
                 memcpy(data, pvsCache[hashes[i]].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
                 vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
-                // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
                 VulkanUtil::copyBuffer(
                     logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
                     currentPvsBuffer, bufferSize, 0, sizeof(int) * MAX_NUM_TRIANGLES * i
@@ -524,6 +545,82 @@ void NirensteinSampler::divideAdaptive(
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
 
+    /*
+    {
+        VkDeviceSize bufferSize = sizeof(int) * MAX_NUM_TRIANGLES * 5;
+
+        VkBuffer hostBuffer;
+        VkDeviceMemory hostBufferMemory;
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, currentPvsBuffer,
+            hostBuffer, bufferSize
+        );
+
+        void *data;
+        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+
+        int* a = (int*)data;
+        std::vector<int> v0(a + MAX_NUM_TRIANGLES * 0, a + MAX_NUM_TRIANGLES * 1);
+        std::vector<int> v1(a + MAX_NUM_TRIANGLES * 1, a + MAX_NUM_TRIANGLES * 2);
+        std::vector<int> v2(a + MAX_NUM_TRIANGLES * 2, a + MAX_NUM_TRIANGLES * 3);
+        std::vector<int> v3(a + MAX_NUM_TRIANGLES * 3, a + MAX_NUM_TRIANGLES * 4);
+
+        int common = 0;
+        for (int i = 0; i < v0.size(); i++) {
+            if (v0[i] == -1) {
+                continue;
+            }
+            if (
+                std::find(v1.begin(), v1.end(), v0[i]) != v1.end() &&
+                std::find(v2.begin(), v2.end(), v0[i]) != v2.end() &&
+                std::find(v3.begin(), v3.end(), v0[i]) != v3.end()
+            ) {
+                common++;
+            }
+        }
+
+        int size = 0;
+
+        int tempSize = 0;
+        for (int i = 0; i < v0.size(); i++) {
+            if (v0[i] > -1) {
+                tempSize++;
+            }
+        }
+        size = std::max(size, tempSize);
+        tempSize = 0;
+        for (int i = 0; i < v1.size(); i++) {
+            if (v1[i] > -1) {
+                tempSize++;
+            }
+        }
+        size = std::max(size, tempSize);
+        tempSize = 0;
+        for (int i = 0; i < v2.size(); i++) {
+            if (v2[i] > -1) {
+                tempSize++;
+            }
+        }
+        size = std::max(size, tempSize);
+        tempSize = 0;
+        for (int i = 0; i < v3.size(); i++) {
+            if (v3[i] > -1) {
+                tempSize++;
+            }
+        }
+        size = std::max(size, tempSize);
+
+        vkUnmapMemory(logicalDevice, hostBufferMemory);
+
+        std::cout << "common " << common << " size " << size << std::endl;
+    }
+    */
 
     startTotal = std::chrono::steady_clock::now();
     int numCommonIDs = CUDAUtil::setIntersection(currentPvsCuda, MAX_NUM_TRIANGLES);
@@ -531,7 +628,7 @@ void NirensteinSampler::divideAdaptive(
     cudaTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
     float nirensteinCriterion = 1.0f - float(numCommonIDs) / float(largestSetSize);
     //std::cout << "numCommonIDs " << numCommonIDs << " largestSetSize " << largestSetSize << std::endl;
-    //std::cout << nirensteinCriterion << " " << numCommonIDs << " " << ERROR_THRESHOLD << std::endl;
+    std::cout << "nirensteinCriterion " << nirensteinCriterion << " " << numCommonIDs << " " << ERROR_THRESHOLD << std::endl;
 
     if (nirensteinCriterion > ERROR_THRESHOLD) {
         numSubdivisions++;
@@ -540,30 +637,43 @@ void NirensteinSampler::divideAdaptive(
         }
 
         std::vector<glm::vec3> newPositions = {
-            positions[0] + (positions[1] - positions[0]) / 2.0f,
-            positions[0] + (positions[2] - positions[0]) / 2.0f,
-            positions[1] + (positions[3] - positions[1]) / 2.0f,
-            positions[2] + (positions[3] - positions[2]) / 2.0f,
-            positions[0] + (positions[3] - positions[0]) / 2.0f
+            positions[0] + ((positions[1] - positions[0]) / 2.0f) + ((positions[1] - positions[0]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f,
+            positions[0] + ((positions[2] - positions[0]) / 2.0f) + ((positions[2] - positions[0]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f,
+            positions[1] + ((positions[3] - positions[1]) / 2.0f) + ((positions[3] - positions[1]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f,
+            positions[2] + ((positions[3] - positions[2]) / 2.0f) + ((positions[3] - positions[2]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f,
+            positions[0] + ((positions[3] - positions[0]) / 2.0f) + ((positions[3] - positions[0]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f
         };
 
+        //std::cout << glm::to_string(viewCell.model * glm::vec4(-1.0f,-1.0f,0.0f,1.0f)) << std::endl;
+        //std::cout << glm::to_string(viewCell.model * glm::vec4(1.0f,1.0f,0.0f,1.0f)) << std::endl;
+
+        glm::vec3 corner0 = viewCell.model * glm::vec4(-1.0f,-1.0f,0.0f,1.0f);
+        glm::vec3 corner1 = viewCell.model * glm::vec4(1.0f,1.0f,0.0f,1.0f);
+        for (int i = 0; i < newPositions.size(); i++) {
+            newPositions[i] = glm::clamp(
+                newPositions[i],
+                glm::vec3(std::min(corner0.x, corner1.x), std::min(corner0.y, corner1.y), std::min(corner0.z, corner1.z)),
+                glm::vec3(std::max(corner0.x, corner1.x), std::max(corner0.y, corner1.y), std::max(corner0.z, corner1.z))
+            );
+        }
+
         divideAdaptive(
-            viewCell,
+            viewCell, viewCellSize,
             cameraForward,
             { positions[0], newPositions[0], newPositions[1], newPositions[4] }
         );
         divideAdaptive(
-            viewCell,
+            viewCell, viewCellSize,
             cameraForward,
             { newPositions[0], positions[1], newPositions[4], newPositions[2] }
         );
         divideAdaptive(
-            viewCell,
+            viewCell, viewCellSize,
             cameraForward,
             { newPositions[1], newPositions[4], positions[2], newPositions[3] }
         );
         divideAdaptive(
-            viewCell,
+            viewCell, viewCellSize,
             cameraForward,
             { newPositions[4], newPositions[2], newPositions[3], positions[3] }
         );
@@ -597,6 +707,7 @@ void NirensteinSampler::divideHaltonRandom(
         glm::vec2(1.0f, -1.0f),
         glm::vec2(1.0f, 1.0f)
     };
+    std::unordered_set<int> oldPvs;
     for (int i = 0; i < haltonPoints.size() + 4; i++) {
         glm::vec4 position;
         if (i < 4) {
@@ -606,6 +717,43 @@ void NirensteinSampler::divideHaltonRandom(
         }
         renderCubePositions.push_back({ position.x, position.y, position.z });
         renderVisibilityCube(cameraForwards, cameraUps, position);
+
+        {
+            VkDeviceSize bufferSize = sizeof(int) * MAX_NUM_TRIANGLES;
+
+            VkBuffer hostBuffer;
+            VkDeviceMemory hostBufferMemory;
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+
+            VulkanUtil::copyBuffer(
+                logicalDevice, transferCommandPool, transferQueue, pvsBuffer,
+                hostBuffer, bufferSize
+            );
+
+            void *data;
+            vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+
+            int numNew = 0;
+            int* pvsArray = (int*)data;
+            oldPvs.insert(pvsArray, pvsArray + MAX_NUM_TRIANGLES);
+
+            /*
+            oldPvs.clear();
+            oldPvs.reserve(MAX_NUM_TRIANGLES);
+            for (int i = 0; i < MAX_NUM_TRIANGLES; i++) {
+                if (pvsArray[i] > -1) {
+                    oldPvs.push_back(pvsArray[i]);
+                }
+            }
+            */
+            std::cout << oldPvs.size() << std::endl;
+
+            vkUnmapMemory(logicalDevice, hostBufferMemory);
+        }
     }
 }
 
@@ -641,8 +789,29 @@ void NirensteinSampler::resetPVS() {
     vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
 }
 
-void NirensteinSampler::printAverage() {
+void NirensteinSampler::printAverageStatistics() {
+    float avgRenderTime = 0.0f;
+    for (auto renderTime : avgRenderTimes) {
+        avgRenderTime += renderTime;
+    }
+    avgRenderTime /= float(avgRenderTimes.size());
 
+    float avgTotalRenderTime = 0.0f;
+    for (auto totalRenderTime : avgTotalRenderTimes) {
+        avgTotalRenderTime += totalRenderTime;
+    }
+    avgTotalRenderTime /= float(avgTotalRenderTimes.size());
+
+    float avgPVSSize = 0.0f;
+    for (auto pvsSize : pvsSizes) {
+        avgPVSSize += pvsSize;
+    }
+    avgPVSSize /= pvsSizes.size();
+    avgPVSSize /= float(MAX_NUM_TRIANGLES);
+
+    std::cout << "Average total render time: " << avgTotalRenderTime << "ms" << std::endl;
+    std::cout << "Average single hemicube render time: " << avgRenderTime << "ms" << std::endl;
+    std::cout << "Average PVS size: " << avgPVSSize * 100.0f << "%" << std::endl;
 }
 
 void NirensteinSampler::createRenderPass(VkFormat depthFormat) {
@@ -1018,14 +1187,14 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
     );
     */
     CUDAUtil::createExternalBuffer(
-        sizeof(int) * numTriangles * 4,
+        sizeof(int) * numTriangles * 5,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, currentPvsBuffer,
         currentPvsBufferMemory, logicalDevice, physicalDevice
     );
     CUDAUtil::importCudaExternalMemory(
         (void**)&currentPvsCuda, currentPvsCudaMemory,
-        currentPvsBufferMemory, sizeof(int) * numTriangles * 4, logicalDevice
+        currentPvsBufferMemory, sizeof(int) * numTriangles * 5, logicalDevice
     );
 
     resetPVS();

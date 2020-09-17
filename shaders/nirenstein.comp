@@ -28,11 +28,23 @@ layout(binding = 4, set = 0) uniform currentPvsIndexUniform {
 void main() {
     #ifdef NIRENSTEIN_USE_MULTI_VIEW_RENDERING
         for (int i = 0; i < 5; i++) {
-            int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
-            pvs[triangleID] = triangleID;
+            #ifdef NIRENSTEIN_USE_ADAPTIVE_DIVIDE
+                int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
+                pvs[triangleID] = triangleID;
+                currentPvs[currentPvsIndex * pvsSize + triangleID] = triangleID;
+            #else
+                int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
+                pvs[triangleID] = triangleID;
+            #endif
         }
     #else
-        int triangleID = int(texelFetch(ids, ivec2(gl_GlobalInvocationID.xy), 0).x);
-        pvs[triangleID] = triangleID;
+        #ifdef NIRENSTEIN_USE_ADAPTIVE_DIVIDE
+            int triangleID = int(texelFetch(ids, ivec2(gl_GlobalInvocationID.xy), 0).x);
+            pvs[triangleID] = triangleID;
+            currentPvs[currentPvsIndex * pvsSize + triangleID] = triangleID;
+        #else
+            int triangleID = int(texelFetch(ids, ivec2(gl_GlobalInvocationID.xy), 0).x);
+            pvs[triangleID] = triangleID;
+        #endif
     #endif
 }

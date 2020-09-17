@@ -57,6 +57,7 @@ public:
     VkQueue transferQueue;
     std::vector<VkCommandPool> commandPool;
     VkCommandPool transferCommandPool;
+    std::vector<Statistics> statistics;
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
@@ -152,7 +153,6 @@ private:
     //char *device_inserted;
     int hashTableCapacity;
 
-    std::vector<Statistics> statistics;
     std::vector<std::vector<float>> haltonPoints;
     std::random_device rd;
     std::mt19937 gen;
