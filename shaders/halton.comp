@@ -7,11 +7,31 @@ layout(binding = 0, set = 0) writeonly buffer haltonBuffer {
 };
 
 layout(push_constant) uniform PushConstants {
-	int startIndex;
+	float rand;
     int size;
 } pushConstants;
 
 void main() {
+    /*
+        Randomized Halton, based on Train, Kenneth E. Discrete choice methods with simulation. Cambridge university press, 2009.
+    */
+    const int offset = int(gl_GlobalInvocationID.x);
+    if (offset < pushConstants.size) {
+        const int i = int(gl_LocalInvocationID.y);
+        const int bases[4] = { 2, 3, 5, 7 };
+
+        float f = 1.0f;
+        float r = 0.0f;
+        int k = offset + 1;
+        while (k > 0) {
+            f /= bases[i];
+            r = r + f * (k % bases[i]);
+            k = int(k / bases[i]);
+        }
+        halton[offset * 4 + i] = mod(r + pushConstants.rand, 1.0f);
+    }
+
+    /*
     const int offset = int(gl_GlobalInvocationID.x);
     if (offset < pushConstants.size) {
         const int i = int(gl_LocalInvocationID.y);
@@ -27,4 +47,5 @@ void main() {
         }
         halton[offset * 4 + i] = r;
     }
+    */
 }

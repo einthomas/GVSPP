@@ -127,10 +127,50 @@ VisibilityManager::VisibilityManager(
 
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
-    generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, 0);
+    generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
+
+    /*
+    generateHaltonSequence(300, rand() / float(RAND_MAX));
+    glm::vec4 h;
+    {
+        VkDeviceSize bufferSize = sizeof(glm::vec4) * 300;
+
+        VkBuffer hostBuffer;
+        VkDeviceMemory hostBufferMemory;
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, haltonPointsBuffer[0],
+            hostBuffer, bufferSize//, sizeof(glm::vec4) * (30 - 1)
+        );
+
+        void *data;
+        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+        float *n = (float*) data;
+        for (int i = 0; i < 1200; i += 4) {
+            std::cout << n[i] << ";" << n[i + 1] << ";" << n[i + 2] << ";"  << n[i + 3] << ";" << std::endl;
+        }
+        //h = glm::vec4(n[0], n[1], n[2], n[3]);
+
+        vkUnmapMemory(logicalDevice, hostBufferMemory);
+        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
+        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
+    }
+
 
     //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
-    //generateHaltonPoints2d(RAYS_PER_ITERATION, 0, 0);
+    for(int i = 0; i < 5; i++) {
+        auto a = generateHaltonPoints2d<2>({2, 3}, 100, {rand() / float(RAND_MAX), 0.0f});
+        for (auto v : a) {
+            //std::cout << glm::to_string(v) << std::endl;
+            std::cout << v[0] << ";" << v[1] << std::endl;
+        }
+    }
+    */
 
 
     // Halton generation benchmark (CUDA, Compute Shader, CPU)
@@ -151,15 +191,6 @@ VisibilityManager::VisibilityManager(
 void VisibilityManager::addViewCell(glm::mat4 model) {
     viewCells.push_back(ViewCell(model));
 }
-
-/*
-    This is the incremental version to generate the halton squence of
-    quasi-random numbers of a given base. It has been taken from:
-    A. Keller: Instant Radiosity,
-    In Computer Graphics (SIGGRAPH 97 Conference Proceedings),
-    pp. 49--56, August 1997.
-*/
-
 
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
     VkDeviceSize bufferSize;
@@ -432,7 +463,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     vkFreeMemory(logicalDevice, pvsBulkInsertBufferMemory[0], nullptr);
 }
 
-void VisibilityManager::generateHaltonSequence(int n, int startIndex) {
+void VisibilityManager::generateHaltonSequence(int n, float rand) {
     // Generate Halton sequence of length n using a compute shader
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -446,10 +477,10 @@ void VisibilityManager::generateHaltonSequence(int n, int startIndex) {
     );
     vkCmdPushConstants(
         commandBufferHaltonCompute[0], pipelineHaltonComputeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-        sizeof(int), &startIndex
+        sizeof(float), &rand
     );
     vkCmdPushConstants(
-        commandBufferHaltonCompute[0], pipelineHaltonComputeLayout, VK_SHADER_STAGE_COMPUTE_BIT, sizeof(int),
+        commandBufferHaltonCompute[0], pipelineHaltonComputeLayout, VK_SHADER_STAGE_COMPUTE_BIT, sizeof(float),
         sizeof(int), &n
     );
     vkCmdDispatch(commandBufferHaltonCompute[0], ((n / 4.0f) + 256 - 1) / 256.0f, 1, 1);
@@ -1629,7 +1660,7 @@ void VisibilityManager::createHaltonComputePipeline() {
     */
     std::array<VkPushConstantRange, 1> pushConstantRanges = {};
     pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushConstantRanges[0].size = sizeof(int) * 2;
+    pushConstantRanges[0].size = sizeof(glm::vec4) + sizeof(int);
     pushConstantRanges[0].offset = 0;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
@@ -2534,9 +2565,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
 
         if (USE_TERMINATION_CRITERION) {
             if (
-                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD
-                    //||
-                //pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
+                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
+                pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
             ) {
                 statistics.back().endOperation(VISIBILITY_SAMPLING);
                 statistics.back().print();
@@ -2546,7 +2576,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             // Generate new Halton points
             //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
             statistics.back().startOperation(HALTON_GENERATION);
-            generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, RANDOM_RAYS_PER_ITERATION * (i + 1));
+            generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
             statistics.back().endOperation(HALTON_GENERATION);
         } else {
             statistics.back().endOperation(VISIBILITY_SAMPLING);

@@ -20,6 +20,10 @@
 #include "CUDAUtil.h"
 #include "gpuHashTable/linearprobing.h"
 
+#include <algorithm>
+#include <math.h>
+#include <cmath>
+
 class ViewCell;
 
 struct AccelerationStructure {
@@ -83,9 +87,9 @@ public:
         std::vector<glm::mat4> viewCellMatrices
     );
     void addViewCell(glm::mat4 model);
-    //template<int T> std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, int offset = 0);
+
     template<int T>
-    std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, int offset = 0) {
+    std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, std::array<float, T> lastHaltonPoints) {
         std::vector<glm::vec<T, float, glm::defaultp>> haltonPoints;
 
         //int bases[4] = { 2, 3, 5, 7 };
@@ -93,9 +97,17 @@ public:
         //haltonPoints.clear();
         haltonPoints.resize(n);
 
+
+        /*
+            This is the incremental version to generate the halton squence of
+            quasi-random numbers of a given base. It has been taken from:
+            Keller, Alexander. "Instant radiosity." Proceedings of the 24th annual conference on Computer graphics and interactive techniques. 1997.
+
+            Train, Kenneth E. Discrete choice methods with simulation. Cambridge university press, 2009.
+        */
         for (int k = 0; k < bases.size(); k++) {
             double inverseBase = 1.0 / bases[k];
-            double value = offset;
+            double value = 0.0;
 
             for (int i = 0; i < n; i++) {
                 double r = 1.0 - value - 1e-10;
@@ -139,7 +151,7 @@ private:
 
     const int RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 200000;
     const int ABS_MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -154,6 +166,7 @@ private:
     int hashTableCapacity;
 
     std::vector<std::vector<float>> haltonPoints;
+    glm::vec4 lastHaltonPoints;
     std::random_device rd;
     std::mt19937 gen;
     std::mutex *queueSubmitMutex;
@@ -311,7 +324,7 @@ private:
     void resetPVSGPUBuffer();
     void resetAtomicBuffers();
     void resizePVSBuffer(int newSize);
-    void generateHaltonSequence(int n, int startIndex);
+    void generateHaltonSequence(int n, float rand);
 
     ShaderExecutionInfo randomSample(int numRays, int threadId, int viewCellIndex);
     ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId, int viewCellIndex);
