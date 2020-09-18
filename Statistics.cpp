@@ -48,13 +48,13 @@ void Statistics::print() {
         "Rand Rays", "ABS Rays", "ABS RS Rays", "ES Rays", "ES RS Rays", "Total Rays", "Rand Tri",
         "ABS Tri", "ABS RS Tri", "ES Tri", "ES RS Tri", "PVS Size", "New Tri"
     );
-    std::array<int, 13> sums;
+    std::array<long, 13> sums;
     for (int i = 0; i < sums.size(); i++) {
         sums[i] = 0;
     }
     for (int i = 0; i < entries.size(); i++) {
         printf(
-            "%14i|| %14i%14i%14i%14i%14i%14i|| %14i%14i%14i%14i%14i|| %14i%14i\n",
+            "%14lu|| %14lu%14lu%14lu%14lu%14lu%14lu|| %14lu%14lu%14lu%14lu%14lu|| %14lu%14lu\n",
             entries[i].numShaderExecutions,
             entries[i].rnsRays,
             entries[i].absRays,
@@ -90,9 +90,9 @@ void Statistics::print() {
 
     for (int i = 0; i < sums.size(); i++) {
         if (i == 1 || i == 7 || i == 12) {
-            printf("|| %14i%", sums[i]);
+            printf("|| %14lu%", sums[i]);
         } else {
-            printf("%14i%", sums[i]);
+            printf("%14lu%", sums[i]);
         }
     }
     printf("\n");
@@ -119,16 +119,16 @@ void Statistics::endOperation(OPERATION_TYPE operationType) {
     elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::nanoseconds>(end - startTimes[operationType]).count();
 }
 
-int Statistics::getTotalTracedRays() {
-    int sum = 0;
+long Statistics::getTotalTracedRays() {
+    long sum = 0;
     for (auto e : entries) {
         sum += e.totalRays();
     }
     return sum;
 }
 
-int Statistics::getPVSSize() {
-    int sum = 0;
+long Statistics::getPVSSize() {
+    long sum = 0;
     for (auto e : entries) {
         sum += e.pvsSize;
     }

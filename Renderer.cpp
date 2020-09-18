@@ -1486,7 +1486,7 @@ void VulkanRenderer::startVisibilityThread() {
                 );
                 pvs = nirensteinSampler->run(
                     visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
-                    visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300)
+                    visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300, {0.0f,0.0f})
                 );
             } else {
                 visibilityManager->rayTrace(indices, 0, k);
@@ -1628,7 +1628,7 @@ void VulkanRenderer::startVisibilityThread() {
     }
 
     // Calculate avg. and max. pixel error across all view cells
-    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000);
+    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 3}, 1000,{0.0f,0.0f});
     totalError = 0.0f;
     maxError = 0.0f;
     for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
@@ -1654,7 +1654,8 @@ void VulkanRenderer::startVisibilityThread() {
         for (auto e : s.entries) {
             a += e.totalRays();
             //std::cout << e.totalRays() << ";" << a << ";" << a / 1000000.0f << ";" << e.pvsSize << std::endl;
-            std::cout << a / 1000000.0f << ";" << e.pvsSize << std::endl;
+            //std::cout << a << ";" << e.pvsSize << std::endl;
+            printf("%lu;%lu\n", a, e.pvsSize);
         }
         std::cout << std::endl << std::endl;
     }

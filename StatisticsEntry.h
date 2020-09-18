@@ -3,28 +3,28 @@
 
 class StatisticsEntry {
 public:
-    int rnsRays = 0;
-    int absRays = 0;
-    int absRsRays = 0;
-    int edgeSubdivRays = 0;
-    int edgeSubdivRsRays = 0;
+    long rnsRays = 0;
+    long absRays = 0;
+    long absRsRays = 0;
+    long edgeSubdivRays = 0;
+    long edgeSubdivRsRays = 0;
 
-    int rnsTris = 0;
-    int absTris = 0;
-    int absRsTris = 0;
-    int edgeSubdivTris = 0;
-    int edgeSubdivRsTris = 0;
+    long rnsTris = 0;
+    long absTris = 0;
+    long absRsTris = 0;
+    long edgeSubdivTris = 0;
+    long edgeSubdivRsTris = 0;
 
-    int newTriangles = 0;
-    int pvsSize = 0;
+    long newTriangles = 0;
+    long pvsSize = 0;
 
-    int numShaderExecutions = 0;
+    long numShaderExecutions = 0;
 
-    int totalRays() {
+    long totalRays() {
         return rnsRays + absRays + absRsRays + edgeSubdivRays + edgeSubdivRsRays;
     }
 
-    int totalFoundTriangles() {
+    long totalFoundTriangles() {
         return rnsTris + absTris + absRsTris + edgeSubdivTris + edgeSubdivRsTris;
     }
 };

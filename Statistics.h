@@ -29,8 +29,8 @@ public:
     void print();
     void startOperation(OPERATION_TYPE operationType);
     void endOperation(OPERATION_TYPE operationType);
-    int getTotalTracedRays();
-    int getPVSSize();
+    long getTotalTracedRays();
+    long getPVSSize();
     void reset();
     static void printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes);
     static void printAverageStatistics(const std::vector<Statistics> &statistics);
