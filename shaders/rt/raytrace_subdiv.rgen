@@ -35,6 +35,9 @@ layout(binding = 4, set = 0) readonly buffer haltonPoints {
 layout(binding = 5, set = 0) uniform viewCellProperties {
     mat4 model;
 } viewCell;
+layout(binding = 6, set = 0) buffer randomSamplingOutputBuffer {
+    Sample randomSamplingOutput[];
+};
 layout(binding = 8, set = 0) buffer triangleCounterBuffer {
     uint triangleCounter;
     uint rsTriangleCounter;
@@ -50,10 +53,7 @@ layout(binding = 10, set = 0) uniform pvsBufferCapacity {
     int pvsCapacity;
 };
 
-layout(binding = 0, set = 1) buffer absOutputBuffer {
-    Sample absOutput[];
-};
-layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
+layout(binding = 0, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
 };
 
@@ -104,9 +104,9 @@ void main() {
 
     // Get two adjacent samples
     uint i = launchIndex;
-    Sample s0 = absOutput[i];
+    Sample s0 = randomSamplingOutput[i];
     i = (int(mod(launchIndex + 1, 15) + 15 * currentTriangleIndex));
-    Sample s1 = absOutput[i];
+    Sample s1 = randomSamplingOutput[i];
 
     if (insert(s0.triangleID)) {
         edgeSubdivOutput[atomicAdd(triangleCounter, 1)] = s0;

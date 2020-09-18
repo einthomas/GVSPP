@@ -23,10 +23,10 @@ layout(binding = 1, set = 0) uniform cameraProperties {
     mat4 view;
     mat4 projection;
 } camera;
-layout(binding = 2, set = 0) buffer Vertices {
+layout(binding = 2, set = 0) readonly buffer Vertices {
     vec4 v[];
 } vertices;
-layout(binding = 3, set = 0) buffer Indices {
+layout(binding = 3, set = 0) readonly buffer Indices {
     uint i[];
 } indices;
 layout(binding = 4, set = 0) readonly buffer haltonPoints {
@@ -50,10 +50,11 @@ layout(binding = 10, set = 0) uniform pvsBufferCapacity {
     int pvsCapacity;
 };
 
-layout(binding = 0, set = 1) buffer absOutputBuffer {
-    Sample absOutput[];
+layout(binding = 6, set = 0) buffer randomSamplingOutputBuffer {
+    Sample randomSamplingOutput[];
 };
-layout(binding = 1, set = 1) readonly buffer absWorkingBuffer {
+
+layout(binding = 0, set = 1) readonly buffer absWorkingBuffer {
     Sample absWorking[];
 };
 
@@ -67,20 +68,20 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
     
     #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
         if (targetSampleReached) {
-            if (insert(absOutput[launchIndex].triangleID)) {
+            if (insert(randomSamplingOutput[launchIndex].triangleID)) {
                 index = int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1));
-                absOutput[index] = absOutput[launchIndex];
+                randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
             }
-            absOutput[launchIndex] = s;
+            randomSamplingOutput[launchIndex] = s;
         } else {
             if (insert(s.triangleID)) {
-                absOutput[int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1))] = s;
+                randomSamplingOutput[int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1))] = s;
             }
         }
     #else
         if (insert(s.triangleID)) {
             atomicAdd(rsTriangleCounter, 1);
-            absOutput[int(atomicAdd(triangleCounter, 1))] = s;
+            randomSamplingOutput[int(atomicAdd(triangleCounter, 1))] = s;
         }
     #endif
     
@@ -176,24 +177,24 @@ void main() {
         vec3 hitPoint = hitInfo.xyz;
         bool pointBehindViewCell = false;
         #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
-            // If the recursive edge subdivision strategy is used, samples are stored in absOutput at index
+            // If the recursive edge subdivision strategy is used, samples are stored in randomSamplingOutput at index
             // launchIndex. Each two samples surrounding the same triangle form an edge, which is recursively
             // subdivided if rays through such samples hit different triangles. The subdivision is performed
             // in the raytrace_subdiv.rgen shader
 
             #ifdef USE_3D_VIEW_CELL
-                absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+                randomSamplingOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
                 if (triangleID != -1) {
                     atomicAdd(triangleCounter, 1);
                 }
             #else
                 if (triangleID != -1) {
                     atomicAdd(triangleCounter, 1);
-                    absOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+                    randomSamplingOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
                 } else {
                     pointBehindViewCell = true;
                     triangleID = -1;
-                    absOutput[launchIndex] = Sample(-1, rayOrigin, hitPoint, samplePos);
+                    randomSamplingOutput[launchIndex] = Sample(-1, rayOrigin, hitPoint, samplePos);
                 }
             #endif
 
@@ -211,11 +212,11 @@ void main() {
                 // are generated, to the sample that lies on the occluding triangle that caused the discontinuity.
                 // This is not intended, therefore the triangleID of the sample at launchIndex is set to -2
                 if (discontinuityFound && foundSample.triangleID == -2) {
-                    if (insert(absOutput[launchIndex].triangleID)) {
+                    if (insert(randomSamplingOutput[launchIndex].triangleID)) {
                         uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
-                        absOutput[index] = absOutput[launchIndex];
+                        randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
                     }
-                    absOutput[launchIndex].triangleID = -2;
+                    randomSamplingOutput[launchIndex].triangleID = -2;
                 }
             }
         #else
@@ -230,7 +231,7 @@ void main() {
 
                 if (triangleID != -1 && insert(triangleID)) {
                     uint index = atomicAdd(triangleCounter, 1);
-                    absOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+                    randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
                 }
             }
         #endif
@@ -239,7 +240,7 @@ void main() {
     #ifndef USE_3D_VIEW_CELL
         } else {
             #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
-                absOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
+                randomSamplingOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
             #endif
         }
     #endif
