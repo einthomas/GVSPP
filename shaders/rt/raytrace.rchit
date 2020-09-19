@@ -26,21 +26,22 @@ layout(binding = 3, set = 0) buffer Indices {
 
 hitAttributeNV vec3 attribs;
 
-#include "util.glsl"
+//#include "util.glsl"
 
 void main() {
-    ivec3 index = ivec3(
+    const ivec3 index = ivec3(
         indices.i[3 * gl_PrimitiveID + 0],
         indices.i[3 * gl_PrimitiveID + 1],
         indices.i[3 * gl_PrimitiveID + 2]
     );
-	Vertex v0 = unpackVertexData(index.x);
-	Vertex v1 = unpackVertexData(index.y);
-	Vertex v2 = unpackVertexData(index.z);
 
-    vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-    vec3 pos = v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z;
-    vec3 worldPos = vec3(camera.model * vec4(pos, 1.0));
+    const vec4 d0 = vertices.v[3 * index.x + 0];
+    const vec4 d1 = vertices.v[3 * index.y + 1];
+    const vec4 d2 = vertices.v[3 * index.z + 2];
+
+    const vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+    const vec3 pos = d0.xyz * barycentricCoords.x + d1.xyz * barycentricCoords.y + d2.xyz * barycentricCoords.z;
+    const vec3 worldPos = vec3(camera.model * vec4(pos, 1.0));
 
     hitInfo = vec4(worldPos, gl_PrimitiveID);
 }

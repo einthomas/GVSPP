@@ -17,10 +17,10 @@ layout(binding = 1, set = 0) uniform cameraProperties {
     mat4 view;
     mat4 projection;
 } camera;
-layout(binding = 2, set = 0) buffer Vertices {
+layout(binding = 2, set = 0) readonly buffer Vertices {
     vec4 v[];
 } vertices;
-layout(binding = 3, set = 0) buffer Indices {
+layout(binding = 3, set = 0) readonly buffer Indices {
     uint i[];
 } indices;
 

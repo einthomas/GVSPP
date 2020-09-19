@@ -88,8 +88,6 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
     return index;
 }
 
-uint tracedRsRays = 0;
-
 #if REVERSE_SAMPLING_METHOD == 0
     #include "reverse_sampling_cpu_impl.rgen"
 #elif REVERSE_SAMPLING_METHOD == 1
@@ -230,8 +228,6 @@ void main() {
                 }
             }
         #endif
-
-        atomicAdd(rsRayCounter, tracedRsRays);
     #ifndef USE_3D_VIEW_CELL
         } else {
             #ifdef USE_RECURSIVE_EDGE_SUBDIVISION

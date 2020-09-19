@@ -36,6 +36,8 @@ public:
     glm::vec3 cameraForward;
     glm::vec3 cameraRight;
     glm::vec3 cameraUp;
+    VisibilityManager *visibilityManager;
+    std::vector<uint32_t> indices;
 
     VulkanRenderer(GLFWVulkanWindow *w);
 
@@ -85,7 +87,6 @@ private:
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
     std::vector<Vertex> shadedVertices;
     std::vector<std::vector<int>> pvsTriangleIDs;
     std::vector<std::vector<Vertex>> shadedPVS;
@@ -168,7 +169,6 @@ private:
     float totalError;
     float maxError;
 
-    VisibilityManager *visibilityManager;
     void initVisibilityManager();
     std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();

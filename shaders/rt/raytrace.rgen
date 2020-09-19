@@ -93,9 +93,8 @@ void main() {
     vec3 rayDir;
 
     // Map Halton point to point on view cell
-    vec2 haltonPoint = vec2(points[launchIndex * 4], points[launchIndex * 4 + 1]);
-    vec2 offset = haltonPoint - vec2(0.5);
-    rayOrigin = viewCellPos + offset.x * viewCellSize.x * viewCellRight + offset.y * viewCellSize.y * viewCellUp;
+    vec2 haltonPoint = vec2(points[launchIndex * 4] - 0.5f, points[launchIndex * 4 + 1] - 0.5f);
+    rayOrigin = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
 
     // Use a different Halton point to calculate the ray direction
     haltonPoint = vec2(points[launchIndex * 4 + 2], points[launchIndex * 4 + 3]);
