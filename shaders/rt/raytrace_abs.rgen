@@ -109,24 +109,19 @@ void main() {
     const uint nextVertexSamplePosIndex = uint(mod(currentVertexSamplePosIndex + 1, ABS_NUM_SAMPLES_PER_EDGE));
 
     const Sample s = absWorking[currentTriangleIndex];
-    const Vertex v[3] = {
-        unpackVertexData(indices.i[3 * s.triangleID]),
-        unpackVertexData(indices.i[3 * s.triangleID + 1]),
-        unpackVertexData(indices.i[3 * s.triangleID + 2])
-    };
-    
+
     const vec3 rayOrigin = s.rayOrigin;
 
     const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
-    vec3 offsetA = -normalize(
-        (v[nextVertexIndex].worldPos - v[currentVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[currentVertexIndex].worldPos)
-    );
-    vec3 offsetB = -normalize(
-        (v[currentVertexIndex].worldPos - v[nextVertexIndex].worldPos) + (v[lastVertexIndex].worldPos - v[nextVertexIndex].worldPos)
-    );
+
+    const vec3 nextWP = unpackVertexData(indices.i[3 * s.triangleID + nextVertexIndex]).worldPos;
+    const vec3 currentWP = unpackVertexData(indices.i[3 * s.triangleID + currentVertexIndex]).worldPos;
+    const vec3 lastWP = unpackVertexData(indices.i[3 * s.triangleID + lastVertexIndex]).worldPos;
+    vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
+    vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
     vec3 samplePos = mix(
-        v[nextVertexIndex].worldPos + offsetB * ABS_DELTA,
-        v[currentVertexIndex].worldPos + offsetA * ABS_DELTA,
+        nextWP + offsetB * ABS_DELTA,
+        currentWP + offsetA * ABS_DELTA,
         currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
     );
 
