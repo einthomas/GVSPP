@@ -46,17 +46,22 @@ bool reverseSampling(uint launchIndex, vec3 v[3], Sample s, vec3 rayOrigin, vec3
             vec3 planePoint = rayOrigin;
 
             // Get the vertices of the intersected, closer triangle
+            /*
             Vertex v0 = unpackVertexData(indices.i[3 * occludingTriangleID]);
             Vertex v1 = unpackVertexData(indices.i[3 * occludingTriangleID + 1]);
             Vertex v2 = unpackVertexData(indices.i[3 * occludingTriangleID + 2]);
+            */
+            const vec3 v0WorldPos = getVertexPos(indices.i[3 * occludingTriangleID]);
+            const vec3 v1WorldPos = getVertexPos(indices.i[3 * occludingTriangleID + 1]);
+            const vec3 v2WorldPos = getVertexPos(indices.i[3 * occludingTriangleID + 2]);
 
             // Choose the two vertices that are on the same side of the plane
             bool vertexSide[3] = {
-                dot(planeNormal, v0.worldPos - planePoint) > 0,
-                dot(planeNormal, v1.worldPos - planePoint) > 0,
-                dot(planeNormal, v2.worldPos - planePoint) > 0
+                dot(planeNormal, v0WorldPos - planePoint) > 0,
+                dot(planeNormal, v1WorldPos - planePoint) > 0,
+                dot(planeNormal, v2WorldPos - planePoint) > 0
             };
-            Vertex a, b, c;
+            vec3 a, b, c;
             if (vertexSide[0] == vertexSide[1]) {
                 a = v0;
                 b = v1;
@@ -76,8 +81,8 @@ bool reverseSampling(uint launchIndex, vec3 v[3], Sample s, vec3 rayOrigin, vec3
             vec3 p0;
             vec3 p1;
             if (
-                intersectRayPlane(planePoint, planeNormal, a.worldPos, normalize(c.worldPos - a.worldPos), p0) &&
-                intersectRayPlane(planePoint, planeNormal, b.worldPos, normalize(c.worldPos - b.worldPos), p1)
+                intersectRayPlane(planePoint, planeNormal, a, normalize(c - a), p0) &&
+                intersectRayPlane(planePoint, planeNormal, b, normalize(c - b), p1)
             ) {
                 // Construct points along the intersection line right outside of the triangle (on both sides)
                 const int numPointOutsideTriangle = 2;

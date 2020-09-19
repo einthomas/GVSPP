@@ -95,9 +95,14 @@ void main() {
     #if REVERSE_SAMPLING_METHOD == 1
         Sample originalSample = absWorking[currentTriangleIndex];
         vec3 v[3];
+        /*
         v[0] = unpackVertexData(indices.i[3 * originalSample.triangleID]).worldPos;
         v[1] = unpackVertexData(indices.i[3 * originalSample.triangleID + 1]).worldPos;
         v[2] = unpackVertexData(indices.i[3 * originalSample.triangleID + 2]).worldPos;
+        */
+        v[0] = getVertexWorldPos(indices.i[3 * originalSample.triangleID]);
+        v[1] = getVertexWorldPos(indices.i[3 * originalSample.triangleID + 1]);
+        v[2] = getVertexWorldPos(indices.i[3 * originalSample.triangleID + 2]);
     #endif
 
     // Get two adjacent samples

@@ -34,12 +34,18 @@ void main() {
         indices.i[3 * gl_PrimitiveID + 1],
         indices.i[3 * gl_PrimitiveID + 2]
     );
+    /*
 	Vertex v0 = unpackVertexData(index.x);
 	Vertex v1 = unpackVertexData(index.y);
 	Vertex v2 = unpackVertexData(index.z);
+    */
+
+    const vec3 v0Pos = getVertexPos(index.x);
+    const vec3 v1Pos = getVertexPos(index.y);
+    const vec3 v2Pos = getVertexPos(index.z);
 
     vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-    vec3 pos = v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z;
+    vec3 pos = v0Pos * barycentricCoords.x + v1Pos * barycentricCoords.y + v2Pos * barycentricCoords.z;
     vec3 worldPos = vec3(camera.model * vec4(pos, 1.0));
 
     hitInfo = vec4(worldPos, gl_PrimitiveID);

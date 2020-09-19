@@ -13,6 +13,17 @@ Vertex unpackVertexData(uint index) {
     return vertex;
 }
 
+vec3 getVertexPos(uint index) {
+    return vertices.v[3 * index].xyz;
+}
+
+vec3 getVertexWorldPos(uint index) {
+    return vec3(camera.model * vec4(
+        vertices.v[3 * index + 0].xyz,
+        1.0)
+    );
+}
+
 bool intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir, out vec3 hitPoint) {
     float denom = dot(rayDir, normal);
     if (abs(denom) > 1e-6) {

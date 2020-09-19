@@ -26,9 +26,10 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
             }
             vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
-            Vertex occludingTriangleVertices[3];
+            vec3 occludingTriangleVerticesWorldPos[3];
             for (int i = 0; i < 3; i++) {
-                occludingTriangleVertices[i] = unpackVertexData(indices.i[3 * occludingTriangleID + i]);
+                //occludingTriangleVertices[i] = unpackVertexData(indices.i[3 * occludingTriangleID + i]);
+                occludingTriangleVerticesWorldPos[i] = getVertexPos(indices.i[3 * occludingTriangleID + i]);
             }
             
             #ifdef USE_3D_VIEW_CELL
@@ -63,7 +64,7 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
                 // Intersect a ray originating at samplePos through the vertices of the occluding triangle with the view cell i.e.
                 // the occluding triangle is projected onto the view cell
                 if (!intersectRayPlane(
-                        viewCellPos, viewCellNormal, samplePos, normalize(occludingTriangleVertices[i].worldPos - samplePos),
+                        viewCellPos, viewCellNormal, samplePos, normalize(occludingTriangleVerticesWorldPos[i] - samplePos),
                         rayViewCellHitPoints[i]
                     )
                 ) {

@@ -112,9 +112,14 @@ void main() {
 
     const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
 
+    /*
     const vec3 nextWP = unpackVertexData(indices.i[3 * s.triangleID + nextVertexIndex]).worldPos;
     const vec3 currentWP = unpackVertexData(indices.i[3 * s.triangleID + currentVertexIndex]).worldPos;
     const vec3 lastWP = unpackVertexData(indices.i[3 * s.triangleID + lastVertexIndex]).worldPos;
+    */
+    const vec3 nextWP = getVertexWorldPos(indices.i[3 * s.triangleID + nextVertexIndex]);
+    const vec3 currentWP = getVertexWorldPos(indices.i[3 * s.triangleID + currentVertexIndex]);
+    const vec3 lastWP = getVertexWorldPos(indices.i[3 * s.triangleID + lastVertexIndex]);
     vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
     vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
     vec3 samplePos = mix(
