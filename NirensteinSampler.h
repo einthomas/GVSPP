@@ -83,7 +83,7 @@ private:
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
-    VkImage colorImage;     // MSAA render target
+    VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
     VkSampler colorImageSampler;

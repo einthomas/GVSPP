@@ -1593,7 +1593,7 @@ void NirensteinSampler::createComputeCommandBuffer() {
         computeCommandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout,
         0, 1, &computeDescriptorSet, 0, nullptr
     );
-    vkCmdDispatch(computeCommandBuffer, std::ceil(FRAME_BUFFER_WIDTH / 8.0f), std::ceil(FRAME_BUFFER_HEIGHT / 8.0f), 1);
+    vkCmdDispatch(computeCommandBuffer, std::ceil(FRAME_BUFFER_WIDTH / 32.0f), std::ceil(FRAME_BUFFER_HEIGHT / 32.0f), 1);
     vkEndCommandBuffer(computeCommandBuffer);
 }
 

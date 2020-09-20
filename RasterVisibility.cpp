@@ -453,130 +453,73 @@ void RasterVisibility::createDescriptorSetLayout() {
 }
 
 void RasterVisibility::createComputeDescriptorSet() {
-    std::array<VkWriteDescriptorSet, 11> descriptorWrites = {};
-
-    VkDescriptorBufferInfo pvsBufferInfo = {};
-    pvsBufferInfo.buffer = pvsBuffer;
-    pvsBufferInfo.offset = 0;
-    pvsBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = computeDescriptorSet;
-    descriptorWrites[0].dstBinding = 0;
-    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[0].descriptorCount = 1;
-    descriptorWrites[0].pBufferInfo = &pvsBufferInfo;
-
-    VkDescriptorBufferInfo currentPvsBufferInfo = {};
-    currentPvsBufferInfo.buffer = currentPvsBuffer;
-    currentPvsBufferInfo.offset = 0;
-    currentPvsBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = computeDescriptorSet;
-    descriptorWrites[1].dstBinding = 1;
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].pBufferInfo = &currentPvsBufferInfo;
-
-    VkDescriptorBufferInfo triangleIDFramebufferInfo = {};
-    triangleIDFramebufferInfo.buffer = triangleIDBuffer;
-    triangleIDFramebufferInfo.offset = 0;
-    triangleIDFramebufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[2].dstSet = computeDescriptorSet;
-    descriptorWrites[2].dstBinding = 2;
-    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[2].descriptorCount = 1;
-    descriptorWrites[2].pBufferInfo = &triangleIDFramebufferInfo;
-
-    VkDescriptorBufferInfo pvsSizeUniformBufferInfo = {};
-    pvsSizeUniformBufferInfo.buffer = pvsSizeUniformBuffer;
-    pvsSizeUniformBufferInfo.offset = 0;
-    pvsSizeUniformBufferInfo.range = sizeof(int);
-    descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[3].dstSet = computeDescriptorSet;
-    descriptorWrites[3].dstBinding = 3;
-    descriptorWrites[3].dstArrayElement = 0;
-    descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[3].descriptorCount = 1;
-    descriptorWrites[3].pBufferInfo = &pvsSizeUniformBufferInfo;
-
-    VkDescriptorBufferInfo currentPvsIndexUniformBufferInfo = {};
-    currentPvsIndexUniformBufferInfo.buffer = currentPvsIndexUniformBuffer;
-    currentPvsIndexUniformBufferInfo.offset = 0;
-    currentPvsIndexUniformBufferInfo.range = sizeof(int);
-    descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[4].dstSet = computeDescriptorSet;
-    descriptorWrites[4].dstBinding = 4;
-    descriptorWrites[4].dstArrayElement = 0;
-    descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[4].descriptorCount = 1;
-    descriptorWrites[4].pBufferInfo = &currentPvsIndexUniformBufferInfo;
+    std::array<VkWriteDescriptorSet, 6> descriptorWrites = {};
 
     VkDescriptorImageInfo framebufferInfo = {};
     framebufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     framebufferInfo.imageView = colorImageView;
     framebufferInfo.sampler = colorImageSampler;
-    descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[5].dstSet = computeDescriptorSet;
-    descriptorWrites[5].dstBinding = 5;
-    descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrites[5].descriptorCount = 1;
-    descriptorWrites[5].pImageInfo = &framebufferInfo;
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = computeDescriptorSet;
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].pImageInfo = &framebufferInfo;
 
     VkDescriptorBufferInfo sampleOutputBufferInfo = {};
     sampleOutputBufferInfo.buffer = sampleOutputBuffer;
     sampleOutputBufferInfo.offset = 0;
     sampleOutputBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[6].dstSet = computeDescriptorSet;
-    descriptorWrites[6].dstBinding = 6;
-    descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[6].descriptorCount = 1;
-    descriptorWrites[6].pBufferInfo = &sampleOutputBufferInfo;
+    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[1].dstSet = computeDescriptorSet;
+    descriptorWrites[1].dstBinding = 1;
+    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[1].descriptorCount = 1;
+    descriptorWrites[1].pBufferInfo = &sampleOutputBufferInfo;
 
     VkDescriptorBufferInfo cubePosUniformBufferInfo = {};
     cubePosUniformBufferInfo.buffer = cubePosUniformBuffer;
     cubePosUniformBufferInfo.offset = 0;
     cubePosUniformBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[7].dstSet = computeDescriptorSet;
-    descriptorWrites[7].dstBinding = 7;
-    descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[7].descriptorCount = 1;
-    descriptorWrites[7].pBufferInfo = &cubePosUniformBufferInfo;
+    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[2].dstSet = computeDescriptorSet;
+    descriptorWrites[2].dstBinding = 2;
+    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[2].descriptorCount = 1;
+    descriptorWrites[2].pBufferInfo = &cubePosUniformBufferInfo;
 
     VkDescriptorBufferInfo sampleCounterBufferInfo = {};
     sampleCounterBufferInfo.buffer = numSamplesBuffer;
     sampleCounterBufferInfo.offset = 0;
     sampleCounterBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[8].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[8].dstSet = computeDescriptorSet;
-    descriptorWrites[8].dstBinding = 8;
-    descriptorWrites[8].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[8].descriptorCount = 1;
-    descriptorWrites[8].pBufferInfo = &sampleCounterBufferInfo;
+    descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[3].dstSet = computeDescriptorSet;
+    descriptorWrites[3].dstBinding = 3;
+    descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[3].descriptorCount = 1;
+    descriptorWrites[3].pBufferInfo = &sampleCounterBufferInfo;
 
     VkDescriptorBufferInfo setBufferInfo = {};
     setBufferInfo.buffer = setBuffer;
     setBufferInfo.offset = 0;
     setBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[9].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[9].dstSet = computeDescriptorSet;
-    descriptorWrites[9].dstBinding = 9;
-    descriptorWrites[9].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[9].descriptorCount = 1;
-    descriptorWrites[9].pBufferInfo = &setBufferInfo;
+    descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[4].dstSet = computeDescriptorSet;
+    descriptorWrites[4].dstBinding = 4;
+    descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[4].descriptorCount = 1;
+    descriptorWrites[4].pBufferInfo = &setBufferInfo;
 
     VkDescriptorBufferInfo triangleCounterBufferInfo = {};
     triangleCounterBufferInfo.buffer = triangleCounterBuffer;
     triangleCounterBufferInfo.offset = 0;
     triangleCounterBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[10].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[10].dstSet = computeDescriptorSet;
-    descriptorWrites[10].dstBinding = 10;
-    descriptorWrites[10].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[10].descriptorCount = 1;
-    descriptorWrites[10].pBufferInfo = &triangleCounterBufferInfo;
+    descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[5].dstSet = computeDescriptorSet;
+    descriptorWrites[5].dstBinding = 5;
+    descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[5].descriptorCount = 1;
+    descriptorWrites[5].pBufferInfo = &triangleCounterBufferInfo;
 
     vkUpdateDescriptorSets(
         logicalDevice,
@@ -588,78 +531,43 @@ void RasterVisibility::createComputeDescriptorSet() {
 }
 
 void RasterVisibility::createComputeDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding pvsBufferBinding = {};
-    pvsBufferBinding.binding = 0;
-    pvsBufferBinding.descriptorCount = 1;
-    pvsBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pvsBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding currentPvsBufferBinding = {};
-    currentPvsBufferBinding.binding = 1;
-    currentPvsBufferBinding.descriptorCount = 1;
-    currentPvsBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    currentPvsBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding triangleIDFramebufferBinding = {};
-    triangleIDFramebufferBinding.binding = 2;
-    triangleIDFramebufferBinding.descriptorCount = 1;
-    triangleIDFramebufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    triangleIDFramebufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding pvsSizeUniformBufferBinding = {};
-    pvsSizeUniformBufferBinding.binding = 3;
-    pvsSizeUniformBufferBinding.descriptorCount = 1;
-    pvsSizeUniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pvsSizeUniformBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding currentPvsIndexUniformBuffer = {};
-    currentPvsIndexUniformBuffer.binding = 4;
-    currentPvsIndexUniformBuffer.descriptorCount = 1;
-    currentPvsIndexUniformBuffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    currentPvsIndexUniformBuffer.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
     VkDescriptorSetLayoutBinding framebufferBinding = {};
-    framebufferBinding.binding = 5;
+    framebufferBinding.binding = 0;
     framebufferBinding.descriptorCount = 1;
     framebufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     framebufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding sampleOutputBinding = {};
-    sampleOutputBinding.binding = 6;
+    sampleOutputBinding.binding = 1;
     sampleOutputBinding.descriptorCount = 1;
     sampleOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     sampleOutputBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding cubePosBinding = {};
-    cubePosBinding.binding = 7;
+    cubePosBinding.binding = 2;
     cubePosBinding.descriptorCount = 1;
     cubePosBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     cubePosBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding numSamplesBufferBinding = {};
-    numSamplesBufferBinding.binding = 8;
+    numSamplesBufferBinding.binding = 3;
     numSamplesBufferBinding.descriptorCount = 1;
     numSamplesBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     numSamplesBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding setBufferBinding = {};
-    setBufferBinding.binding = 9;
+    setBufferBinding.binding = 4;
     setBufferBinding.descriptorCount = 1;
     setBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     setBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutBinding triangleCounterBufferBinding = {};
-    triangleCounterBufferBinding.binding = 10;
+    triangleCounterBufferBinding.binding = 5;
     triangleCounterBufferBinding.descriptorCount = 1;
     triangleCounterBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triangleCounterBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 11> bindings = {
-        pvsBufferBinding,
-        currentPvsBufferBinding,
-        triangleIDFramebufferBinding,
-        pvsSizeUniformBufferBinding,
-        currentPvsIndexUniformBuffer,
+    std::array<VkDescriptorSetLayoutBinding, 6> bindings = {
         framebufferBinding,
         sampleOutputBinding,
         cubePosBinding,
@@ -873,7 +781,7 @@ void RasterVisibility::createFramebuffer(VkFormat depthFormat) {
     VkFramebufferCreateInfo framebufferInfo = {};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferInfo.renderPass = renderPass;
-    framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
+    framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
     framebufferInfo.pAttachments = attachments.data();
     framebufferInfo.width = FRAME_BUFFER_WIDTH;
     framebufferInfo.height = FRAME_BUFFER_HEIGHT;
