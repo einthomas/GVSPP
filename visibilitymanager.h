@@ -49,7 +49,7 @@ struct ShaderExecutionInfo {
     unsigned int numRsRays;
 };
 
-class NirensteinSampler;
+class RasterVisibility;
 
 class VisibilityManager {
 public:
@@ -72,6 +72,7 @@ public:
         bool USE_TERMINATION_CRITERION,
         bool USE_RECURSIVE_EDGE_SUBDIVISION,
         bool USE_HYBRID_VISIBILITY_SAMPLING,
+        int RASTER_NUM_HEMICUBES,
         int RAY_COUNT_TERMINATION_THRESHOLD,
         int NEW_TRIANGLE_TERMINATION_THRESHOLD,
         int RANDOM_RAYS_PER_ITERATION,
@@ -90,7 +91,12 @@ public:
         const std::vector<VkBuffer> &uniformBuffers,
         int numThreads,
         std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
-        std::vector<glm::mat4> viewCellMatrices
+        std::vector<glm::mat4> viewCellMatrices,
+        VkCommandPool graphicsCommandPool,
+        VkQueue graphicsQueue,
+        uint32_t frameBufferWidth,
+        uint32_t frameBufferHeight,
+        VkFormat depthFormat
     );
     void addViewCell(glm::mat4 model);
 
@@ -136,7 +142,7 @@ public:
 
         return haltonPoints;
     }
-    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex, NirensteinSampler *nirensteinSampler, const std::vector<glm::vec3> &viewCellSizes);
+    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
     void releaseResources();
     void fetchPVS();
     void printAverageStatistics();
@@ -148,6 +154,7 @@ private:
     const bool USE_TERMINATION_CRITERION;
     const bool USE_RECURSIVE_EDGE_SUBDIVISION;
     const bool USE_HYBRID_VISIBILITY_SAMPLING;
+    const int RASTER_NUM_HEMICUBES;
     const int RAY_COUNT_TERMINATION_THRESHOLD;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const int NUM_ABS_SAMPLES;
@@ -171,6 +178,7 @@ private:
     //char *inserted;
     //char *device_inserted;
     int hashTableCapacity;
+    RasterVisibility *rasterVisibility;
 
     std::vector<std::vector<float>> haltonPoints;
     glm::vec4 lastHaltonPoints;

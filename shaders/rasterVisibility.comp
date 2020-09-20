@@ -1,0 +1,63 @@
+#version 460
+
+#include "rt/defines.glsl"
+
+struct Sample {
+    int triangleID;
+    vec3 rayOrigin;
+    vec3 rayHitPos;
+    vec3 pos;
+};
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) writeonly buffer pvsBuffer {
+    int pvs[];
+};
+layout(binding = 1, set = 0) writeonly buffer currentPvsBuffer {
+    int currentPvs[];
+};
+layout(binding = 2, set = 0) readonly buffer triangleIDFramebuffer {
+    int triangleIDs[];
+};
+layout(binding = 3, set = 0) uniform pvsSizeUniform {
+    int pvsSize2;
+};
+layout(binding = 4, set = 0) uniform currentPvsIndexUniform {
+    int currentPvsIndex;
+};
+#ifdef NIRENSTEIN_USE_MULTI_VIEW_RENDERING
+    layout(binding = 5, set = 0) uniform isampler2DArray ids;
+#else
+    layout(binding = 5, set = 0) uniform isampler2D ids;
+#endif
+layout(binding = 6, set = 0) buffer writeonly sampleOutputBuffer {
+    Sample sampleOutput[];
+};
+layout(binding = 7, set = 0) uniform cubePosUniform {
+    vec3 cubePos;
+};
+layout(binding = 8, set = 0) buffer writeonly numSamplesBuffer {
+    int numSamples;
+};
+layout(binding = 9, set = 0) buffer setBuffer {
+    int set[];
+};
+layout(binding = 10, set = 0) buffer triangleCounterBuffer {
+    uint triangleCounter;
+    uint rsTriangleCounter;
+    uint rayCounter;
+    uint rsRayCounter;
+    uint pvsSize;
+};
+
+#include "rt/gpuHashSet.glsl"
+
+void main() {
+    for (int i = 0; i < 5; i++) {
+        const int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
+        if (insert(triangleID)) {
+            sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID, cubePos, vec3(0.0f), vec3(0.0f));
+        }
+    }
+}

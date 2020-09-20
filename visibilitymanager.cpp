@@ -14,7 +14,7 @@
 #include "sample.h"
 #include "Vertex.h"
 #include "gpuHashTable/linearprobing.h"
-#include "NirensteinSampler.h"
+#include "RasterVisibility.h"
 
 struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
@@ -26,6 +26,7 @@ VisibilityManager::VisibilityManager(
     bool USE_TERMINATION_CRITERION,
     bool USE_RECURSIVE_EDGE_SUBDIVISION,
     bool USE_HYBRID_VISIBILITY_SAMPLING,
+    int RASTER_NUM_HEMICUBES,
     int RAY_COUNT_TERMINATION_THRESHOLD,
     int NEW_TRIANGLE_TERMINATION_THRESHOLD,
     int RANDOM_RAYS_PER_ITERATION,
@@ -44,11 +45,17 @@ VisibilityManager::VisibilityManager(
     const std::vector<VkBuffer> &uniformBuffers,
     int numThreads,
     std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
-    std::vector<glm::mat4> viewCellMatrices
+    std::vector<glm::mat4> viewCellMatrices,
+    VkCommandPool graphicsCommandPool,
+    VkQueue graphicsQueue,
+    uint32_t frameBufferWidth,
+    uint32_t frameBufferHeight,
+    VkFormat depthFormat
 ):
     USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
     USE_RECURSIVE_EDGE_SUBDIVISION(USE_RECURSIVE_EDGE_SUBDIVISION),
     USE_HYBRID_VISIBILITY_SAMPLING(USE_HYBRID_VISIBILITY_SAMPLING),
+    RASTER_NUM_HEMICUBES(RASTER_NUM_HEMICUBES),
     RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
@@ -131,6 +138,28 @@ VisibilityManager::VisibilityManager(
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
     generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
+
+    rasterVisibility = new RasterVisibility(
+        physicalDevice,
+        logicalDevice,
+        graphicsCommandPool,
+        graphicsQueue,
+        frameBufferWidth,
+        frameBufferHeight,
+        depthFormat,
+        computeQueue,
+        commandPool[0],
+        transferQueue,
+        transferCommandPool,
+        vertexBuffer,
+        vertices,
+        indexBuffer,
+        indices,
+        indices.size() / 3.0f,
+        randomSamplingOutputBuffer[0],
+        pvsBuffer[0],
+        triangleCounterBuffer[0]
+    );
 
     /*
     generateHaltonSequence(300, rand() / float(RAND_MAX));
@@ -2282,13 +2311,14 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
     return shaderGroupHandleSize;
 }
 
-void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex,
-                                 NirensteinSampler *nirensteinSampler, const std::vector<glm::vec3> &viewCellSizes) {
+void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex) {
     updateViewCellBuffer(viewCellIndex);
     resetPVSGPUBuffer();
     resetAtomicBuffers();
     //gpuHashSet->reset();
     statistics.push_back(Statistics(1000000));
+
+    rasterVisibility->statistics = &statistics.back();
 
     std::vector<Sample> absSampleQueue;
     size_t previousPVSSize;
@@ -2311,14 +2341,13 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 glm::normalize(glm::vec3(viewCells[viewCellIndex].model[0])),
                 glm::normalize(glm::vec3(viewCells[viewCellIndex].model[1]))
             );
-            nirensteinSampler->run(
-                viewCells[viewCellIndex], viewCellSizes[viewCellIndex], cameraForward,
-                generateHaltonPoints2d<2>({5, 7}, 2, {0.0f, 0.0f})
+            int numSamples = rasterVisibility->run(
+                viewCells[viewCellIndex], cameraForward,
+                generateHaltonPoints2d<2>({5, 7}, RASTER_NUM_HEMICUBES, {0.0f, 0.0f})
             );
-
-            if (nirensteinSampler->numSamples > 0) {
+            if (numSamples > 0) {
                 // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * nirensteinSampler->numSamples;
+                VkDeviceSize bufferSize = sizeof(Sample) * numSamples;
 
                 // Copy the intersected triangles GPU buffer to the host buffer
                 VulkanUtil::copyBuffer(
@@ -2327,7 +2356,11 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 );
 
                 Sample *s = (Sample*)randomSamplingOutputPointer[0];
-                absSampleQueue.insert(absSampleQueue.end(), s, s + nirensteinSampler->numSamples);
+                absSampleQueue.insert(absSampleQueue.end(), s, s + numSamples);
+
+                statistics.back().entries.back().rasterHemicubes += RASTER_NUM_HEMICUBES + 4;
+                statistics.back().entries.back().pvsSize = numSamples;
+                statistics.back().addLine();
             }
         } else {
             // Execute random sampling

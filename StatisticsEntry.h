@@ -3,6 +3,8 @@
 
 class StatisticsEntry {
 public:
+    long rasterHemicubes = 0;
+
     long rnsRays = 0;
     long absRays = 0;
     long absRsRays = 0;

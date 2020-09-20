@@ -51,7 +51,7 @@ public:
     );
     void toggleShadedRendering();
     void toggleViewCellRendering();
-    void toggleRayVisualization();
+    void showMaxErrorDirection();
     void nextCorner();
     void nextViewCell();
     void alignCameraWithViewCellNormal();
@@ -120,8 +120,10 @@ private:
     VkImageView textureImageView;
     VkSampler textureSampler;
     int currentViewCellCornerView = 0;
-
     int currentViewCellIndex = 0;
+
+    glm::vec3 maxErrorCameraForward;
+    glm::vec3 maxErrorCameraPos;
 
     void createGraphicsPipeline(
         VkPipeline &pipeline, VkPipelineLayout &pipelineLayout, std::string vertShaderPath,

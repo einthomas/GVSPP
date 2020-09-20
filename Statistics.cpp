@@ -20,14 +20,18 @@ Statistics::Statistics(int samplesPerLine)
 
 void Statistics::update() {
     if (entries.back().totalRays() >= samplesPerLine) {
-        if (entries.size() == 1) {
-            entries[0].newTriangles = entries[0].pvsSize;
-        } else {
-            entries.back().newTriangles = entries.back().pvsSize - entries[entries.size() - 2].pvsSize;
-        }
-
-        entries.push_back(StatisticsEntry());
+        addLine();
     }
+}
+
+void Statistics::addLine() {
+    if (entries.size() == 1) {
+        entries[0].newTriangles = entries[0].pvsSize;
+    } else {
+        entries.back().newTriangles = entries.back().pvsSize - entries[entries.size() - 2].pvsSize;
+    }
+
+    entries.push_back(StatisticsEntry());
 }
 
 void Statistics::print() {
@@ -44,18 +48,19 @@ void Statistics::print() {
     setlocale(LC_ALL, "");
     printf("\n");
     printf(
-        "%14s|| %14s%14s%14s%14s%14s%14s|| %14s%14s%14s%14s%14s|| %14s%14s\n", "Shader Calls",
+        "%16s|| %16s|| %16s%16s%16s%16s%16s%16s|| %16s%16s%16s%16s%16s|| %16s%16s\n", "Ray Shader Calls", "Raster Cubes",
         "Rand Rays", "ABS Rays", "ABS RS Rays", "ES Rays", "ES RS Rays", "Total Rays", "Rand Tri",
         "ABS Tri", "ABS RS Tri", "ES Tri", "ES RS Tri", "PVS Size", "New Tri"
     );
-    std::array<long, 13> sums;
+    std::array<long, 14> sums;
     for (int i = 0; i < sums.size(); i++) {
         sums[i] = 0;
     }
     for (int i = 0; i < entries.size(); i++) {
         printf(
-            "%14lu|| %14lu%14lu%14lu%14lu%14lu%14lu|| %14lu%14lu%14lu%14lu%14lu|| %14lu%14lu\n",
+            "%16lu|| %16lu|| %16lu%16lu%16lu%16lu%16lu%16lu|| %16lu%16lu%16lu%16lu%16lu|| %16lu%16lu\n",
             entries[i].numShaderExecutions,
+            entries[i].rasterHemicubes,
             entries[i].rnsRays,
             entries[i].absRays,
             entries[i].absRsRays,
@@ -71,35 +76,35 @@ void Statistics::print() {
             entries[i].newTriangles
         );
         sums[0] += entries[i].numShaderExecutions;
-        sums[1] += entries[i].rnsRays;
-        sums[2] += entries[i].absRays;
-        sums[3] += entries[i].absRsRays;
-        sums[4] += entries[i].edgeSubdivRays;
-        sums[5] += entries[i].edgeSubdivRsRays;
-        sums[6] += entries[i].totalRays();
-        sums[7] += entries[i].rnsTris;
-        sums[8] += entries[i].absTris;
-        sums[9] += entries[i].absRsTris;
-        sums[10] += entries[i].edgeSubdivTris;
-        sums[11] += entries[i].edgeSubdivRsTris;
-        sums[12] = entries[i].pvsSize;
+        sums[1] += entries[i].rasterHemicubes;
+        sums[2] += entries[i].rnsRays;
+        sums[3] += entries[i].absRays;
+        sums[4] += entries[i].absRsRays;
+        sums[5] += entries[i].edgeSubdivRays;
+        sums[6] += entries[i].edgeSubdivRsRays;
+        sums[7] += entries[i].totalRays();
+        sums[8] += entries[i].rnsTris;
+        sums[9] += entries[i].absTris;
+        sums[10] += entries[i].absRsTris;
+        sums[11] += entries[i].edgeSubdivTris;
+        sums[12] += entries[i].edgeSubdivRsTris;
+        sums[13] = entries[i].pvsSize;
     }
-    printf("%s", "===\n");
-    float totalRaySum = sums[6];
-    float pvsSize = sums[12];
+    printf("%s", "============================================================================================================================================================================================================================================================\n");
+    float totalRaySum = sums[7];
 
     for (int i = 0; i < sums.size(); i++) {
-        if (i == 1 || i == 7 || i == 12) {
-            printf("|| %14lu%", sums[i]);
+        if (i == 1 || i == 2 || i == 8 || i == 13) {
+            printf("|| %16lu%", sums[i]);
         } else {
-            printf("%14lu%", sums[i]);
+            printf("%16lu%", sums[i]);
         }
     }
     printf("\n");
     printf(
-        "%14s|| %13.2f%%%13.2f%%%13.2f%%%13.2f%%%13.2f%%%14s||\n",
-        "", (sums[1] / totalRaySum) * 100, (sums[2] / totalRaySum) * 100,
-        (sums[3] / totalRaySum) * 100, (sums[4] / totalRaySum) * 100, (sums[5] / totalRaySum) * 100,
+        "%16s|| %16s|| %15.2f%%%15.2f%%%15.2f%%%15.2f%%%15.2f%%%16s||\n", "",
+        "", (sums[2] / totalRaySum) * 100, (sums[3] / totalRaySum) * 100,
+        (sums[4] / totalRaySum) * 100, (sums[5] / totalRaySum) * 100, (sums[6] / totalRaySum) * 100,
         "100%"
     );
     printf("\n\n");
@@ -143,35 +148,45 @@ void Statistics::reset() {
     }
 }
 
-void Statistics::printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes) {
+void Statistics::printElapsedTimes(const std::array<uint64_t, 11> &elapsedTimes) {
+    auto rasterSum = (elapsedTimes[RASTER_VISIBILITY_RENDER] + elapsedTimes[RASTER_VISIBILITY_COMPUTE]) / div;
     auto randSum = (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT]) / div;
     auto absSum = (elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT]) / div;
     auto esSum = (elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
 
-    printf("%14s%14s%14s\n", "Rand", "Rand Insert", "Total (ms)");
+    printf("%24s%24s%24s\n", "Raster", "Raster", "Total (ms)");
+    printf("%24s%24s%24s\n", "(Hemicube Rendering)", "(Compute)", "");
     printf(
-        "%14.1f%14.1f%14.1f\n", elapsedTimes[RANDOM_SAMPLING]/ div,
+        "%24.1f%24.1f%24.1f\n\n", elapsedTimes[RASTER_VISIBILITY_RENDER]/ div,
+        elapsedTimes[RASTER_VISIBILITY_COMPUTE]/ div, rasterSum
+    );
+    printf("%24s%24s%24s\n", "Random", "Random", "Total (ms)");
+    printf("%24s%24s%24s\n", "(Shader)", "(Sample Queue Insert)", "");
+    printf(
+        "%24.1f%24.1f%24.1f\n\n", elapsedTimes[RANDOM_SAMPLING]/ div,
         elapsedTimes[RANDOM_SAMPLING_INSERT]/ div, randSum
     );
-    printf("%14s%14s%14s\n", "ABS", "ABS Insert", "Total (ms)");
+    printf("%24s%24s%24s\n", "ABS", "ABS", "Total (ms)");
+    printf("%24s%24s%24s\n", "(Shader)", "(Sample Queue Insert)", "");
     printf(
-        "%14.1f%14.1f%14.1f\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING] / div,
+        "%24.1f%24.1f%24.1f\n\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING] / div,
         elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] / div, absSum
     );
-    printf("%14s%14s%14s\n", "ES", "ES Insert", "Total (ms)");
+    printf("%24s%24s%24s\n", "Recursive Edge Subdiv.", "Recursive Edge Subdiv.", "Total (ms)");
+    printf("%24s%24s%24s\n", "(Shader)", "(Sample Queue Insert)", "");
     printf(
-        "%14.1f%14.1f%14.1f\n", elapsedTimes[EDGE_SUBDIVISION] / div,
+        "%24.1f%24.1f%24.1f\n", elapsedTimes[EDGE_SUBDIVISION] / div,
         elapsedTimes[EDGE_SUBDIVISION_INSERT] / div, esSum
     );
-    printf("%14s", "===\n");
+    printf("                   =====                   =====                   =====\n");
     printf(
-        "%14.1f%14.1f%14.1f\n",
+        "%24.1f%24.1f%24.1f\n",
         (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION]) / div,
         (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div,
-        randSum + absSum + esSum
+        rasterSum + randSum + absSum + esSum
     );
 
-    printf("\n\n");
+    printf("\n");
 
     printf("Halton sequence generation time: %.2fms\n", elapsedTimes[HALTON_GENERATION] / div);
     printf("GPU hash set resize: %.2fms\n", elapsedTimes[GPU_HASH_SET_RESIZE] / div);
@@ -179,8 +194,8 @@ void Statistics::printElapsedTimes(const std::array<uint64_t, 9> &elapsedTimes) 
 }
 
 void Statistics::printAverageStatistics(const std::vector<Statistics> &statistics) {
-    printf("================== AVERAGE ==================\n");
-    std::array<uint64_t, 9> avgElapsedTimes;
+    printf("==================================== AVERAGE> ====================================\n");
+    std::array<uint64_t, 11> avgElapsedTimes;
     for (int i = 0; i < avgElapsedTimes.size(); i++) {
         avgElapsedTimes[i] = 0;
     }
@@ -203,5 +218,5 @@ void Statistics::printAverageStatistics(const std::vector<Statistics> &statistic
     }
     pvsSize /= statistics.size();
     printf("PVS size: %i\n", pvsSize);
-    printf("\n\n");
+    printf("==================================== <AVERAGE ====================================\n\n");
 }

@@ -857,7 +857,7 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
             static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleViewCellRendering();
         }
         if (key == GLFW_KEY_R) {
-            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->toggleRayVisualization();
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->showMaxErrorDirection();
         }
 
         if (key == GLFW_KEY_ESCAPE) {
