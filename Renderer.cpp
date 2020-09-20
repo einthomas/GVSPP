@@ -173,6 +173,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     visibilityManager = new VisibilityManager(
         se.at("USE_TERMINATION_CRITERION") == "true",
         se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
+        se.at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
         std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
         std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),
@@ -204,7 +205,10 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
         std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),
         USE_NIRENSTEIN_MULTI_VIEW_RENDERING,
-        USE_NIRENSTEIN_ADAPTIVE_DIVIDE
+        USE_NIRENSTEIN_ADAPTIVE_DIVIDE,
+        visibilityManager->randomSamplingOutputBuffer[0],
+        visibilityManager->pvsBuffer[0],
+        visibilityManager->triangleCounterBuffer[0]
     );
 
     VkFenceCreateInfo fenceInfo;
@@ -1462,6 +1466,9 @@ Settings VulkanRenderer::loadSettingsFile() {
     if (se.at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
         shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
     }
+    if (se.at("USE_HYBRID_VISIBILITY_SAMPLING") == "true") {
+        shaderDefinesFile << "#define USE_HYBRID_VISIBILITY_SAMPLING\n";
+    }
     shaderDefinesFile.close();
 
     USE_NIRENSTEIN_VISIBILITY_SAMPLING = se.at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
@@ -1489,7 +1496,7 @@ void VulkanRenderer::startVisibilityThread() {
                     visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300, {0.0f,0.0f})
                 );
             } else {
-                visibilityManager->rayTrace(indices, 0, k);
+                visibilityManager->rayTrace(indices, 0, k, nirensteinSampler, viewCellSizes);
                 // Fetch the PVS from the GPU
                 visibilityManager->fetchPVS();
             }

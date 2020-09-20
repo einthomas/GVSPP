@@ -15,6 +15,7 @@ public:
     std::vector<glm::vec3> renderCubePositions;
     int numSubdivisions = 0;
     std::unordered_map<uint64_t, std::vector<int>> pvsCache;
+    int numSamples = 0;
 
     NirensteinSampler(
         GLFWVulkanWindow *window,
@@ -30,7 +31,10 @@ public:
         const float ERROR_THRESHOLD,
         const int MAX_SUBDIVISIONS,
         const bool USE_MULTI_VIEW_RENDERING,
-        const bool USE_ADAPTIVE_DIVIDE
+        const bool USE_ADAPTIVE_DIVIDE,
+        VkBuffer sampleOutputBuffer,
+        VkBuffer setBuffer,
+        VkBuffer triangleCounterBuffer
     );
     std::vector<int> run(const ViewCell &viewCell, glm::vec3 viewCellSize, glm::vec3 cameraForward, const std::vector<glm::vec2> &haltonPoints);
     void printAverageStatistics();
@@ -103,6 +107,15 @@ private:
 
     VkBuffer primitiveCounterBuffer;
     VkDeviceMemory primitiveCounterBufferMemory;
+
+    VkBuffer sampleOutputBuffer;
+    VkBuffer setBuffer;
+    VkBuffer triangleCounterBuffer;
+
+    VkBuffer cubePosUniformBuffer;
+    VkDeviceMemory cubePosUniformBufferMemory;
+    VkBuffer numSamplesBuffer;
+    VkDeviceMemory numSamplesBufferMemory;
 
     void createRenderPass(VkFormat depthFormat);
     void createDescriptorPool();

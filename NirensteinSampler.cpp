@@ -39,7 +39,10 @@ NirensteinSampler::NirensteinSampler(
     const float ERROR_THRESHOLD,
     const int MAX_SUBDIVISIONS,
     const bool USE_MULTI_VIEW_RENDERING,
-    const bool USE_ADAPTIVE_DIVIDE
+    const bool USE_ADAPTIVE_DIVIDE,
+    VkBuffer sampleOutputBuffer,
+    VkBuffer setBuffer,
+    VkBuffer triangleCounterBuffer
 ) :
     computeQueue(computeQueue),
     computeCommandPool(computeCommandPool),
@@ -53,7 +56,10 @@ NirensteinSampler::NirensteinSampler(
     ERROR_THRESHOLD(ERROR_THRESHOLD),
     MAX_SUBDIVISIONS(MAX_SUBDIVISIONS),
     USE_MULTI_VIEW_RENDERING(USE_MULTI_VIEW_RENDERING),
-    USE_ADAPTIVE_DIVIDE(USE_ADAPTIVE_DIVIDE)
+    USE_ADAPTIVE_DIVIDE(USE_ADAPTIVE_DIVIDE),
+    sampleOutputBuffer(sampleOutputBuffer),
+    setBuffer(setBuffer),
+    triangleCounterBuffer(triangleCounterBuffer)
 {
     const VkFormat depthFormat = window->findDepthFormat();
     createRenderPass(depthFormat);
@@ -321,6 +327,35 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 view
     numSubdivisions = 0;
     resetPVS();
 
+    {
+        VkDeviceSize bufferSize = sizeof(int);
+
+        // Create staging buffer using host-visible memory
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        VulkanUtil::createBuffer(
+            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            stagingBuffer, stagingBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+
+        // Copy triangles data to the staging buffer
+        unsigned int numTriangles[1] = { 0 };
+        void *data;
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+        memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
+        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
+            numSamplesBuffer, bufferSize
+        );
+
+        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
+
     auto startTotal = std::chrono::steady_clock::now();
 
     std::array<glm::vec3, 4> cornerPositions;
@@ -336,6 +371,32 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 view
         divideAdaptive(viewCell, viewCellSize, cameraForward, cornerPositions);
     } else {
         divideHaltonRandom(viewCell, cameraForward, haltonPoints);
+    }
+
+    {
+        VkDeviceSize bufferSize = sizeof(int);
+
+        VkBuffer hostBuffer;
+        VkDeviceMemory hostBufferMemory;
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, numSamplesBuffer,
+            hostBuffer, bufferSize
+        );
+
+        void *data;
+        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
+        int *n = (int*) data;
+        numSamples = n[0];
+
+        vkUnmapMemory(logicalDevice, hostBufferMemory);
+        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
+        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
     }
 
     // Copy current pvs to host
@@ -716,8 +777,40 @@ void NirensteinSampler::divideHaltonRandom(
             position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
         }
         renderCubePositions.push_back({ position.x, position.y, position.z });
+
+        // Update cube position uniform
+        {
+            VkDeviceSize bufferSize = sizeof(glm::vec3);
+
+            // Create staging buffer using host-visible memory
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            VulkanUtil::createBuffer(
+                physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                stagingBuffer, stagingBufferMemory,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+
+            // Copy triangles data to the staging buffer
+            glm::vec3 cubePos[1] = { position };
+            void *data;
+            vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+            memcpy(data, &cubePos, (size_t) bufferSize);  // Copy vertex data to mapped memory
+            vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+            // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
+            VulkanUtil::copyBuffer(
+                logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
+                cubePosUniformBuffer, bufferSize
+            );
+
+            vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+            vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+        }
+
         renderVisibilityCube(cameraForwards, cameraUps, position);
 
+        /*
         {
             VkDeviceSize bufferSize = sizeof(int) * MAX_NUM_TRIANGLES;
 
@@ -741,19 +834,11 @@ void NirensteinSampler::divideHaltonRandom(
             int* pvsArray = (int*)data;
             oldPvs.insert(pvsArray, pvsArray + MAX_NUM_TRIANGLES);
 
-            /*
-            oldPvs.clear();
-            oldPvs.reserve(MAX_NUM_TRIANGLES);
-            for (int i = 0; i < MAX_NUM_TRIANGLES; i++) {
-                if (pvsArray[i] > -1) {
-                    oldPvs.push_back(pvsArray[i]);
-                }
-            }
-            */
             std::cout << oldPvs.size() << std::endl;
 
             vkUnmapMemory(logicalDevice, hostBufferMemory);
         }
+        */
     }
 }
 
@@ -953,7 +1038,7 @@ void NirensteinSampler::createDescriptorSetLayout() {
 }
 
 void NirensteinSampler::createComputeDescriptorSet() {
-    std::array<VkWriteDescriptorSet, 6> descriptorWrites = {};
+    std::array<VkWriteDescriptorSet, 11> descriptorWrites = {};
 
     VkDescriptorBufferInfo pvsBufferInfo = {};
     pvsBufferInfo.buffer = pvsBuffer;
@@ -1023,6 +1108,61 @@ void NirensteinSampler::createComputeDescriptorSet() {
     descriptorWrites[5].descriptorCount = 1;
     descriptorWrites[5].pImageInfo = &framebufferInfo;
 
+    VkDescriptorBufferInfo sampleOutputBufferInfo = {};
+    sampleOutputBufferInfo.buffer = sampleOutputBuffer;
+    sampleOutputBufferInfo.offset = 0;
+    sampleOutputBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[6].dstSet = computeDescriptorSet;
+    descriptorWrites[6].dstBinding = 6;
+    descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[6].descriptorCount = 1;
+    descriptorWrites[6].pBufferInfo = &sampleOutputBufferInfo;
+
+    VkDescriptorBufferInfo cubePosUniformBufferInfo = {};
+    cubePosUniformBufferInfo.buffer = cubePosUniformBuffer;
+    cubePosUniformBufferInfo.offset = 0;
+    cubePosUniformBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[7].dstSet = computeDescriptorSet;
+    descriptorWrites[7].dstBinding = 7;
+    descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[7].descriptorCount = 1;
+    descriptorWrites[7].pBufferInfo = &cubePosUniformBufferInfo;
+
+    VkDescriptorBufferInfo sampleCounterBufferInfo = {};
+    sampleCounterBufferInfo.buffer = numSamplesBuffer;
+    sampleCounterBufferInfo.offset = 0;
+    sampleCounterBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[8].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[8].dstSet = computeDescriptorSet;
+    descriptorWrites[8].dstBinding = 8;
+    descriptorWrites[8].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[8].descriptorCount = 1;
+    descriptorWrites[8].pBufferInfo = &sampleCounterBufferInfo;
+
+    VkDescriptorBufferInfo setBufferInfo = {};
+    setBufferInfo.buffer = setBuffer;
+    setBufferInfo.offset = 0;
+    setBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[9].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[9].dstSet = computeDescriptorSet;
+    descriptorWrites[9].dstBinding = 9;
+    descriptorWrites[9].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[9].descriptorCount = 1;
+    descriptorWrites[9].pBufferInfo = &setBufferInfo;
+
+    VkDescriptorBufferInfo triangleCounterBufferInfo = {};
+    triangleCounterBufferInfo.buffer = triangleCounterBuffer;
+    triangleCounterBufferInfo.offset = 0;
+    triangleCounterBufferInfo.range = VK_WHOLE_SIZE;
+    descriptorWrites[10].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[10].dstSet = computeDescriptorSet;
+    descriptorWrites[10].dstBinding = 10;
+    descriptorWrites[10].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[10].descriptorCount = 1;
+    descriptorWrites[10].pBufferInfo = &triangleCounterBufferInfo;
+
     vkUpdateDescriptorSets(
         logicalDevice,
         static_cast<uint32_t>(descriptorWrites.size()),
@@ -1069,13 +1209,48 @@ void NirensteinSampler::createComputeDescriptorSetLayout() {
     framebufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     framebufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 6> bindings = {
+    VkDescriptorSetLayoutBinding sampleOutputBinding = {};
+    sampleOutputBinding.binding = 6;
+    sampleOutputBinding.descriptorCount = 1;
+    sampleOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sampleOutputBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding cubePosBinding = {};
+    cubePosBinding.binding = 7;
+    cubePosBinding.descriptorCount = 1;
+    cubePosBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    cubePosBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding numSamplesBufferBinding = {};
+    numSamplesBufferBinding.binding = 8;
+    numSamplesBufferBinding.descriptorCount = 1;
+    numSamplesBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    numSamplesBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding setBufferBinding = {};
+    setBufferBinding.binding = 9;
+    setBufferBinding.descriptorCount = 1;
+    setBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    setBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding triangleCounterBufferBinding = {};
+    triangleCounterBufferBinding.binding = 10;
+    triangleCounterBufferBinding.descriptorCount = 1;
+    triangleCounterBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    triangleCounterBufferBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 11> bindings = {
         pvsBufferBinding,
         currentPvsBufferBinding,
         triangleIDFramebufferBinding,
         pvsSizeUniformBufferBinding,
         currentPvsIndexUniformBuffer,
-        framebufferBinding
+        framebufferBinding,
+        sampleOutputBinding,
+        cubePosBinding,
+        numSamplesBufferBinding,
+        setBufferBinding,
+        triangleCounterBufferBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1178,6 +1353,28 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
         pvsBuffer, pvsBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
+
+
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice,
+        sizeof(glm::vec3),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        cubePosUniformBuffer,
+        cubePosUniformBufferMemory,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+    VulkanUtil::createBuffer(
+        physicalDevice,
+        logicalDevice,
+        sizeof(int),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        numSamplesBuffer,
+        numSamplesBufferMemory,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+
     /*
     VulkanUtil::createBuffer(
         physicalDevice,
@@ -1198,6 +1395,37 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
     );
 
     resetPVS();
+
+
+
+    {
+        VkDeviceSize bufferSize = sizeof(int);
+
+        // Create staging buffer using host-visible memory
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        VulkanUtil::createBuffer(
+            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            stagingBuffer, stagingBufferMemory,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+
+        // Copy triangles data to the staging buffer
+        unsigned int numTriangles[1] = { 0 };
+        void *data;
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+        memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
+        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
+        VulkanUtil::copyBuffer(
+            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
+            numSamplesBuffer, bufferSize
+        );
+
+        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
 }
 
 void NirensteinSampler::createFramebuffer(VkFormat depthFormat) {

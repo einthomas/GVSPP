@@ -49,6 +49,8 @@ struct ShaderExecutionInfo {
     unsigned int numRsRays;
 };
 
+class NirensteinSampler;
+
 class VisibilityManager {
 public:
     std::vector<ViewCell> viewCells;
@@ -62,10 +64,14 @@ public:
     std::vector<VkCommandPool> commandPool;
     VkCommandPool transferCommandPool;
     std::vector<Statistics> statistics;
+    std::vector<VkBuffer> randomSamplingOutputBuffer;
+    std::vector<VkBuffer> pvsBuffer;
+    std::vector<VkBuffer> triangleCounterBuffer;
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
         bool USE_RECURSIVE_EDGE_SUBDIVISION,
+        bool USE_HYBRID_VISIBILITY_SAMPLING,
         int RAY_COUNT_TERMINATION_THRESHOLD,
         int NEW_TRIANGLE_TERMINATION_THRESHOLD,
         int RANDOM_RAYS_PER_ITERATION,
@@ -130,7 +136,7 @@ public:
 
         return haltonPoints;
     }
-    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
+    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex, NirensteinSampler *nirensteinSampler, const std::vector<glm::vec3> &viewCellSizes);
     void releaseResources();
     void fetchPVS();
     void printAverageStatistics();
@@ -141,6 +147,7 @@ private:
 
     const bool USE_TERMINATION_CRITERION;
     const bool USE_RECURSIVE_EDGE_SUBDIVISION;
+    const bool USE_HYBRID_VISIBILITY_SAMPLING;
     const int RAY_COUNT_TERMINATION_THRESHOLD;
     const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const int NUM_ABS_SAMPLES;
@@ -151,7 +158,7 @@ private:
 
     const int RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
+    const int MAX_ABS_TRIANGLES_PER_ITERATION = 500000;
     const int ABS_MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -217,7 +224,7 @@ private:
     std::vector<VkDeviceMemory> haltonPointsBufferMemory;
     std::vector<VkBuffer> viewCellBuffer;
     std::vector<VkDeviceMemory> viewCellBufferMemory;
-    std::vector<VkBuffer> randomSamplingOutputBuffer;
+
     std::vector<VkDeviceMemory> randomSamplingOutputBufferMemory;
     std::vector<VkBuffer> absWorkingBuffer;
     std::vector<VkDeviceMemory> absWorkingBufferMemory;
@@ -229,7 +236,6 @@ private:
     std::vector<VkBuffer> edgeSubdivOutputHostBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputHostBufferMemory;
     std::vector<void*> edgeSubdivOutputPointer;
-    std::vector<VkBuffer> triangleCounterBuffer;
     std::vector<VkDeviceMemory> triangleCounterBufferMemory;
     std::vector<VkBuffer> randomSamplingOutputHostBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputHostBufferMemory;
@@ -238,7 +244,6 @@ private:
     std::vector<VkBuffer> pvsBulkInsertBuffer;
     std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
 
-    std::vector<VkBuffer> pvsBuffer;
     std::vector<VkDeviceMemory> pvsBufferMemory;
     std::vector<VkBuffer> pvsHostBuffer;
     std::vector<VkDeviceMemory> pvsHostBufferMemory;

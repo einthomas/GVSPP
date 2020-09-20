@@ -14,6 +14,7 @@
 #include "sample.h"
 #include "Vertex.h"
 #include "gpuHashTable/linearprobing.h"
+#include "NirensteinSampler.h"
 
 struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
@@ -24,6 +25,7 @@ struct UniformBufferObjectMultiView {
 VisibilityManager::VisibilityManager(
     bool USE_TERMINATION_CRITERION,
     bool USE_RECURSIVE_EDGE_SUBDIVISION,
+    bool USE_HYBRID_VISIBILITY_SAMPLING,
     int RAY_COUNT_TERMINATION_THRESHOLD,
     int NEW_TRIANGLE_TERMINATION_THRESHOLD,
     int RANDOM_RAYS_PER_ITERATION,
@@ -46,6 +48,7 @@ VisibilityManager::VisibilityManager(
 ):
     USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
     USE_RECURSIVE_EDGE_SUBDIVISION(USE_RECURSIVE_EDGE_SUBDIVISION),
+    USE_HYBRID_VISIBILITY_SAMPLING(USE_HYBRID_VISIBILITY_SAMPLING),
     RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
@@ -2279,7 +2282,8 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
     return shaderGroupHandleSize;
 }
 
-void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex) {
+void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex,
+                                 NirensteinSampler *nirensteinSampler, const std::vector<glm::vec3> &viewCellSizes) {
     updateViewCellBuffer(viewCellIndex);
     resetPVSGPUBuffer();
     resetAtomicBuffers();
@@ -2302,48 +2306,73 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().endOperation(GPU_HASH_SET_RESIZE);
         }
 
-        // Execute random sampling
-        statistics.back().startOperation(RANDOM_SAMPLING);
-        ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
-        statistics.back().endOperation(RANDOM_SAMPLING);
-
-        statistics.back().entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
-        statistics.back().entries.back().rnsTris += randomSampleInfo.numTriangles;
-        statistics.back().entries.back().rnsRays += randomSampleInfo.numRays;
-
-        statistics.back().startOperation(RANDOM_SAMPLING_INSERT);
-        {
-            /*
-            std::vector<Sample> newSamples;
-            pvsSize = CUDAUtil::work(
-                pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                randomSampleInfo.numTriangles
+        if (i == 0 && USE_HYBRID_VISIBILITY_SAMPLING) {
+            glm::vec3 cameraForward = glm::cross(
+                glm::normalize(glm::vec3(viewCells[viewCellIndex].model[0])),
+                glm::normalize(glm::vec3(viewCells[viewCellIndex].model[1]))
             );
-            */
-            /*
-            pvsSize = CUDAUtil::work2(
-                gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                randomSampleInfo.numTriangles
+            nirensteinSampler->run(
+                viewCells[viewCellIndex], viewCellSizes[viewCellIndex], cameraForward,
+                generateHaltonPoints2d<2>({5, 7}, 2, {0.0f, 0.0f})
             );
-            if (newSamples.size() > 0) {
-                absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+
+            if (nirensteinSampler->numSamples > 0) {
+                // Copy intersected triangles from VRAM to CPU accessible buffer
+                VkDeviceSize bufferSize = sizeof(Sample) * nirensteinSampler->numSamples;
+
+                // Copy the intersected triangles GPU buffer to the host buffer
+                VulkanUtil::copyBuffer(
+                    logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                    randomSamplingOutputHostBuffer[threadId], bufferSize
+                );
+
+                Sample *s = (Sample*)randomSamplingOutputPointer[0];
+                absSampleQueue.insert(absSampleQueue.end(), s, s + nirensteinSampler->numSamples);
             }
-            */
-        }
-        if (randomSampleInfo.numTriangles > 0) {
-            // Copy intersected triangles from VRAM to CPU accessible buffer
-            VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
+        } else {
+            // Execute random sampling
+            statistics.back().startOperation(RANDOM_SAMPLING);
+            ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
+            statistics.back().endOperation(RANDOM_SAMPLING);
 
-            // Copy the intersected triangles GPU buffer to the host buffer
-            VulkanUtil::copyBuffer(
-                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                randomSamplingOutputHostBuffer[threadId], bufferSize
-            );
+            statistics.back().entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
+            statistics.back().entries.back().rnsTris += randomSampleInfo.numTriangles;
+            statistics.back().entries.back().rnsRays += randomSampleInfo.numRays;
 
-            Sample *s = (Sample*)randomSamplingOutputPointer[0];
-            absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
+            statistics.back().startOperation(RANDOM_SAMPLING_INSERT);
+            {
+                /*
+                std::vector<Sample> newSamples;
+                pvsSize = CUDAUtil::work(
+                    pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                    randomSampleInfo.numTriangles
+                );
+                */
+                /*
+                pvsSize = CUDAUtil::work2(
+                    gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
+                    randomSampleInfo.numTriangles
+                );
+                if (newSamples.size() > 0) {
+                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
+                }
+                */
+            }
+            if (randomSampleInfo.numTriangles > 0) {
+                // Copy intersected triangles from VRAM to CPU accessible buffer
+                VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
+
+                // Copy the intersected triangles GPU buffer to the host buffer
+                VulkanUtil::copyBuffer(
+                    logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                    randomSamplingOutputHostBuffer[threadId], bufferSize
+                );
+
+                Sample *s = (Sample*)randomSamplingOutputPointer[0];
+                absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
+            }
+            statistics.back().endOperation(RANDOM_SAMPLING_INSERT);
         }
-        statistics.back().endOperation(RANDOM_SAMPLING_INSERT);
 
         statistics.back().entries.back().pvsSize = pvsSize;
         statistics.back().update();
