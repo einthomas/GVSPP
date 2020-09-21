@@ -2078,7 +2078,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
     if (visualizeABSRays) {
         // Copy intersected triangles from VRAM to CPU accessible buffer
-        VkDeviceSize bufferSize = sizeof(Sample) * (triangles.size() * NUM_ABS_SAMPLES + numRsRays);
+        VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
 
         // Copy the intersected triangles GPU buffer to the host buffer
         VulkanUtil::copyBuffer(
@@ -2088,8 +2088,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         // Visualize ABS rays
-        for (int i = 0; i < triangles.size() * NUM_ABS_SAMPLES; i++) {
-            //break;
+        for (int i = 0; i < numTriangles + numRsTriangles; i++) {
             if (s[i].triangleID != -1) {
                 rayVertices[viewCellIndex].push_back({
                     s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)
@@ -2100,6 +2099,8 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
             }
         }
+
+        /*
         // Visualize ABS RS rays
         for (int i = triangles.size() * NUM_ABS_SAMPLES; i < triangles.size() * NUM_ABS_SAMPLES + numRsRays; i++) {
             if (s[i].triangleID != -1) {
@@ -2111,6 +2112,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
                 });
             }
         }
+        */
     }
 
     /*

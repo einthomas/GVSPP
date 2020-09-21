@@ -1256,8 +1256,8 @@ void VulkanRenderer::startNextFrame(
 
     // Draw ray visualizations
     if (
-        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays
+        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
@@ -1312,8 +1312,8 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellCornerView = 0;
     updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
     if (
-        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays
+        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
         updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
     }
@@ -1627,8 +1627,8 @@ void VulkanRenderer::startVisibilityThread() {
 
     // Create and fill ray visualization buffers
     if (
-        visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays
+        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
         createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
         updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
