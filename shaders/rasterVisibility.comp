@@ -3,10 +3,9 @@
 #include "rt/defines.glsl"
 
 struct Sample {
-    int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
-    vec3 pos;
+    int triangleID;
 };
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
@@ -35,10 +34,26 @@ layout(binding = 5, set = 0) buffer triangleCounterBuffer {
 #include "rt/gpuHashSet.glsl"
 
 void main() {
+    // Texture fetches are batched, as suggested in https://developer.nvidia.com/blog/the-peak-performance-analysis-method-for-optimizing-any-gpu-workload/#appendix2
+    const int triangleID0 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 0), 0).x);
+    const int triangleID1 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 1), 0).x);
+    const int triangleID2 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 2), 0).x);
+    const int triangleID3 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 3), 0).x);
+    const int triangleID4 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 4), 0).x);
+
+    if (insert(triangleID0)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID0);
+    if (insert(triangleID1)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID1);
+    if (insert(triangleID2)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID2);
+    if (insert(triangleID3)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID3);
+    if (insert(triangleID4)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID4);
+
+    /*
     for (int i = 0; i < 5; i++) {
         const int triangleID = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, i), 0).x);
         if (insert(triangleID)) {
-            sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID, cubePos, vec3(0.0f), vec3(0.0f));
+            //sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID, cubePos, vec3(0.0f), vec3(0.0f));
+            sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID);
         }
     }
+    */
 }
