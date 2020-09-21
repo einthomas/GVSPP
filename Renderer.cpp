@@ -164,9 +164,9 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     updateUniformBuffer(1);
 
     int reverseSamplingMethod = std::stoi(se.at("REVERSE_SAMPLING_METHOD"));
-    int numReverseSamplingSamples = 2;
+    int numReverseSamplingSamples = 15;
     if (reverseSamplingMethod == 1) {
-        numReverseSamplingSamples = 15;
+        numReverseSamplingSamples = 2;
     } else if (reverseSamplingMethod == 2) {
         numReverseSamplingSamples = std::stoi(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     }
