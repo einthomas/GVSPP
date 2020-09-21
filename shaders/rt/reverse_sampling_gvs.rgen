@@ -63,32 +63,38 @@ bool reverseSampling(uint launchIndex, vec3 v[3], Sample s, vec3 rayOrigin, vec3
             };
             vec3 a, b, c;
             if (vertexSide[0] == vertexSide[1]) {
-                a = v0;
-                b = v1;
-                c = v2;
+                a = v0WorldPos;
+                b = v1WorldPos;
+                c = v2WorldPos;
             } else if (vertexSide[0] == vertexSide[2]) {
-                a = v0;
-                b = v2;
-                c = v1;
+                a = v0WorldPos;
+                b = v2WorldPos;
+                c = v1WorldPos;
             } else if (vertexSide[1] == vertexSide[2]) {
-                a = v1;
-                b = v2;
-                c = v0;
+                a = v1WorldPos;
+                b = v2WorldPos;
+                c = v0WorldPos;
             }
 
             // Construct a line between the two vertices on the same side of the plane each and the vertex on
             // the opposite side and intersect them with the plane
             vec3 p0;
             vec3 p1;
+            float t0;
+            float t1;
             if (
-                intersectRayPlane(planePoint, planeNormal, a, normalize(c - a), p0) &&
-                intersectRayPlane(planePoint, planeNormal, b, normalize(c - b), p1)
+                intersectRayPlane2(planePoint, planeNormal, a, normalize(c - a), p0, t0) &&
+                intersectRayPlane2(planePoint, planeNormal, b, normalize(c - b), p1, t1)
             ) {
                 // Construct points along the intersection line right outside of the triangle (on both sides)
                 const int numPointOutsideTriangle = 2;
                 vec3 pointOutsideTriangle[numPointOutsideTriangle];
                 pointOutsideTriangle[0] = p0 + normalize(p0 - p1) * 0.01;
+                //pointOutsideTriangle[0] = p0 + (p0 - p1) * t0;
+                //pointOutsideTriangle[0] += normalize(pointOutsideTriangle[0] - samplePos);
                 pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
+                //pointOutsideTriangle[1] = p1 + (p1 - p0) * t1;
+                //pointOutsideTriangle[1] += normalize(pointOutsideTriangle[1] - samplePos);
 
                 /*
                 // More sample points outside the occluding triangle

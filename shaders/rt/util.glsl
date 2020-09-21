@@ -35,3 +35,15 @@ bool intersectRayPlane(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir, out vec
 
     return false;
 }
+
+bool intersectRayPlane2(vec3 d, vec3 normal, vec3 rayOrigin, vec3 rayDir, out vec3 hitPoint, out float t) {
+    float denom = dot(rayDir, normal);
+    if (abs(denom) > 1e-6) {
+        t = dot(d - rayOrigin, normal) / denom;
+        hitPoint = rayOrigin + t * rayDir;
+
+        return true;
+    }
+
+    return false;
+}

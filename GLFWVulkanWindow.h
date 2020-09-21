@@ -29,8 +29,8 @@
 
 class VulkanRenderer;
 
-const int WIDTH = 1024;
-const int HEIGHT = 1024;
+const int WIDTH = 1000;
+const int HEIGHT = 1000;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
