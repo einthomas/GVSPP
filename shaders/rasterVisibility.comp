@@ -3,9 +3,10 @@
 #include "rt/defines.glsl"
 
 struct Sample {
+    int triangleID;
     vec3 rayOrigin;
     vec3 rayHitPos;
-    int triangleID;
+    vec3 pos;
 };
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
@@ -41,11 +42,11 @@ void main() {
     const int triangleID3 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 3), 0).x);
     const int triangleID4 = int(texelFetch(ids, ivec3(gl_GlobalInvocationID.xy, 4), 0).x);
 
-    if (insert(triangleID0)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID0);
-    if (insert(triangleID1)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID1);
-    if (insert(triangleID2)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID2);
-    if (insert(triangleID3)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID3);
-    if (insert(triangleID4)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(cubePos, vec3(0.0f), triangleID4);
+    if (insert(triangleID0)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID0, cubePos, vec3(0.0f), vec3(0.0f));
+    if (insert(triangleID1)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID1, cubePos, vec3(0.0f), vec3(0.0f));
+    if (insert(triangleID2)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID2, cubePos, vec3(0.0f), vec3(0.0f));
+    if (insert(triangleID3)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID3, cubePos, vec3(0.0f), vec3(0.0f));
+    if (insert(triangleID4)) sampleOutput[atomicAdd(numSamples, 1)] = Sample(triangleID4, cubePos, vec3(0.0f), vec3(0.0f));
 
     /*
     for (int i = 0; i < 5; i++) {
