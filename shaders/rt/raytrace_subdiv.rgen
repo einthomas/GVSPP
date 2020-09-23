@@ -89,17 +89,13 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));
+    //const uint currentTriangleIndex = uint(floor(launchIndex / 15.0));
+    const uint currentTriangleIndex = uint(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE * 3)));
     const int numSamplesPerEdge = int(pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1);
 
     #if REVERSE_SAMPLING_METHOD == 1
         Sample originalSample = absWorking[currentTriangleIndex];
         vec3 v[3];
-        /*
-        v[0] = unpackVertexData(indices.i[3 * originalSample.triangleID]).worldPos;
-        v[1] = unpackVertexData(indices.i[3 * originalSample.triangleID + 1]).worldPos;
-        v[2] = unpackVertexData(indices.i[3 * originalSample.triangleID + 2]).worldPos;
-        */
         v[0] = getVertexWorldPos(indices.i[3 * originalSample.triangleID]);
         v[1] = getVertexWorldPos(indices.i[3 * originalSample.triangleID + 1]);
         v[2] = getVertexWorldPos(indices.i[3 * originalSample.triangleID + 2]);
@@ -108,7 +104,8 @@ void main() {
     // Get two adjacent samples
     uint i = launchIndex;
     Sample s0 = randomSamplingOutput[i];
-    i = (int(mod(launchIndex + 1, 15) + 15 * currentTriangleIndex));
+    //i = (int(mod(launchIndex + 1, 15) + 15 * currentTriangleIndex));
+    i = (int(mod(launchIndex + 1, ABS_NUM_SAMPLES_PER_EDGE * 3) + ABS_NUM_SAMPLES_PER_EDGE * 3 * currentTriangleIndex));
     Sample s1 = randomSamplingOutput[i];
 
     if (insert(s0.triangleID)) {
@@ -203,6 +200,7 @@ void main() {
                     if (int(hitInfo.w) != -1) {
                         Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
 
+/*
                         if (newSample.triangleID != -1) {
                             Sample foundSample;
                             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
@@ -217,6 +215,7 @@ void main() {
                                 newSample = foundSample;
                             }
                         }
+                        */
                         
                         samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                     }
@@ -244,7 +243,7 @@ void main() {
 
                     if (int(hitInfo.w) != -1) {
                         Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-                           
+                           /*
                         if (newSample.triangleID != -1) {
                             Sample foundSample;
                             #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
@@ -259,6 +258,7 @@ void main() {
                                 newSample = foundSample;
                             }
                         }
+                        */
                         
                         samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                     }
@@ -271,7 +271,6 @@ void main() {
             index = int(index / 2.0f);
         }
 
-        // Count then number of triangles that have been found
         const int numSubdivSamples = numSamplesPerEdge - 2;
         uint foundTriangles = 0;
         for (int k = 0; k < numSubdivSamples; k++) {
