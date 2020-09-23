@@ -98,7 +98,7 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE * 3)));   // for each triangle 15 rays are shot i.e. for each triangle the shader is invoked 15 times
+    const uint currentTriangleIndex = uint(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE * 3)));   // for each triangle ABS_NUM_SAMPLES_PER_EDGE * 3 rays are shot i.e. for each triangle the shader is invoked ABS_NUM_SAMPLES_PER_EDGE * 3 times
 
     const uint currentVertexIndex = uint(mod(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE)), 3.0));
     const uint nextVertexIndex = uint(mod(currentVertexIndex + 1, 3));
