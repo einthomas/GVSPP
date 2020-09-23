@@ -72,16 +72,16 @@ public:
         bool USE_TERMINATION_CRITERION,
         bool USE_RECURSIVE_EDGE_SUBDIVISION,
         bool USE_HYBRID_VISIBILITY_SAMPLING,
-        int RASTER_NUM_HEMICUBES,
-        int RAY_COUNT_TERMINATION_THRESHOLD,
-        int NEW_TRIANGLE_TERMINATION_THRESHOLD,
-        int RANDOM_RAYS_PER_ITERATION,
-        int ABS_MAX_SUBDIVISION_STEPS,
-        int NUM_ABS_SAMPLES,
-        int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
-        int MAX_BULK_INSERT_BUFFER_SIZE,
+        long RASTER_NUM_HEMICUBES,
+        long RAY_COUNT_TERMINATION_THRESHOLD,
+        long NEW_TRIANGLE_TERMINATION_THRESHOLD,
+        long RANDOM_RAYS_PER_ITERATION,
+        long ABS_MAX_SUBDIVISION_STEPS,
+        long NUM_ABS_SAMPLES,
+        long REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
+        long MAX_BULK_INSERT_BUFFER_SIZE,
         int GPU_SET_TYPE,
-        int INITIAL_HASH_SET_SIZE,
+        long INITIAL_HASH_SET_SIZE,
         VkPhysicalDevice physicalDevice,
         VkDevice logicalDevice,
         VkBuffer indexBuffer,
@@ -154,19 +154,19 @@ private:
     const bool USE_TERMINATION_CRITERION;
     const bool USE_RECURSIVE_EDGE_SUBDIVISION;
     const bool USE_HYBRID_VISIBILITY_SAMPLING;
-    const int RASTER_NUM_HEMICUBES;
-    const int RAY_COUNT_TERMINATION_THRESHOLD;
-    const int NEW_TRIANGLE_TERMINATION_THRESHOLD;
-    const int NUM_ABS_SAMPLES;
-    const int NUM_REVERSE_SAMPLING_SAMPLES;
-    const int MAX_BULK_INSERT_BUFFER_SIZE;
-    const int MAX_TRIANGLE_COUNT;
+    const long RASTER_NUM_HEMICUBES;
+    const long RAY_COUNT_TERMINATION_THRESHOLD;
+    const long NEW_TRIANGLE_TERMINATION_THRESHOLD;
+    const long NUM_ABS_SAMPLES;
+    const long NUM_REVERSE_SAMPLING_SAMPLES;
+    const long MAX_BULK_INSERT_BUFFER_SIZE;
+    const long MAX_TRIANGLE_COUNT;
     const int GPU_SET_TYPE;
 
-    const int RANDOM_RAYS_PER_ITERATION;
+    const long RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const int MAX_ABS_TRIANGLES_PER_ITERATION = 500000;
-    const int ABS_MAX_SUBDIVISION_STEPS;     // TODO: Shouldn't have to be set separately in raytrace-subdiv.rgen
+    const long MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
+    const long ABS_MAX_SUBDIVISION_STEPS;
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;

@@ -26,16 +26,16 @@ VisibilityManager::VisibilityManager(
     bool USE_TERMINATION_CRITERION,
     bool USE_RECURSIVE_EDGE_SUBDIVISION,
     bool USE_HYBRID_VISIBILITY_SAMPLING,
-    int RASTER_NUM_HEMICUBES,
-    int RAY_COUNT_TERMINATION_THRESHOLD,
-    int NEW_TRIANGLE_TERMINATION_THRESHOLD,
-    int RANDOM_RAYS_PER_ITERATION,
-    int MAX_SUBDIVISION_STEPS,
-    int NUM_ABS_SAMPLES,
-    int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
-    int MAX_BULK_INSERT_BUFFER_SIZE,
+    long RASTER_NUM_HEMICUBES,
+    long RAY_COUNT_TERMINATION_THRESHOLD,
+    long NEW_TRIANGLE_TERMINATION_THRESHOLD,
+    long RANDOM_RAYS_PER_ITERATION,
+    long MAX_SUBDIVISION_STEPS,
+    long NUM_ABS_SAMPLES,
+    long REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
+    long MAX_BULK_INSERT_BUFFER_SIZE,
     int GPU_SET_TYPE,
-    int INITIAL_HASH_SET_SIZE,
+    long INITIAL_HASH_SET_SIZE,
     VkPhysicalDevice physicalDevice,
     VkDevice logicalDevice,
     VkBuffer indexBuffer,
@@ -394,7 +394,7 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
     // Re-insert PVS data
     if (pvsSize > 0) {
         // Create bulk insert buffer
-        VkDeviceSize bufferSize = sizeof(int) * std::min(MAX_BULK_INSERT_BUFFER_SIZE, oldPVSBufferCapacity);
+        VkDeviceSize bufferSize = sizeof(int) * std::min(MAX_BULK_INSERT_BUFFER_SIZE, (long)oldPVSBufferCapacity);
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -576,8 +576,10 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VkDeviceSize haltonSize = sizeof(float) * RANDOM_RAYS_PER_ITERATION * 4;
 
     VkDeviceSize absOutputBufferSize;
+    VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION;
+    //VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * int(pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1);
     if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        absOutputBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT;
+        absOutputBufferSize = sizeof(Sample) * (MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
     } else {
         absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
     }
@@ -617,7 +619,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         // ABS buffers
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION,
+            logicalDevice, absWorkingBufferSize,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             absWorkingBuffer[i], absWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
@@ -2415,7 +2417,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
         // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
-            const int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, (int)absSampleQueue.size());
+            const int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, (long)absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
             if (numAbsRays == absSampleQueue.size()) {
                 absWorkingVector = absSampleQueue;
@@ -2530,7 +2532,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 }
 
                 statistics.back().startOperation(EDGE_SUBDIVISION);
-                ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
+                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
+                ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numRays, threadId, viewCellIndex);
                 statistics.back().endOperation(EDGE_SUBDIVISION);
 
                 statistics.back().entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
@@ -2558,6 +2561,8 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     }
                     */
                 }
+
+                std::cout << edgeSubdivideInfo.numTriangles << " " << edgeSubdivideInfo.numRsTriangles << std::endl;
                 if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
                     // Copy intersected triangles from VRAM to CPU accessible buffer
                     VkDeviceSize bufferSize = sizeof(Sample) * (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);

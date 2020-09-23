@@ -164,26 +164,26 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     updateUniformBuffer(1);
 
     int reverseSamplingMethod = std::stoi(se.at("REVERSE_SAMPLING_METHOD"));
-    int numReverseSamplingSamples = 15;
+    long numReverseSamplingSamples = 15;
     if (reverseSamplingMethod == 1) {
         numReverseSamplingSamples = 2;
     } else if (reverseSamplingMethod == 2) {
-        numReverseSamplingSamples = std::stoi(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
+        numReverseSamplingSamples = std::stol(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     }
     visibilityManager = new VisibilityManager(
         se.at("USE_TERMINATION_CRITERION") == "true",
         se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
         se.at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
-        std::stoi(se.at("RASTER_NUM_HEMICUBES")),
-        std::stoi(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
-        std::stoi(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
-        std::stoi(se.at("RANDOM_RAYS_PER_ITERATION")),
-        std::stoi(se.at("ABS_MAX_SUBDIVISION_STEPS")),
-        std::stoi(se.at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+        std::stol(se.at("RASTER_NUM_HEMICUBES")),
+        std::stol(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
+        std::stol(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+        std::stol(se.at("RANDOM_RAYS_PER_ITERATION")),
+        std::stol(se.at("ABS_MAX_SUBDIVISION_STEPS")),
+        std::stol(se.at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
         numReverseSamplingSamples,
-        std::stoi(se.at("MAX_BULK_INSERT_BUFFER_SIZE")),
+        std::stol(se.at("MAX_BULK_INSERT_BUFFER_SIZE")),
         std::stoi(se.at("SET_TYPE")),
-        std::stoi(se.at("INITIAL_HASH_SET_SIZE")),
+        std::stol(se.at("INITIAL_HASH_SET_SIZE")),
         window->physicalDevice,
         window->device,
         indexBuffer,
@@ -735,6 +735,7 @@ void VulkanRenderer::loadModel(std::string modelPath) {
         throw std::runtime_error((warn + err).c_str());
     }
 
+    //float scale = 0.001f;
     float scale = 1.0f;
 
     uint32_t i = 0;
@@ -1649,7 +1650,8 @@ void VulkanRenderer::startVisibilityThread() {
     maxError = 0.0f;
     for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
         float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
-        std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
+        //std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
+        std::cout << error << std::endl;
         totalError += error / visibilityManager->viewCells.size();
 
         currentViewCellIndex++;
@@ -1660,8 +1662,10 @@ void VulkanRenderer::startVisibilityThread() {
 
         alignCameraWithViewCellNormal();
     }
-    std::cout << "Average total pixel error: " << totalError << std::endl;
-    std::cout << "Max. pixel error: " << maxError << std::endl;
+    //std::cout << "Average total pixel error: " << totalError << std::endl;
+    //std::cout << "Max. pixel error: " << maxError << std::endl;
+    std::cout << maxError << std::endl;
+    std::cout << totalError << std::endl;
 
     // Temporary
     std::cout << std::endl << std::endl;
@@ -1674,6 +1678,10 @@ void VulkanRenderer::startVisibilityThread() {
             printf("%lu;%lu\n", a, e.pvsSize);
         }
         std::cout << std::endl << std::endl;
+    }
+
+    for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+        std::cout << visibilityManager->statistics[i].elapsedTimes[VISIBILITY_SAMPLING] / 1000000.0f << std::endl;
     }
 }
 
