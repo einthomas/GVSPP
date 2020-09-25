@@ -54,6 +54,7 @@ public:
     void showMaxErrorDirection();
     void nextCorner();
     void nextViewCell();
+    void printCamera();
     void alignCameraWithViewCellNormal();
     void startVisibilityThread();
 

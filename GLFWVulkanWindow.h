@@ -97,6 +97,7 @@ public:
 
 private:
     const int MAX_FRAMES_IN_FLIGHT = 2;
+    static float cameraSpeed;
 
     GLFWwindow* window;
     VkInstance instance;

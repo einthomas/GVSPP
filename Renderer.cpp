@@ -1324,6 +1324,17 @@ void VulkanRenderer::nextViewCell() {
         << " triangles (" << (pvsTriangleIDs[currentViewCellIndex].size() / (indices.size() / 3.0f)) * 100.0f << "%)" << std::endl;
 }
 
+void VulkanRenderer::printCamera() {
+    std::cout << "camera pos: " << glm::to_string(cameraPos) << std::endl;
+    std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
+    std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
+    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << glm::degrees(std::acosf(-cameraForward.z)) << std::endl;
+
+    std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
+    std::cout << "1 1 0" << std::endl;
+    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acosf(-cameraForward.z)) << " 0" << std::endl;
+}
+
 void VulkanRenderer::alignCameraWithViewCellNormal() {
     cameraForward = glm::cross(
         glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0])),
@@ -1462,6 +1473,7 @@ Settings VulkanRenderer::loadSettingsFile() {
     shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se.at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
     shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se.at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
     shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se.at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
     shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se.at("REVERSE_SAMPLING_METHOD") << "\n";
     shaderDefinesFile << "#define SET_TYPE " << se.at("SET_TYPE") << "\n";
     if (se.at("USE_3D_VIEW_CELL") == "true") {

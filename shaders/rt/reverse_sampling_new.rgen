@@ -123,6 +123,37 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
                         }
                     }
                 }
+
+                for (int i = 0; i < REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES; i++) {
+                    vec2 haltonPoint = vec2(points[i * 2] - 0.5f, points[i * 2 + 1] - 0.5f);
+                    const vec3 viewCellSamplePoint = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
+
+                    // Check if viewCellSamplePoint is within the occluding triangle projected onto the view cell
+                    // Ericson, Christer. Real-time collision detection. CRC Press, 2004.
+                    const vec3 v2 = viewCellSamplePoint - rayViewCellHitPoints[0];
+                    const float dot20 = dot(v2, v0);
+                    const float dot21 = dot(v2, v1);
+                    const float v = (dot11 * dot20 - dot01 * dot21) / denom;
+                    const float w = (dot00 * dot21 - dot01 * dot20) / denom;
+                    if (any(bvec3(w < 0.0f || w > 1.0f, v < 0.0f || v > 1.0f, w + v > 1.0f))) {
+                        const vec3 rayOrigin = viewCellSamplePoint;
+                        traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
+                        atomicAdd(rsRayCounter, 1);
+
+                        int triangleID = int(hitInfo.w);
+                        if (triangleID != -1) {
+                            bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
+                            if (targetSampleReached) {
+                                foundSample = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
+                            }
+                            int index = storeReverseSample(
+                                launchIndex,
+                                Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
+                                targetSampleReached
+                            );
+                        }
+                    }
+                }
             }
             #ifdef USE_3D_VIEW_CELL
                     if (!invalidRayPlaneIntersection) {

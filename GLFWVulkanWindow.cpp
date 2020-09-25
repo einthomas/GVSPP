@@ -5,6 +5,8 @@
 
 #include <glm/gtx/string_cast.hpp>
 
+float GLFWVulkanWindow::cameraSpeed = 200.0f;
+
 void GLFWVulkanWindow::initWindow() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // Tell GLFW to not create an OpenGL context
@@ -578,7 +580,7 @@ void GLFWVulkanWindow::mainLoop() {
 
         glfwPollEvents();
 
-        float cameraSpeed = 200.0f * deltaTime;
+        float cameraSpeed = this->cameraSpeed * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
             renderer->cameraPos += cameraSpeed * renderer->cameraForward;
         }
@@ -881,13 +883,14 @@ void GLFWVulkanWindow::keyCallback(GLFWwindow *window, int key, int scancode, in
         }
 
         if (key == GLFW_KEY_Q) {
-            auto *vulkanWindow = static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window));
-            std::cout << "glm::vec3 pos = glm::"
-                      << glm::to_string(vulkanWindow->renderer->cameraPos)
-                      << "; glm::vec3 normal = glm::normalize(glm::"
-                      << glm::to_string(vulkanWindow->renderer->cameraForward)
-                      << ");"
-                      << std::endl;
+            static_cast<GLFWVulkanWindow*>(glfwGetWindowUserPointer(window))->renderer->printCamera();
+        }
+
+        if (key == GLFW_KEY_1) {
+            cameraSpeed *= 0.5f;
+        }
+        if (key == GLFW_KEY_2) {
+            cameraSpeed *= 1.5f;
         }
     }
 }
