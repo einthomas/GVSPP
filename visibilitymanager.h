@@ -165,7 +165,7 @@ private:
 
     const long RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const long MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
+    const long MAX_ABS_TRIANGLES_PER_ITERATION = 400000;
     const long ABS_MAX_SUBDIVISION_STEPS;
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -302,9 +302,9 @@ private:
     );
     void createDescriptorPool();
     void createPipeline(
-        std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages,
-        VkPipelineLayout *pipelineLayout, VkPipeline *pipeline,
-        std::vector<VkDescriptorSetLayout> descriptorSetLayouts,
+        const std::array<VkPipelineShaderStageCreateInfo, 3> &shaderStages,
+        VkPipelineLayout &pipelineLayout, VkPipeline &pipeline,
+        const std::vector<VkDescriptorSetLayout> &descriptorSetLayouts,
         std::vector<VkPushConstantRange> pushConstantRanges
     );
     void createShaderBindingTable(

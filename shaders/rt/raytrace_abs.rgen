@@ -122,9 +122,10 @@ void main() {
     const vec3 lastWP = getVertexWorldPos(indices.i[3 * s.triangleID + lastVertexIndex]);
     vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
     vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
+    float absDelta = mod(currentVertexSamplePosIndex, 2.0f) == 0 ? ABS_DELTA : ABS_DELTA * 0.1f;
     vec3 samplePos = mix(
-        nextWP + offsetB * ABS_DELTA,
-        currentWP + offsetA * ABS_DELTA,
+        nextWP + offsetB * absDelta,
+        currentWP + offsetA * absDelta,
         currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
     );
 
@@ -173,7 +174,6 @@ void main() {
 
         int triangleID = int(hitInfo.w);
         vec3 hitPoint = hitInfo.xyz;
-        bool pointBehindViewCell = false;
         #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
             // If the recursive edge subdivision strategy is used, samples are stored in randomSamplingOutput at index
             // launchIndex. Each two samples surrounding the same triangle form an edge, which is recursively
@@ -190,59 +190,52 @@ void main() {
                     atomicAdd(triangleCounter, 1);
                     randomSamplingOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
                 } else {
-                    pointBehindViewCell = true;
                     triangleID = -1;
                     randomSamplingOutput[launchIndex] = Sample(-1, rayOrigin, hitPoint, samplePos);
                 }
             #endif
 
-            if (!pointBehindViewCell) {
-                // Reverse sampling
-                Sample foundSample;
-                #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                    bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-                #elif REVERSE_SAMPLING_METHOD == 1
-                    vec3 v = { currentWP, nextWP, lastWP };
-                    bool discontinuityFound = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-                #endif
+            // Reverse sampling
+            Sample foundSample;
+            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+            #elif REVERSE_SAMPLING_METHOD == 1
+                vec3 v[3] = { currentWP, nextWP, lastWP };
+                bool discontinuityFound = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+            #endif
 
-                // If a discontinuity has been found but no ray was traced through the original sample, the
-                // edge that would be subdivided would span from the current triangle, for which ABS samples
-                // are generated, to the sample that lies on the occluding triangle that caused the discontinuity.
-                // This is not intended, therefore the triangleID of the sample at launchIndex is set to -2
-                if (discontinuityFound && foundSample.triangleID == -2) {
-                    if (insert(randomSamplingOutput[launchIndex].triangleID)) {
-                        uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
-                        randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
-                    }
-                    randomSamplingOutput[launchIndex].triangleID = -2;
+            // If a discontinuity has been found but no ray was traced through the original sample, the
+            // edge that would be subdivided would span from the current triangle, for which ABS samples
+            // are generated, to the sample that lies on the occluding triangle that caused the discontinuity.
+            // This is not intended, therefore the triangleID of the sample at launchIndex is set to -2
+            if (discontinuityFound && foundSample.triangleID == -2 && triangleID != -1) {
+                if (insert(randomSamplingOutput[launchIndex].triangleID)) {
+                    uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
+                    randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
                 }
+                randomSamplingOutput[launchIndex].triangleID = -2;
             }
         #else
-            if (!pointBehindViewCell) {
-                // Reverse sampling
-                
-                Sample foundSample;
-                #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                    reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-                #elif REVERSE_SAMPLING_METHOD == 1
-                    vec3 v[3] = { currentWP, nextWP, lastWP };
-                    reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-                #endif
-                
-
-                if (triangleID != -1 && insert(triangleID)) {
-                    uint index = atomicAdd(triangleCounter, 1);
-                    randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-                }
-                /*
-                if (triangleID != -1 && s.triangleID == 597294) {
-                    insert(triangleID);
-                    uint index = atomicAdd(triangleCounter, 1);
-                    randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-                }
-                */
+            // Reverse sampling
+            Sample foundSample;
+            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+            #elif REVERSE_SAMPLING_METHOD == 1
+                vec3 v[3] = { currentWP, nextWP, lastWP };
+                reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+            #endif
+            
+            if (triangleID != -1 && insert(triangleID)) {
+                uint index = atomicAdd(triangleCounter, 1);
+                randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
             }
+            /*
+            if (triangleID != -1 && s.triangleID == 597294) {
+                insert(triangleID);
+                uint index = atomicAdd(triangleCounter, 1);
+                randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+            }
+            */
         #endif
     #ifndef USE_3D_VIEW_CELL
         } else {

@@ -1,63 +1,119 @@
-bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludingTriangleID, const vec3 samplePos, vec3 hitPoint, out Sample foundSample) {
+bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int occludingTriangleID, const vec3 samplePos, vec3 hitPoint, out Sample foundSample) {
     bool discontinuityFound = false;
-    if (occludingTriangleID != -1) {
-        // Check for discontinuity
-        const float samplePointDistance = length(samplePos - rayOrigin);
-        if (samplePointDistance - length(hitPoint - rayOrigin) > 0.985) {
-            foundSample.triangleID = -2;
-            discontinuityFound = true;
+    // Check for discontinuity
+    const float samplePointDistance = length(samplePos - rayOrigin);
+    if (occludingTriangleID == -1 || samplePointDistance - length(hitPoint - rayOrigin) > 0.985) {
+        foundSample.triangleID = -2;
+        discontinuityFound = true;
 
-            // Get view cell coordinate system
-            vec3 viewCellSize = vec3(
-                length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-                length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-                length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-            ) * 2.0f;
-            vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-            vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-            vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-            if (viewCellSize.x == 0.0f) {
-                viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-            } else if (viewCellSize.y == 0.0f) {
-                viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-            } else if (viewCellSize.z == 0.0f) {
-                //viewCellRight = -viewCellRight;
-                viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+        // Get view cell coordinate system
+        vec3 viewCellSize = vec3(
+            length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+            length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+            length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+        ) * 2.0f;
+        vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+        vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+        vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+        if (viewCellSize.x == 0.0f) {
+            viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+        } else if (viewCellSize.y == 0.0f) {
+            viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+        } else if (viewCellSize.z == 0.0f) {
+            //viewCellRight = -viewCellRight;
+            viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+        }
+        vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+
+        #ifdef USE_3D_VIEW_CELL
+            const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
+            const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
+            const vec3 faceNormals[6] = { viewCellNormal, viewCellRight, -viewCellNormal, -viewCellRight, viewCellUp, -viewCellUp };
+            const vec3 faceSizes[6] = { 
+                viewCellSize.xyz,
+                viewCellSize.zyx,
+                viewCellSize.xyz,
+                viewCellSize.zyx,
+                viewCellSize.xzy,
+                viewCellSize.xzy
+            };
+
+            vec3 startRayDir = rayDir;
+            for (int m = 0; m < 6; m++) {
+                if (dot(startRayDir, faceNormals[m]) < 0) {
+                    continue;
+                }
+
+                viewCellNormal = faceNormals[m];
+                viewCellRight = faceRights[m];
+                viewCellUp = faceUps[m];
+                viewCellSize = faceSizes[m];
+                viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]) + viewCellNormal * viewCellSize.z * 0.5;
+        #endif
+
+        if (occludingTriangleID == -1) {
+            // Get the corners of the view cell
+            vec3 corners[4];
+            corners[0] = viewCellPos - viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;    // bottom left
+            corners[1] = viewCellPos - viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;    // top left
+            corners[2] = viewCellPos + viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;    // top right
+            corners[3] = viewCellPos + viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;    // bottom right
+
+            for (int i = 0; i < 4; i++) {
+                vec3 vec = (corners[int(mod(i + 1, 4))] - corners[i]) / float(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE - 1);
+                for (int k = 0; k < REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE - 1; k++) {
+                    const vec3 viewCellSamplePoint = corners[i] + vec * k;
+
+                    const vec3 rayOrigin = viewCellSamplePoint;
+                    traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
+                    atomicAdd(rsRayCounter, 1);
+
+                    int triangleID = int(hitInfo.w);
+                    if (triangleID != -1) {
+                        //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
+                        bool targetSampleReached = foundSample.triangleID == -2;
+                        targetSampleReached = false;
+                        if (targetSampleReached) {
+                            foundSample = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
+                        }
+                        int index = storeReverseSample(
+                            launchIndex,
+                            Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
+                            targetSampleReached
+                        );
+                    }
+                }
             }
-            vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
+            for (int i = 0; i < REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES; i++) {
+                vec2 haltonPoint = vec2(points[i * 2] - 0.5f, points[i * 2 + 1] - 0.5f);
+                const vec3 viewCellSamplePoint = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
+
+                const vec3 rayOrigin = viewCellSamplePoint;
+                traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, normalize(samplePos - viewCellSamplePoint), 100000.0, 0);
+                atomicAdd(rsRayCounter, 1);
+
+                int triangleID = int(hitInfo.w);
+                if (triangleID != -1) {
+                    //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
+                    bool targetSampleReached = foundSample.triangleID == -2;
+                    targetSampleReached = false;
+                    if (targetSampleReached) {
+                        foundSample = Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos);
+                    }
+                    int index = storeReverseSample(
+                        launchIndex,
+                        Sample(triangleID, rayOrigin, hitInfo.xyz, samplePos),
+                        targetSampleReached
+                    );
+                }
+            }
+        } else {
             vec3 occludingTriangleVerticesWorldPos[3];
             for (int i = 0; i < 3; i++) {
                 //occludingTriangleVertices[i] = unpackVertexData(indices.i[3 * occludingTriangleID + i]);
                 occludingTriangleVerticesWorldPos[i] = getVertexPos(indices.i[3 * occludingTriangleID + i]);
             }
-            
-            #ifdef USE_3D_VIEW_CELL
-                const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
-                const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
-                const vec3 faceNormals[6] = { viewCellNormal, viewCellRight, -viewCellNormal, -viewCellRight, viewCellUp, -viewCellUp };
-                const vec3 faceSizes[6] = { 
-                    viewCellSize.xyz,
-                    viewCellSize.zyx,
-                    viewCellSize.xyz,
-                    viewCellSize.zyx,
-                    viewCellSize.xzy,
-                    viewCellSize.xzy
-                };
-
-                vec3 startRayDir = rayDir;
-                for (int m = 0; m < 6; m++) {
-                    if (dot(startRayDir, faceNormals[m]) < 0) {
-                        continue;
-                    }
-
-                    viewCellNormal = faceNormals[m];
-                    viewCellRight = faceRights[m];
-                    viewCellUp = faceUps[m];
-                    viewCellSize = faceSizes[m];
-                    viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]) + viewCellNormal * viewCellSize.z * 0.5;
-            #endif
-
             bool invalidRayPlaneIntersection = false;
             vec3 rayViewCellHitPoints[3];
             for (int i = 0; i < 3; i++) {
@@ -155,13 +211,13 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, int occludin
                     }
                 }
             }
-            #ifdef USE_3D_VIEW_CELL
-                    if (!invalidRayPlaneIntersection) {
-                        //break;
-                    }
-                }
-            #endif
         }
+        #ifdef USE_3D_VIEW_CELL
+                if (!invalidRayPlaneIntersection) {
+                    //break;
+                }
+            }
+        #endif
     }
 
     return discontinuityFound;

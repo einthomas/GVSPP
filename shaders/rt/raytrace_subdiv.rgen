@@ -197,26 +197,20 @@ void main() {
                     traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
-                    if (int(hitInfo.w) != -1) {
-                        Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-
-/*
-                        if (newSample.triangleID != -1) {
-                            Sample foundSample;
-                            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                                bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
-                            #elif REVERSE_SAMPLING_METHOD == 1
-                                bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
-                            #endif
-                            if (discontinuityFound && foundSample.triangleID >= 0) {
-                                if (insert(newSample.triangleID)) {
-                                    edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
-                                }
-                                newSample = foundSample;
-                            }
+                    Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                    Sample foundSample;
+                    #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                        bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
+                    #elif REVERSE_SAMPLING_METHOD == 1
+                        bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
+                    #endif
+                    if (discontinuityFound && foundSample.triangleID >= 0) {
+                        if (insert(newSample.triangleID)) {
+                            edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
                         }
-                        */
-                        
+                        newSample = foundSample;
+                    }
+                    if (int(hitInfo.w) != -1) {
                         samplesOutput[int(currentIndex + index / 2.0f)] = newSample;
                     }
                     #ifndef USE_3D_VIEW_CELL
@@ -241,25 +235,21 @@ void main() {
                     traceNV(topLevelAS, gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, rayOrigin, 0.001, rayDir, 100000.0, 0);
                     tracedRays++;
 
-                    if (int(hitInfo.w) != -1) {
-                        Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
-                           /*
-                        if (newSample.triangleID != -1) {
-                            Sample foundSample;
-                            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                                bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
-                            #elif REVERSE_SAMPLING_METHOD == 1
-                                bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
-                            #endif
-                            if (discontinuityFound && foundSample.triangleID >= 0) {
-                                if (insert(newSample.triangleID)) {
-                                    edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
-                                }
-                                newSample = foundSample;
-                            }
+                    Sample newSample = Sample(int(hitInfo.w), rayOrigin, hitInfo.xyz, samplePos);
+                    Sample foundSample;
+                    #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+                        bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
+                    #elif REVERSE_SAMPLING_METHOD == 1
+                        bool discontinuityFound = reverseSampling(launchIndex, v, originalSample, rayOrigin, rayDir, newSample.triangleID, samplePos, newSample.rayHitPos, foundSample);
+                    #endif
+                    if (discontinuityFound && foundSample.triangleID >= 0) {
+                        if (insert(newSample.triangleID)) {
+                            edgeSubdivOutput[int(atomicAdd(triangleCounter, 1))] = newSample;
                         }
-                        */
+                        newSample = foundSample;
+                    }
                         
+                    if (int(hitInfo.w) != -1) {
                         samplesOutput[int(currentIndex - index / 2.0f)] = newSample;
                     }
                     #ifndef USE_3D_VIEW_CELL

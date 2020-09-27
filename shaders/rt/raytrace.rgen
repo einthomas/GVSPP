@@ -96,39 +96,51 @@ void main() {
     vec2 haltonPoint = vec2(points[launchIndex * 4] - 0.5f, points[launchIndex * 4 + 1] - 0.5f);
     rayOrigin = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
 
-    // Use a different Halton point to calculate the ray direction
-    haltonPoint = vec2(points[launchIndex * 4 + 2], points[launchIndex * 4 + 3]);
+    for (int i = 0; i < 1; i++) {
+        // Use a different Halton point to calculate the ray direction
+        //haltonPoint = vec2(points[launchIndex * 4 + 2], points[launchIndex * 4 + 3]);
+        haltonPoint = vec2(points[launchIndex * 4 + 2 + i * 2], points[launchIndex * 4 + 3 + i * 2]);
 
-    // Map Halton point to point on hemisphere
-    float phi = 2.0 * 3.1415926 * haltonPoint.x;
-    float r = sqrt(max(1.0 - haltonPoint.y * haltonPoint.y, 0.0));
-    rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
+        // Map Halton point to point on hemisphere
+        float phi = 2.0 * 3.1415926 * haltonPoint.x;
+        float r = sqrt(max(1.0 - haltonPoint.y * haltonPoint.y, 0.0));
+        rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
 
-    // Transform direction to view cell coordinate system
-    rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
+        // Transform direction to view cell coordinate system
+        rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
 
-    // Trace ray
-    uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV;
-    uint cullMask = 0xff;
-    float tmin = 0.001;
-    float tmax = 100000.0;
-    traceNV(
-        topLevelAS,     // acceleration structure
-        rayFlags,       // rayFlags
-        cullMask,       // cullMask
-        0,              // sbtRecordOffset
-        0,              // sbtRecordStride
-        0,              // missIndex
-        rayOrigin.xyz,  // ray origin
-        tmin,           // ray min range
-        rayDir.xyz,     // ray direction
-        tmax,           // ray max range
-        0               // payload (location = 0)
-    );
-    
-    int triangleID = int(hitInfo.w);
-    if (triangleID != -1 && insert(triangleID)) {
-        uint index = atomicAdd(triangleCounter, 1);
-        randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
+        /*
+        if (launchIndex == 0) {
+            rayDir = normalize(vec3(-25.659540, 17.318491, 11.035990) - rayOrigin);
+        } else if (launchIndex == 1) {
+            rayOrigin = vec3(-59.571327, 51.222729, 93.720490);
+            rayDir = normalize(vec3(-23.551039, 9.746131, 18.934601) - rayOrigin);
+        }
+        */
+
+        // Trace ray
+        uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV;
+        uint cullMask = 0xff;
+        float tmin = 0.001;
+        float tmax = 100000.0;
+        traceNV(
+            topLevelAS,     // acceleration structure
+            rayFlags,       // rayFlags
+            cullMask,       // cullMask
+            0,              // sbtRecordOffset
+            0,              // sbtRecordStride
+            0,              // missIndex
+            rayOrigin.xyz,  // ray origin
+            tmin,           // ray min range
+            rayDir.xyz,     // ray direction
+            tmax,           // ray max range
+            0               // payload (location = 0)
+        );
+        
+        int triangleID = int(hitInfo.w);
+        if (triangleID != -1 && insert(triangleID)) {
+            uint index = atomicAdd(triangleCounter, 1);
+            randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
+        }
     }
 }

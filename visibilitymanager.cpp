@@ -581,7 +581,8 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     if (USE_RECURSIVE_EDGE_SUBDIVISION) {
         absOutputBufferSize = sizeof(Sample) * (MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
     } else {
-        absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
+        //absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
+        absOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
     }
     VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
     VkDeviceSize randomSamplingOutputBufferSize = std::max(sizeof(Sample) * std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT), absOutputBufferSize);
@@ -594,6 +595,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
+
         /*
         CUDAUtil::createExternalBuffer(
             randomSamplingOutputBufferSize,
@@ -1424,8 +1426,8 @@ void VisibilityManager::createDescriptorPool() {
 }
 
 void VisibilityManager::createPipeline(
-    std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages, VkPipelineLayout *pipelineLayout,
-    VkPipeline *pipeline, std::vector<VkDescriptorSetLayout> descriptorSetLayouts,
+    const std::array<VkPipelineShaderStageCreateInfo, 3> &shaderStages, VkPipelineLayout &pipelineLayout,
+    VkPipeline &pipeline, const std::vector<VkDescriptorSetLayout> &descriptorSetLayouts,
     std::vector<VkPushConstantRange> pushConstantRanges
 ) {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
@@ -1435,7 +1437,7 @@ void VisibilityManager::createPipeline(
     pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
     pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
     if (vkCreatePipelineLayout(
-            logicalDevice, &pipelineLayoutInfo, nullptr, pipelineLayout
+            logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout
         ) != VK_SUCCESS
     ) {
         throw std::runtime_error("failed to create rt pipeline layout");
@@ -1466,9 +1468,9 @@ void VisibilityManager::createPipeline(
     rtPipelineInfo.groupCount = static_cast<uint32_t>(groups.size());
     rtPipelineInfo.pGroups = groups.data();
     rtPipelineInfo.maxRecursionDepth = 1;
-    rtPipelineInfo.layout = *pipelineLayout;
+    rtPipelineInfo.layout = pipelineLayout;
     if (vkCreateRayTracingPipelinesNV(
-            logicalDevice, VK_NULL_HANDLE, 1, &rtPipelineInfo, nullptr, pipeline
+            logicalDevice, VK_NULL_HANDLE, 1, &rtPipelineInfo, nullptr, &pipeline
         ) != VK_SUCCESS
     ) {
         throw std::runtime_error("failed to create rt pipeline");
@@ -1500,7 +1502,7 @@ void VisibilityManager::createRandomSamplingPipeline() {
     shaderStages[RT_SHADER_INDEX_CLOSEST_HIT] = rayClosestHitShaderStageInfo;
     shaderStages[RT_SHADER_INDEX_MISS] = rayMissShaderStageInfo;
 
-    createPipeline(shaderStages, &pipelineLayout, &pipeline, { descriptorSetLayout }, { });
+    createPipeline(shaderStages, pipelineLayout, pipeline, { descriptorSetLayout }, { });
 
     vkDestroyShaderModule(logicalDevice, rayGenShaderStageInfo.module, nullptr);
     vkDestroyShaderModule(logicalDevice, rayClosestHitShaderStageInfo.module, nullptr);
@@ -1532,7 +1534,7 @@ void VisibilityManager::createABSPipeline() {
     shaderStages[RT_SHADER_INDEX_MISS] = rayMissShaderStageInfo;
 
     createPipeline(
-        shaderStages, &pipelineABSLayout, &pipelineABS,
+        shaderStages, pipelineABSLayout, pipelineABS,
         { descriptorSetLayout, descriptorSetLayoutABS }, { }
     );
 
@@ -1567,7 +1569,7 @@ void VisibilityManager::createEdgeSubdivPipeline() {
     shaderStages[RT_SHADER_INDEX_MISS] = rayMissShaderStageInfo;
 
     createPipeline(
-        shaderStages, &pipelineEdgeSubdivLayout, &pipelineEdgeSubdiv,
+        shaderStages, pipelineEdgeSubdivLayout, pipelineEdgeSubdiv,
         { descriptorSetLayout, descriptorSetLayoutABS, descriptorSetLayoutEdgeSubdiv }, { }
     );
 
@@ -2059,7 +2061,11 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
         numRsTriangles = n[1];
-        numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            numTriangles = n[0];
+        } else {
+            numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
+        }
         numRsRays = n[3];
         pvsSize = n[4];
 
@@ -2369,7 +2375,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         } else {
             // Execute random sampling
             statistics.back().startOperation(RANDOM_SAMPLING);
-            ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION, threadId, viewCellIndex);
+            ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION / 1.0f, threadId, viewCellIndex);
             statistics.back().endOperation(RANDOM_SAMPLING);
 
             statistics.back().entries.back().numShaderExecutions += RANDOM_RAYS_PER_ITERATION;
@@ -2562,7 +2568,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                     */
                 }
 
-                std::cout << edgeSubdivideInfo.numTriangles << " " << edgeSubdivideInfo.numRsTriangles << std::endl;
                 if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
                     // Copy intersected triangles from VRAM to CPU accessible buffer
                     VkDeviceSize bufferSize = sizeof(Sample) * (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);

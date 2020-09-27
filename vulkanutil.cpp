@@ -187,7 +187,7 @@ VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const std::strin
     VkShaderModule shaderModule;
     VkResult err = vkCreateShaderModule(logicalDevice, &shaderInfo, nullptr, &shaderModule);
     if (err != VK_SUCCESS) {
-        //qWarning("Failed to create shader module: %d", err);
+        throw std::runtime_error("failed to create shader module ");
         return VK_NULL_HANDLE;
     }
 
