@@ -62,5 +62,5 @@ USE_3D_VIEW_CELL false
 
 --- SCENE ---
 CALCPVS pvs.txt
-CANYON
+BISTRO
 0

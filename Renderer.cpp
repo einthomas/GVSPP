@@ -1692,8 +1692,10 @@ void VulkanRenderer::startVisibilityThread() {
         std::cout << std::endl << std::endl;
     }
 
-    for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
-        std::cout << visibilityManager->statistics[i].elapsedTimes[VISIBILITY_SAMPLING] / 1000000.0f << std::endl;
+    if (!USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+        for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+            std::cout << visibilityManager->statistics[i].elapsedTimes[VISIBILITY_SAMPLING] / 1000000.0f << std::endl;
+        }
     }
 }
 
