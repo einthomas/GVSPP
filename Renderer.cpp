@@ -16,6 +16,7 @@
 #include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
+#include <filesystem>
 
 #include "vulkanutil.h"
 #include "Renderer.h"
@@ -55,16 +56,16 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     Settings settings = loadSettingsFile();
 
     std::cout << "compiling shaders..." << std::endl;
-    system(se.at("SHADER_COMPILE_SCRIPT").c_str());
+    system(se[0].at("SHADER_COMPILE_SCRIPT").c_str());
 
     std::cout << std::endl << "========================================" << std::endl;
     std::cout << "Settings loaded: " << std::endl;
-    for (const auto &pair : se) {
+    for (const auto &pair : se[0]) {
         std::cout << "    " << pair.first << " " << pair.second << std::endl;
     }
     std::cout << "========================================" << std::endl << std::endl;
 
-    std::vector<glm::mat4> viewCellMatrices = loadSceneFile(settings);
+    viewCellMatrices = loadSceneFile(settings);
 
     createDescriptorSetLayout();
     {
@@ -163,27 +164,27 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
-    int reverseSamplingMethod = std::stoi(se.at("REVERSE_SAMPLING_METHOD"));
+    int reverseSamplingMethod = std::stoi(se[0].at("REVERSE_SAMPLING_METHOD"));
     long numReverseSamplingSamples = 15;
     if (reverseSamplingMethod == 1) {
         numReverseSamplingSamples = 2;
     } else if (reverseSamplingMethod == 2) {
-        numReverseSamplingSamples = std::stol(se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
+        numReverseSamplingSamples = std::stol(se[0].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     }
     visibilityManager = new VisibilityManager(
-        se.at("USE_TERMINATION_CRITERION") == "true",
-        se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
-        se.at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
-        std::stol(se.at("RASTER_NUM_HEMICUBES")),
-        std::stol(se.at("RAY_COUNT_TERMINATION_THRESHOLD")),
-        std::stol(se.at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
-        std::stol(se.at("RANDOM_RAYS_PER_ITERATION")),
-        std::stol(se.at("ABS_MAX_SUBDIVISION_STEPS")),
-        std::stol(se.at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+        se[0].at("USE_TERMINATION_CRITERION") == "true",
+        se[0].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
+        se[0].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
+        std::stol(se[0].at("RASTER_NUM_HEMICUBES")),
+        std::stol(se[0].at("RAY_COUNT_TERMINATION_THRESHOLD")),
+        std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+        std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
+        std::stol(se[0].at("ABS_MAX_SUBDIVISION_STEPS")),
+        std::stol(se[0].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
         numReverseSamplingSamples,
-        std::stol(se.at("MAX_BULK_INSERT_BUFFER_SIZE")),
-        std::stoi(se.at("SET_TYPE")),
-        std::stol(se.at("INITIAL_HASH_SET_SIZE")),
+        std::stol(se[0].at("MAX_BULK_INSERT_BUFFER_SIZE")),
+        std::stoi(se[0].at("SET_TYPE")),
+        std::stol(se[0].at("INITIAL_HASH_SET_SIZE")),
         window->physicalDevice,
         window->device,
         indexBuffer,
@@ -204,15 +205,15 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     nextCorner();
     alignCameraWithViewCellNormal();
 
-    if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
         nirensteinSampler = new NirensteinSampler(
             window, visibilityManager->computeQueue, visibilityManager->commandPool[0],
             visibilityManager->transferQueue, visibilityManager->transferCommandPool, vertexBuffer,
             vertices, indexBuffer, indices, indices.size() / 3.0f,
-            std::stof(se.at("NIRENSTEIN_ERROR_THRESHOLD")),
-            std::stoi(se.at("NIRENSTEIN_MAX_SUBDIVISIONS")),
-            USE_NIRENSTEIN_MULTI_VIEW_RENDERING,
-            USE_NIRENSTEIN_ADAPTIVE_DIVIDE,
+            std::stof(se[0].at("NIRENSTEIN_ERROR_THRESHOLD")),
+            std::stoi(se[0].at("NIRENSTEIN_MAX_SUBDIVISIONS")),
+            se[settingsIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true",
+            se[settingsIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true",
             visibilityManager->randomSamplingOutputBuffer[0],
             visibilityManager->pvsBuffer[0],
             visibilityManager->triangleCounterBuffer[0]
@@ -706,13 +707,15 @@ void VulkanRenderer::createComputeCommandBuffer() {
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = visibilityManager->commandPool[0];
+        //allocInfo.commandPool = visibilityManager->commandPool[0];
+        allocInfo.commandPool = window->graphicsCommandPool;
         allocInfo.commandBufferCount = 1;
         vkAllocateCommandBuffers(window->device, &allocInfo, &computeCommandBuffers[i]);
 
         // Begin recording commands
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
         vkBeginCommandBuffer(computeCommandBuffers[i], &beginInfo);
 
         vkCmdBindPipeline(computeCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
@@ -735,7 +738,6 @@ void VulkanRenderer::loadModel(std::string modelPath) {
         throw std::runtime_error((warn + err).c_str());
     }
 
-    //float scale = 0.001f;
     float scale = 1.0f;
 
     uint32_t i = 0;
@@ -1240,7 +1242,7 @@ void VulkanRenderer::startNextFrame(
     }
 
     // Draw visibility cubes
-    if (USE_NIRENSTEIN_VISIBILITY_SAMPLING && viewCellRendering) {
+    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true" && viewCellRendering) {
         for (auto pos : nirensteinSampler->renderCubePositions) {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, pos);
@@ -1426,260 +1428,393 @@ std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
 Settings VulkanRenderer::loadSettingsFile() {
     Settings settings;
 
-    std::ifstream file("settings.txt");
-    std::string line;
+    int entryIndex = 0;
+    for (const auto &entry : std::filesystem::directory_iterator("settings")) {
+        se.push_back({});
 
-    bool readSettings = false;
-    bool readSceneDefinition = false;
-    bool readComment = false;
-    while (std::getline(file, line)) {
-        if (line.length() == 0) {
-            continue;
-        }
+        //std::ifstream file("settings.txt");
+        settingsFilePaths.push_back(entry.path().string());
+        std::ifstream file(entry.path());
+        std::cout << "Loading settings file " << entry.path() << std::endl;
+        std::string line;
 
-        if (line.rfind("/*", 0) == 0) {
-            readComment = true;
-        } else if (line.rfind("*/") == 0) {
-            readComment = false;
-        } else if (!readComment) {
-            if (line.rfind("--- SCENE ---", 0) == 0) {
-                readSettings = false;
-                readSceneDefinition = true;
-            } else if (line.rfind("--- SETTINGS ---", 0) == 0) {
-                readSettings = true;
-                readSceneDefinition = false;
-            } else if (readSettings) {
-                se[line.substr(0, line.find(" "))] = line.substr(line.find(" ") + 1, line.length());
-            } else if (readSceneDefinition) {
-                if (line.rfind("CALCPVS", 0) == 0) {
-                    loadPVS = false;
-                } else if (line.rfind("LOADPVS", 0) == 0) {
-                    loadPVS = true;
+        bool readSettings = false;
+        bool readSceneDefinition = false;
+        bool readComment = false;
+        while (std::getline(file, line)) {
+            if (line.length() == 0) {
+                continue;
+            }
+
+            if (line.rfind("/*", 0) == 0) {
+                readComment = true;
+            } else if (line.rfind("*/") == 0) {
+                readComment = false;
+            } else if (!readComment) {
+                if (line.rfind("--- SCENE ---", 0) == 0) {
+                    readSettings = false;
+                    readSceneDefinition = true;
+                } else if (line.rfind("--- SETTINGS ---", 0) == 0) {
+                    readSettings = true;
+                    readSceneDefinition = false;
+                } else if (readSettings) {
+                    se[entryIndex][line.substr(0, line.find(" "))] = line.substr(line.find(" ") + 1, line.length());
+                } else if (readSceneDefinition) {
+                    if (line.rfind("CALCPVS_NOSTORE", 0) == 0) {
+                        loadPVS = false;
+                        storePVS = false;
+                    } else if (line.rfind("CALCPVS", 0) == 0) {
+                        loadPVS = true;
+                        storePVS = true;
+                    } else if (line.rfind("LOADPVS", 0) == 0) {
+                        loadPVS = true;
+                        storePVS = false;
+                    }
+                    pvsStorageFile = line.substr(line.find(" "));
+
+                    std::getline(file, line);
+                    settings.modelName = line;
+
+                    std::getline(file, line);
+                    settings.viewCellIndex = std::stoi(line);
                 }
-                pvsStorageFile = line.substr(line.find(" "));
-
-                std::getline(file, line);
-                settings.modelName = line;
-
-                std::getline(file, line);
-                settings.viewCellIndex = std::stoi(line);
             }
         }
+
+        //USE_NIRENSTEIN_VISIBILITY_SAMPLING = se[entryIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
+        //USE_NIRENSTEIN_MULTI_VIEW_RENDERING = se[entryIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true";
+        //USE_NIRENSTEIN_ADAPTIVE_DIVIDE = se[entryIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true";
+
+        entryIndex++;
     }
 
-    std::ofstream shaderDefinesFile;
-    shaderDefinesFile.open("shaders/rt/defines.glsl");
-    shaderDefinesFile << "const float ABS_DELTA = " << se.at("ABS_DELTA") << ";\n";
-    shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se.at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
-    shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se.at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
-    shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se.at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
-    shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se.at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
-    shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se.at("REVERSE_SAMPLING_METHOD") << "\n";
-    shaderDefinesFile << "#define SET_TYPE " << se.at("SET_TYPE") << "\n";
-    if (se.at("USE_3D_VIEW_CELL") == "true") {
-        shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
-    }
-    if (se.at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
-        shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
-    }
-    if (se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true") {
-        shaderDefinesFile << "#define NIRENSTEIN_USE_MULTI_VIEW_RENDERING\n";
-    }
-    if (se.at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
-        shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
-    }
-    if (se.at("USE_HYBRID_VISIBILITY_SAMPLING") == "true") {
-        shaderDefinesFile << "#define USE_HYBRID_VISIBILITY_SAMPLING\n";
-    }
-    shaderDefinesFile.close();
-
-    USE_NIRENSTEIN_VISIBILITY_SAMPLING = se.at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
-    USE_NIRENSTEIN_MULTI_VIEW_RENDERING = se.at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true";
-    USE_NIRENSTEIN_ADAPTIVE_DIVIDE = se.at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true";
+    writeShaderDefines(0);
 
     return settings;
 }
 
+void VulkanRenderer::writeShaderDefines(int settingsIndex) {
+    std::ofstream shaderDefinesFile;
+    shaderDefinesFile.open("shaders/rt/defines.glsl");
+    shaderDefinesFile << "const float ABS_DELTA = " << se[settingsIndex].at("ABS_DELTA") << ";\n";
+    shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se[settingsIndex].at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
+    shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se[settingsIndex].at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se[settingsIndex].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se[settingsIndex].at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
+    shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se[settingsIndex].at("REVERSE_SAMPLING_METHOD") << "\n";
+    shaderDefinesFile << "#define SET_TYPE " << se[settingsIndex].at("SET_TYPE") << "\n";
+    if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
+        shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
+    }
+    if (se[settingsIndex].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
+        shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
+    }
+    if (se[settingsIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true") {
+        shaderDefinesFile << "#define NIRENSTEIN_USE_MULTI_VIEW_RENDERING\n";
+    }
+    if (se[settingsIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
+        shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
+    }
+    if (se[settingsIndex].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true") {
+        shaderDefinesFile << "#define USE_HYBRID_VISIBILITY_SAMPLING\n";
+    }
+    shaderDefinesFile.close();
+}
+
 void VulkanRenderer::startVisibilityThread() {
     // Calculate the PVS
-    if (!loadPVS) {
+    //if (!loadPVS) {
         std::ofstream pvsFile;
-        pvsFile.open(pvsStorageFile);
-        for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
-            std::cout << "View cell " << k << ":" << std::endl;
-            std::vector<int> pvs;
-            if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
-                glm::vec3 cameraForward = glm::cross(
-                    glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[0])),
-                    glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[1]))
+        if (storePVS) {
+            pvsFile.open(pvsStorageFile);
+        }
+
+        for (int i = 0; i < se.size(); i++) {
+            std::cout << std::endl;
+            std::cout << "-------------------------" << std::endl;
+            std::cout << settingsFilePaths[i] << ":" << std::endl;
+            std::cout << "-------------------------" << std::endl;
+            std::cout << std::endl;
+            if (i > 0) {
+                shadedPVS.clear();
+                pvsTriangleIDs.clear();
+                viewCellGeometry.clear();
+                vkDestroyBuffer(window->device, shadedVertexBuffer, nullptr);
+                vkFreeMemory(window->device, shadedVertexBufferMemory, nullptr);
+                writeShaderDefines(i);
+                system(se[0].at("SHADER_COMPILE_SCRIPT").c_str());
+
+                delete visibilityManager;
+
+                int reverseSamplingMethod = std::stoi(se[i].at("REVERSE_SAMPLING_METHOD"));
+                long numReverseSamplingSamples = 15;
+                if (reverseSamplingMethod == 1) {
+                    numReverseSamplingSamples = 2;
+                } else if (reverseSamplingMethod == 2) {
+                    numReverseSamplingSamples = std::stol(se[i].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
+                }
+                visibilityManager = new VisibilityManager(
+                    se[i].at("USE_TERMINATION_CRITERION") == "true",
+                    se[i].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
+                    se[i].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
+                    std::stol(se[i].at("RASTER_NUM_HEMICUBES")),
+                    std::stol(se[i].at("RAY_COUNT_TERMINATION_THRESHOLD")),
+                    std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+                    std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
+                    std::stol(se[i].at("ABS_MAX_SUBDIVISION_STEPS")),
+                    std::stol(se[i].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+                    numReverseSamplingSamples,
+                    std::stol(se[i].at("MAX_BULK_INSERT_BUFFER_SIZE")),
+                    std::stoi(se[i].at("SET_TYPE")),
+                    std::stol(se[i].at("INITIAL_HASH_SET_SIZE")),
+                    window->physicalDevice,
+                    window->device,
+                    indexBuffer,
+                    indices,
+                    vertexBuffer,
+                    vertices,
+                    uniformBuffers,
+                    NUM_THREADS,
+                    window->deviceUUID,
+                    viewCellMatrices,
+                    window->graphicsCommandPool,
+                    window->graphicsQueue,
+                    window->swapChainImageSize.width,
+                    window->swapChainImageSize.height,
+                    window->findDepthFormat()
                 );
-                pvs = nirensteinSampler->run(
-                    visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
-                    visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300, {0.0f,0.0f})
-                );
-            } else {
-                visibilityManager->rayTrace(indices, 0, k);
-                // Fetch the PVS from the GPU
-                visibilityManager->fetchPVS();
+
+                //settingsIndex++;
             }
 
-            // Write view cell model matrix to the PVS file
-            for (int x = 0; x < 4; x++) {
-                for (int y = 0; y < 4; y++) {
-                    pvsFile << visibilityManager->viewCells[k].model[x][y] << ";";
+            for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
+                std::cout << "View cell " << k << ":" << std::endl;
+                std::vector<int> pvs;
+                if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
+                    glm::vec3 cameraForward = glm::cross(
+                        glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[0])),
+                        glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[1]))
+                    );
+                    pvs = nirensteinSampler->run(
+                        visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
+                        visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300, {0.0f,0.0f})
+                    );
+                } else {
+                    visibilityManager->rayTrace(indices, 0, k);
+                    // Fetch the PVS from the GPU
+                    visibilityManager->fetchPVS();
+                }
+
+                if (storePVS) {
+                    // Write view cell model matrix to the PVS file
+                    for (int x = 0; x < 4; x++) {
+                        for (int y = 0; y < 4; y++) {
+                            pvsFile << visibilityManager->viewCells[k].model[x][y] << ";";
+                        }
+                    }
+                    pvsFile << "|";
+
+                    // Write pvs to the PVS file
+                    std::ostringstream oss;
+                    if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
+                        std::copy(pvs.begin(), pvs.end(), std::ostream_iterator<int>(oss, ";"));
+                    } else {
+                        std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
+                    }
+                    pvsFile << oss.str() << "\n";
+                } else if (!loadPVS) {
+                    // Color all vertices red
+                    for (int i = 0; i < indices.size(); i++) {
+                        vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
+                    }
+
+                    int viewCellIndex = k;
+                    shadedPVS.push_back({});
+                    for (int i = 0; i < indices.size(); i++) {
+                        shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
+                    }
+
+                    // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
+                    pvsTriangleIDs.push_back({});
+                    for (int triangleID : visibilityManager->pvs.pvsVector) {
+                        pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                        shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                    }
+
+                    {
+                        // Load a box model for the current view cell
+                        std::vector<Vertex> viewCellGeomtryVertices;
+
+                        tinyobj::attrib_t attrib;
+                        std::vector<tinyobj::shape_t> shapes;
+                        std::vector<tinyobj::material_t> materials;
+                        std::string warn, err;
+
+                        std::string viewCellModelPath = "models/box/box.obj";
+                        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
+                            throw std::runtime_error((warn + err).c_str());
+                        }
+
+                        for (const auto &shape : shapes) {
+                            for (const auto &index : shape.mesh.indices) {
+                                Vertex vertex = {};
+                                vertex.pos = {
+                                    attrib.vertices[3 * index.vertex_index + 0],
+                                    attrib.vertices[3 * index.vertex_index + 1],
+                                    attrib.vertices[3 * index.vertex_index + 2]
+                                };
+                                vertex.normal = {
+                                    attrib.normals[3 * index.normal_index + 0],
+                                    attrib.normals[3 * index.normal_index + 1],
+                                    attrib.normals[3 * index.normal_index + 2]
+                                };
+                                vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                                viewCellGeomtryVertices.push_back(vertex);
+                            }
+                        }
+
+                        VkBuffer vertexBuffer;
+                        VkDeviceMemory vertexBufferMemory;
+                        createVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                        updateVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                        viewCellGeometry.emplace_back(vertexBuffer, vertexBufferMemory);
+                    }
                 }
             }
-            pvsFile << "|";
-
-            // Write pvs to the PVS file
-            std::ostringstream oss;
-            if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
-                std::copy(pvs.begin(), pvs.end(), std::ostream_iterator<int>(oss, ";"));
-            } else {
-                std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
-            }
-            pvsFile << oss.str() << "\n";
-        }
-        pvsFile.close();
-    }
-
-    // Color all vertices red
-    for (int i = 0; i < indices.size(); i++) {
-        vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
-    }
-
-    // Parse PVS file
-    std::ifstream pvsFile(pvsStorageFile);
-    std::string line;
-    int viewCellIndex = 0;
-    while (std::getline(pvsFile, line)) {
-        // Read view cell data from the PVS file
-        std::string viewCellString = line.substr(0, line.find("|"));
-        std::stringstream stringStream(viewCellString);
-
-        std::array<float, 16> viewCellData;
-        int i = 0;
-        for (float f; stringStream >> f; i++) {
-            viewCellData[i] = f;
-            if (stringStream.peek() == ';') {
-                stringStream.ignore();
-            }
-        }
-
-        ViewCell viewCell(glm::make_mat4(viewCellData.data()));
-
-        shadedPVS.push_back({});
-        for (int i = 0; i < indices.size(); i++) {
-            shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
-        }
-
-        // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
-        pvsTriangleIDs.push_back({});
-        std::string pvsString = line.substr(line.find("|") + 1);
-        std::stringstream ss(pvsString);
-        for (int triangleID; ss >> triangleID;) {
-            pvsTriangleIDs[viewCellIndex].push_back(triangleID);
-
-            shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-            shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-            shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
-
-            if (ss.peek() == ';') {
-                ss.ignore();
-            }
-        }
-
-        {
-            // Load a box model for the current view cell
-            std::vector<Vertex> viewCellGeomtryVertices;
-
-            tinyobj::attrib_t attrib;
-            std::vector<tinyobj::shape_t> shapes;
-            std::vector<tinyobj::material_t> materials;
-            std::string warn, err;
-
-            std::string viewCellModelPath = "models/box/box.obj";
-            if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
-                throw std::runtime_error((warn + err).c_str());
+            if (storePVS) {
+                pvsFile.close();
             }
 
-            for (const auto &shape : shapes) {
-                for (const auto &index : shape.mesh.indices) {
-                    Vertex vertex = {};
-                    vertex.pos = {
-                        attrib.vertices[3 * index.vertex_index + 0],
-                        attrib.vertices[3 * index.vertex_index + 1],
-                        attrib.vertices[3 * index.vertex_index + 2]
-                    };
-                    vertex.normal = {
-                        attrib.normals[3 * index.normal_index + 0],
-                        attrib.normals[3 * index.normal_index + 1],
-                        attrib.normals[3 * index.normal_index + 2]
-                    };
-                    vertex.color = { 1.0f, 1.0f, 1.0f };
-
-                    viewCellGeomtryVertices.push_back(vertex);
+            // Print average statistics across view cells
+            if (visibilityManager->viewCells.size() > 1) {
+                if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
+                    nirensteinSampler->printAverageStatistics();
+                } else {
+                    visibilityManager->printAverageStatistics();
                 }
             }
 
-            VkBuffer vertexBuffer;
-            VkDeviceMemory vertexBufferMemory;
-            createVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
-            updateVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
-            viewCellGeometry.emplace_back(vertexBuffer, vertexBufferMemory);
+            if (loadPVS) {
+                // Color all vertices red
+                for (int i = 0; i < indices.size(); i++) {
+                    vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
+                }
+
+                std::ifstream pvsFile(pvsStorageFile);
+                std::string line;
+                int viewCellIndex = 0;
+                while (std::getline(pvsFile, line)) {
+                    shadedPVS.push_back({});
+                    for (int i = 0; i < indices.size(); i++) {
+                        shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
+                    }
+
+                    // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
+                    pvsTriangleIDs.push_back({});
+                    std::string pvsString = line.substr(line.find("|") + 1);
+                    std::stringstream ss(pvsString);
+                    for (int triangleID; ss >> triangleID;) {
+                        pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                        shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+
+                        if (ss.peek() == ';') {
+                            ss.ignore();
+                        }
+                    }
+
+                    {
+                        // Load a box model for the current view cell
+                        std::vector<Vertex> viewCellGeomtryVertices;
+
+                        tinyobj::attrib_t attrib;
+                        std::vector<tinyobj::shape_t> shapes;
+                        std::vector<tinyobj::material_t> materials;
+                        std::string warn, err;
+
+                        std::string viewCellModelPath = "models/box/box.obj";
+                        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
+                            throw std::runtime_error((warn + err).c_str());
+                        }
+
+                        for (const auto &shape : shapes) {
+                            for (const auto &index : shape.mesh.indices) {
+                                Vertex vertex = {};
+                                vertex.pos = {
+                                    attrib.vertices[3 * index.vertex_index + 0],
+                                    attrib.vertices[3 * index.vertex_index + 1],
+                                    attrib.vertices[3 * index.vertex_index + 2]
+                                };
+                                vertex.normal = {
+                                    attrib.normals[3 * index.normal_index + 0],
+                                    attrib.normals[3 * index.normal_index + 1],
+                                    attrib.normals[3 * index.normal_index + 2]
+                                };
+                                vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                                viewCellGeomtryVertices.push_back(vertex);
+                            }
+                        }
+
+                        VkBuffer vertexBuffer;
+                        VkDeviceMemory vertexBufferMemory;
+                        createVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                        updateVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                        viewCellGeometry.emplace_back(vertexBuffer, vertexBufferMemory);
+                    }
+
+                    viewCellIndex++;
+                }
+                pvsFile.close();
+            }
+
+            currentViewCellIndex = 0;
+            cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+            createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+            updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+
+            // Create and fill ray visualization buffers
+            if (
+                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
+                || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+            ) {
+                createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+                updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+            }
+
+            // Calculate avg. and max. pixel error across all view cells
+            auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
+            totalError = 0.0f;
+            maxError = 0.0f;
+            for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+                float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
+                std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
+                //std::cout << error << std::endl;
+                totalError += error / visibilityManager->viewCells.size();
+
+                currentViewCellIndex++;
+                currentViewCellIndex %= visibilityManager->viewCells.size();
+                currentViewCellCornerView = 0;
+                cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+                updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+
+                alignCameraWithViewCellNormal();
+            }
+            std::cout << "Average total pixel error: " << totalError << std::endl;
+            std::cout << "Max. pixel error: " << maxError << std::endl;
+            //std::cout << maxError << std::endl;
+            //std::cout << totalError << std::endl;
         }
-
-        viewCellIndex++;
-    }
-    pvsFile.close();
-
-    currentViewCellIndex = 0;
-    cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
-    createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
-    updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
-
-    // Create and fill ray visualization buffers
-    if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
-    ) {
-        createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
-        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
-    }
-
-    // Print average statistics across view cells
-    if (visibilityManager->viewCells.size() > 1) {
-        if (USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
-            nirensteinSampler->printAverageStatistics();
-        } else {
-            visibilityManager->printAverageStatistics();
-        }
-    }
-
-    // Calculate avg. and max. pixel error across all view cells
-    auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
-    totalError = 0.0f;
-    maxError = 0.0f;
-    for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
-        float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
-        //std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
-        std::cout << error << std::endl;
-        totalError += error / visibilityManager->viewCells.size();
-
-        currentViewCellIndex++;
-        currentViewCellIndex %= visibilityManager->viewCells.size();
-        currentViewCellCornerView = 0;
-        cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
-        updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
-
-        alignCameraWithViewCellNormal();
-    }
-    //std::cout << "Average total pixel error: " << totalError << std::endl;
-    //std::cout << "Max. pixel error: " << maxError << std::endl;
-    std::cout << maxError << std::endl;
-    std::cout << totalError << std::endl;
+    //}
 
     // Temporary
+    /*
     std::cout << std::endl << std::endl;
     for (auto s : visibilityManager->statistics) {
         long a = 0;
@@ -1692,11 +1827,12 @@ void VulkanRenderer::startVisibilityThread() {
         std::cout << std::endl << std::endl;
     }
 
-    if (!USE_NIRENSTEIN_VISIBILITY_SAMPLING) {
+    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") != "true") {
         for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
             std::cout << visibilityManager->statistics[i].elapsedTimes[VISIBILITY_SAMPLING] / 1000000.0f << std::endl;
         }
     }
+    */
 }
 
 float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints) {
@@ -1760,7 +1896,8 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         computeCommandBufferSubmitInfo.commandBufferCount = 1;
         computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffers[0];
 
-        vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+        //vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+        vkQueueSubmit(window->graphicsQueue, 1, &computeCommandBufferSubmitInfo, fence);
         VkResult result;
         do {
             result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);

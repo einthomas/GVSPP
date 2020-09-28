@@ -98,6 +98,8 @@ public:
         uint32_t frameBufferHeight,
         VkFormat depthFormat
     );
+    ~VisibilityManager();
+
     void addViewCell(glm::mat4 model);
 
     template<int T>
@@ -165,7 +167,7 @@ private:
 
     const long RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
-    const long MAX_ABS_TRIANGLES_PER_ITERATION = 400000;
+    const long MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
     const long ABS_MAX_SUBDIVISION_STEPS;
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
@@ -236,8 +238,6 @@ private:
     std::vector<VkDeviceMemory> randomSamplingOutputBufferMemory;
     std::vector<VkBuffer> absWorkingBuffer;
     std::vector<VkDeviceMemory> absWorkingBufferMemory;
-    std::vector<VkBuffer> absOutputHostBuffer;
-    std::vector<VkDeviceMemory> absOutputHostBufferMemory;
     std::vector<void*> absOutputPointer;
     std::vector<VkBuffer> edgeSubdivOutputBuffer;
     std::vector<VkDeviceMemory> edgeSubdivOutputBufferMemory;
@@ -253,8 +253,6 @@ private:
     std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
 
     std::vector<VkDeviceMemory> pvsBufferMemory;
-    std::vector<VkBuffer> pvsHostBuffer;
-    std::vector<VkDeviceMemory> pvsHostBufferMemory;
     std::vector<void*> pvsPointer;
     std::vector<VkBuffer> pvsCapacityUniformBuffer;
     std::vector<VkDeviceMemory> pvsCapacityUniformMemory;

@@ -60,13 +60,10 @@ public:
 
 private:
     const int NUM_THREADS = 1;
-    bool USE_NIRENSTEIN_VISIBILITY_SAMPLING;
-    bool USE_NIRENSTEIN_MULTI_VIEW_RENDERING;
-    bool USE_NIRENSTEIN_ADAPTIVE_DIVIDE;
 
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
-    std::map<std::string, std::string> se;
+    std::vector<std::map<std::string, std::string>> se;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -122,6 +119,8 @@ private:
     VkSampler textureSampler;
     int currentViewCellCornerView = 0;
     int currentViewCellIndex = 0;
+    int settingsIndex = 0;
+    std::vector<std::string> settingsFilePaths;
 
     glm::vec3 maxErrorCameraForward;
     glm::vec3 maxErrorCameraPos;
@@ -166,6 +165,8 @@ private:
     bool viewCellRendering = false;
     std::string pvsStorageFile;
     bool loadPVS;
+    bool storePVS;
+    std::vector<glm::mat4> viewCellMatrices;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
@@ -175,6 +176,7 @@ private:
     void initVisibilityManager();
     std::vector<glm::mat4> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
+    void writeShaderDefines(int settingsIndex);
     float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
 
     NirensteinSampler *nirensteinSampler;

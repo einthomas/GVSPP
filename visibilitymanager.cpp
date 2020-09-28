@@ -220,6 +220,10 @@ VisibilityManager::VisibilityManager(
     */
 }
 
+VisibilityManager::~VisibilityManager() {
+    releaseResources();
+}
+
 void VisibilityManager::addViewCell(glm::mat4 model) {
     viewCells.push_back(ViewCell(model));
 }
@@ -537,9 +541,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     triangleCounterBuffer.resize(numThreads);
     triangleCounterBufferMemory.resize(numThreads);
 
-    absOutputHostBuffer.resize(numThreads);
-    absOutputHostBufferMemory.resize(numThreads);
-
     absWorkingBuffer.resize(numThreads);
     absWorkingBufferMemory.resize(numThreads);
 
@@ -557,8 +558,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     pvsBuffer.resize(numThreads);
     pvsBufferMemory.resize(numThreads);
-    pvsHostBuffer.resize(numThreads);
-    pvsHostBufferMemory.resize(numThreads);
     pvsPointer.resize(numThreads);
 
     viewCellBuffer.resize(numThreads);
@@ -637,11 +636,19 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         );
         */
         if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            /*
             CUDAUtil::createExternalBuffer(
                 edgeSubdivOutputBufferSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivOutputBuffer[i],
                 edgeSubdivOutputBufferMemory[i], logicalDevice, physicalDevice
+            );
+            */
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, edgeSubdivOutputBufferSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
             );
             VulkanUtil::createBuffer(
                 physicalDevice,
@@ -2627,33 +2634,34 @@ void VisibilityManager::releaseResources() {
 
         vkDestroyBuffer(logicalDevice, absWorkingBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absWorkingBufferMemory[i], nullptr);
-        vkUnmapMemory(logicalDevice, absOutputHostBufferMemory[i]);
-        vkDestroyBuffer(logicalDevice, absOutputHostBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, absOutputHostBufferMemory[i], nullptr);
 
-        vkDestroyBuffer(logicalDevice, edgeSubdivOutputBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
-        vkUnmapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i]);
-        vkDestroyBuffer(logicalDevice, edgeSubdivOutputHostBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], nullptr);
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            vkDestroyBuffer(logicalDevice, edgeSubdivOutputBuffer[i], nullptr);
+            vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
+            vkUnmapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i]);
+            vkDestroyBuffer(logicalDevice, edgeSubdivOutputHostBuffer[i], nullptr);
+            vkFreeMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], nullptr);
+        }
 
         vkDestroyBuffer(logicalDevice, triangleCounterBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, triangleCounterBufferMemory[i], nullptr);
 
+        vkDestroyBuffer(logicalDevice, pvsBulkInsertBuffer[i], nullptr);
+        vkFreeMemory(logicalDevice, pvsBulkInsertBufferMemory[i], nullptr);
+
         vkDestroyBuffer(logicalDevice, pvsBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, pvsBufferMemory[i], nullptr);
-        vkUnmapMemory(logicalDevice, pvsHostBufferMemory[i]);
-        vkDestroyBuffer(logicalDevice, pvsHostBuffer[i], nullptr);
-        vkFreeMemory(logicalDevice, pvsHostBufferMemory[i], nullptr);
 
         vkDestroyFence(logicalDevice, commandBufferFence[i], nullptr);
 
         VkCommandBuffer commandBuffers[] = {
             commandBuffer[i],
             commandBufferABS[i],
-            commandBufferEdgeSubdiv[i]
+            commandBufferEdgeSubdiv[i],
+            commandBufferCompute[i],
+            commandBufferHaltonCompute[i]
         };
-        vkFreeCommandBuffers(logicalDevice, commandPool[i], 3, commandBuffers);
+        vkFreeCommandBuffers(logicalDevice, commandPool[i], 5, commandBuffers);
 
         vkDestroyCommandPool(logicalDevice, commandPool[i], nullptr);
     }
@@ -2661,29 +2669,41 @@ void VisibilityManager::releaseResources() {
     vkDestroyBuffer(logicalDevice, pvsCapacityUniformBuffer[0], nullptr);
     vkFreeMemory(logicalDevice, pvsCapacityUniformMemory[0], nullptr);
 
+    /*
     cudaDestroyExternalMemory(pvsCudaMemory);
     cudaDestroyExternalMemory(haltonCudaMemory);
     cudaDestroyExternalMemory(randomSamplingOutputCudaMemory);
     cudaDestroyExternalMemory(absOutputCudaMemory);
     cudaDestroyExternalMemory(edgeSubdivOutputCudaMemory);
+    */
 
     vkDestroyBuffer(logicalDevice, shaderBindingTable, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemory, nullptr);
     vkDestroyBuffer(logicalDevice, shaderBindingTableABS, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemoryABS, nullptr);
-    vkDestroyBuffer(logicalDevice, shaderBindingTableEdgeSubdiv, nullptr);
-    vkFreeMemory(logicalDevice, shaderBindingTableMemoryEdgeSubdiv, nullptr);
+    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        vkDestroyBuffer(logicalDevice, shaderBindingTableEdgeSubdiv, nullptr);
+        vkFreeMemory(logicalDevice, shaderBindingTableMemoryEdgeSubdiv, nullptr);
+    }
 
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutABS, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutEdgeSubdiv, nullptr);
+    vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutCompute, nullptr);
+    vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutHaltonCompute, nullptr);
 
     vkDestroyPipeline(logicalDevice, pipeline, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineLayout, nullptr);
     vkDestroyPipeline(logicalDevice, pipelineABS, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineABSLayout, nullptr);
-    vkDestroyPipeline(logicalDevice, pipelineEdgeSubdiv, nullptr);
-    vkDestroyPipelineLayout(logicalDevice, pipelineEdgeSubdivLayout, nullptr);
+    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+        vkDestroyPipeline(logicalDevice, pipelineEdgeSubdiv, nullptr);
+        vkDestroyPipelineLayout(logicalDevice, pipelineEdgeSubdivLayout, nullptr);
+    }
+    vkDestroyPipeline(logicalDevice, pipelineCompute, nullptr);
+    vkDestroyPipelineLayout(logicalDevice, pipelineComputeLayout, nullptr);
+    vkDestroyPipeline(logicalDevice, pipelineHaltonCompute, nullptr);
+    vkDestroyPipelineLayout(logicalDevice, pipelineHaltonComputeLayout, nullptr);
 
     vkDestroyDescriptorPool(logicalDevice, descriptorPool, nullptr);
 
