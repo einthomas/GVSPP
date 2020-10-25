@@ -1,4 +1,4 @@
-const float ABS_DELTA = 0.01;
+const float ABS_DELTA = 0.001;
 const int ABS_NUM_SAMPLES_PER_EDGE = 30;
 const int ABS_MAX_SUBDIVISION_STEPS = 1;
 const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = 20;

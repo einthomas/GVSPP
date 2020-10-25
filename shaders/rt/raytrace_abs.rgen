@@ -98,10 +98,11 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
-    const uint currentTriangleIndex = uint(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE * 3)));   // for each triangle ABS_NUM_SAMPLES_PER_EDGE * 3 rays are shot i.e. for each triangle the shader is invoked ABS_NUM_SAMPLES_PER_EDGE * 3 times
+    const uint currentTriangleIndex = uint(floor(launchIndex / float((ABS_NUM_SAMPLES_PER_EDGE + 3) * 3)));   // for each triangle ABS_NUM_SAMPLES_PER_EDGE * 3 rays are shot i.e. for each triangle the shader is invoked ABS_NUM_SAMPLES_PER_EDGE * 3 times
 
-    const uint currentVertexIndex = uint(mod(floor(launchIndex / float(ABS_NUM_SAMPLES_PER_EDGE)), 3.0));
+    const uint currentVertexIndex = uint(mod(floor(launchIndex / float((ABS_NUM_SAMPLES_PER_EDGE + 3))), 3));
     const uint nextVertexIndex = uint(mod(currentVertexIndex + 1, 3));
+    const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
 
     const uint currentVertexSamplePosIndex = uint(mod(launchIndex, ABS_NUM_SAMPLES_PER_EDGE));
     const uint nextVertexSamplePosIndex = uint(mod(currentVertexSamplePosIndex + 1, ABS_NUM_SAMPLES_PER_EDGE));
@@ -110,24 +111,41 @@ void main() {
 
     const vec3 rayOrigin = s.rayOrigin;
 
-    const uint lastVertexIndex = uint(mod(currentVertexIndex + 2, 3));
-
-    /*
-    const vec3 nextWP = unpackVertexData(indices.i[3 * s.triangleID + nextVertexIndex]).worldPos;
-    const vec3 currentWP = unpackVertexData(indices.i[3 * s.triangleID + currentVertexIndex]).worldPos;
-    const vec3 lastWP = unpackVertexData(indices.i[3 * s.triangleID + lastVertexIndex]).worldPos;
-    */
     const vec3 currentWP = getVertexWorldPos(indices.i[3 * s.triangleID + currentVertexIndex]);
     const vec3 nextWP = getVertexWorldPos(indices.i[3 * s.triangleID + nextVertexIndex]);
     const vec3 lastWP = getVertexWorldPos(indices.i[3 * s.triangleID + lastVertexIndex]);
-    vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
-    vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
-    float absDelta = mod(currentVertexSamplePosIndex, 2.0f) == 0 ? ABS_DELTA : ABS_DELTA * 0.1f;
-    vec3 samplePos = mix(
-        nextWP + offsetB * absDelta,
-        currentWP + offsetA * absDelta,
-        currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
-    );
+
+    vec3 samplePos;
+    const uint currentEdgeSampleIndex = uint(mod(launchIndex, (ABS_NUM_SAMPLES_PER_EDGE + 3)));
+    const vec3 vec = normalize(currentWP - rayOrigin);
+    if (currentEdgeSampleIndex < 3) {
+        vec3 d[3];
+        d[0] = normalize(cross(vec, nextWP - currentWP));
+        d[1] = normalize(cross(vec, currentWP - lastWP));
+
+        if (dot(d[0], d[1]) < 0) {
+            d[2] = normalize(d[0] + d[1]);
+        } else {
+            d[2] = normalize(normalize(d[1] + cross(vec, d[1])) + normalize(d[0] + cross(d[0], vec)));
+        }
+
+        samplePos = currentWP + ABS_DELTA *  d[currentEdgeSampleIndex];
+    } else {
+        vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
+        vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
+        float absDelta = mod(currentVertexSamplePosIndex, 2.0f) == 0 ? ABS_DELTA : ABS_DELTA * 0.1f;
+        samplePos = mix(
+            nextWP + offsetB * absDelta,
+            currentWP + offsetA * absDelta,
+            currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
+        );
+        
+        samplePos = mix(
+            nextWP + ABS_DELTA * normalize(cross(normalize(nextWP - rayOrigin), nextWP - currentWP)),// + offsetA * absDelta,
+            currentWP + ABS_DELTA * normalize(cross(normalize(currentWP - rayOrigin), nextWP - currentWP)),// + offsetB * absDelta,
+            ((currentEdgeSampleIndex - 2)) / float(ABS_NUM_SAMPLES_PER_EDGE + 1)
+        );
+    }
 
     vec3 rayDir = normalize(samplePos - rayOrigin);
     

@@ -109,15 +109,6 @@ void main() {
         // Transform direction to view cell coordinate system
         rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
 
-        /*
-        if (launchIndex == 0) {
-            rayDir = normalize(vec3(-25.659540, 17.318491, 11.035990) - rayOrigin);
-        } else if (launchIndex == 1) {
-            rayOrigin = vec3(-59.571327, 51.222729, 93.720490);
-            rayDir = normalize(vec3(-23.551039, 9.746131, 18.934601) - rayOrigin);
-        }
-        */
-
         // Trace ray
         uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV;
         uint cullMask = 0xff;

@@ -45,6 +45,7 @@ ESTEST models/estest/estest.obj
 0 0 0
 1 1 0
 0 180 0
+
 0 0 0
 1 1 0
 0 180 0
@@ -150,7 +151,7 @@ TESS models/tess_test/tess_test.obj
 1 1 0
 0 0 0
 
-TRNGL models/trngl/trngl2.obj
+TRNGL models/trngl/trngl.obj
 0 0 0
 2 2 0
 0 180 0

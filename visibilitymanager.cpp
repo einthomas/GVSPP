@@ -60,7 +60,7 @@ VisibilityManager::VisibilityManager(
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
     ABS_MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
-    NUM_ABS_SAMPLES(NUM_ABS_SAMPLES),
+    NUM_ABS_SAMPLES(NUM_ABS_SAMPLES + 9),
     NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
@@ -588,12 +588,28 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, randomSamplingOutputBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, randomSamplingOutputBufferSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, randomSamplingOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, randomSamplingOutputHostBuffer[i], randomSamplingOutputHostBufferMemory[i],
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+            vkMapMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
+        } else {
+            VulkanUtil::createBuffer(
+                physicalDevice,
+                logicalDevice, randomSamplingOutputBufferSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+            );
+            vkMapMemory(logicalDevice, randomSamplingOutputBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
+        }
 
         /*
         CUDAUtil::createExternalBuffer(
@@ -603,12 +619,14 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             randomSamplingOutputBufferMemory[i], logicalDevice, physicalDevice
         );
         */
+        /*
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, randomSamplingOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, randomSamplingOutputHostBuffer[i], randomSamplingOutputHostBufferMemory[i],
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
         vkMapMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
+        */
 
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -1969,10 +1987,12 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
         VkDeviceSize bufferSize = sizeof(Sample) * numTriangles;
 
         // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-            randomSamplingOutputHostBuffer[threadId], bufferSize
-        );
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            VulkanUtil::copyBuffer(
+                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                randomSamplingOutputHostBuffer[threadId], bufferSize
+            );
+        }
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         for (int i = 0; i < numTriangles; i++) {
@@ -2096,10 +2116,12 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
 
         // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-            randomSamplingOutputHostBuffer[threadId], bufferSize
-        );
+        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+            VulkanUtil::copyBuffer(
+                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                randomSamplingOutputHostBuffer[threadId], bufferSize
+            );
+        }
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         // Visualize ABS rays
@@ -2111,7 +2133,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
                 rayVertices[viewCellIndex].push_back({
                     s[i].hitPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f)
                 });
-
             }
         }
 
@@ -2367,10 +2388,12 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 VkDeviceSize bufferSize = sizeof(Sample) * numSamples;
 
                 // Copy the intersected triangles GPU buffer to the host buffer
-                VulkanUtil::copyBuffer(
-                    logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                    randomSamplingOutputHostBuffer[threadId], bufferSize
-                );
+                if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+                    VulkanUtil::copyBuffer(
+                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                        randomSamplingOutputHostBuffer[threadId], bufferSize
+                    );
+                }
 
                 Sample *s = (Sample*)randomSamplingOutputPointer[0];
                 absSampleQueue.insert(absSampleQueue.end(), s, s + numSamples);
@@ -2413,10 +2436,12 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
 
                 // Copy the intersected triangles GPU buffer to the host buffer
-                VulkanUtil::copyBuffer(
-                    logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                    randomSamplingOutputHostBuffer[threadId], bufferSize
-                );
+                if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+                    VulkanUtil::copyBuffer(
+                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                        randomSamplingOutputHostBuffer[threadId], bufferSize
+                    );
+                }
 
                 Sample *s = (Sample*)randomSamplingOutputPointer[0];
                 absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
@@ -2516,10 +2541,12 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                         absOutputHostBuffer[threadId], bufferSize
                     );
                     */
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                        randomSamplingOutputHostBuffer[threadId], bufferSize
-                    );
+                    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
+                        VulkanUtil::copyBuffer(
+                            logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
+                            randomSamplingOutputHostBuffer[threadId], bufferSize
+                        );
+                    }
                     statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
 
                     Sample *s = (Sample*)randomSamplingOutputPointer[0];
