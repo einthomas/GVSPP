@@ -137,7 +137,7 @@ VisibilityManager::VisibilityManager(
 
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
-    generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
+    generateHaltonSequence(RANDOM_RAYS_PER_ITERATION * 4.0f, rand() / float(RAND_MAX));
 
     rasterVisibility = new RasterVisibility(
         physicalDevice,
