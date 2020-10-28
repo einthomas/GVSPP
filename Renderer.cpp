@@ -326,7 +326,7 @@ void VulkanRenderer::createGraphicsPipeline(
     rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     //rasterizerInfo.polygonMode = VK_POLYGON_MODE_LINE;        // Wireframe
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizerInfo.lineWidth = 10.0f;
+    rasterizerInfo.lineWidth = 1.0f;
     rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     //rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -1246,7 +1246,7 @@ void VulkanRenderer::startNextFrame(
         for (auto pos : nirensteinSampler->renderCubePositions) {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, pos);
-            model = glm::scale(model, glm::vec3(2.0f));
+            model = glm::scale(model, glm::vec3(0.2f));
 
             vkCmdPushConstants(
                 commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
@@ -1535,7 +1535,7 @@ void VulkanRenderer::startVisibilityThread() {
             std::cout << settingsFilePaths[i] << ":" << std::endl;
             std::cout << "-------------------------" << std::endl;
             std::cout << std::endl;
-            if (i > 0) {
+            if (i > 0 && se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") != "true") {
                 shadedPVS.clear();
                 pvsTriangleIDs.clear();
                 viewCellGeometry.clear();
@@ -1597,7 +1597,7 @@ void VulkanRenderer::startVisibilityThread() {
                     );
                     pvs = nirensteinSampler->run(
                         visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
-                        visibilityManager->generateHaltonPoints2d<2>({5, 7}, 300, {0.0f,0.0f})
+                        visibilityManager->generateHaltonPoints2d<2>({5, 7}, 1000, {0.0f,0.0f})
                     );
                 } else {
                     visibilityManager->rayTrace(indices, 0, k);
@@ -1636,12 +1636,22 @@ void VulkanRenderer::startVisibilityThread() {
 
                     // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
                     pvsTriangleIDs.push_back({});
-                    for (int triangleID : visibilityManager->pvs.pvsVector) {
-                        pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+                    if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
+                        for (int triangleID : pvs) {
+                            pvsTriangleIDs[viewCellIndex].push_back(triangleID);
 
-                        shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                        shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                        shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        }
+                    } else {
+                        for (int triangleID : visibilityManager->pvs.pvsVector) {
+                            pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                            shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        }
                     }
 
                     {
@@ -1853,97 +1863,150 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         glm::vec2(1.0f, -1.0f),
         glm::vec2(1.0f, 1.0f)
     };
-    for (int i = 0; i < haltonPoints.size() + 4; i++) {
-        glm::vec4 position;
-        if (i < 4) {
-            position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
-        } else {
-            position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
-        }
+    int sides = se[settingsIndex].at("USE_3D_VIEW_CELL") == "true" ? 6 : 1;
+    for (int k = 0; k < sides; k++) {
+        glm::vec3 originalCameraForward;
+        for (int i = 0; i < haltonPoints.size() + 4; i++) {
+            glm::vec4 position;
+            if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
+                glm::vec3 viewCellSize = glm::vec3(
+                    length(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
+                    length(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
+                    length(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
+                ) * 2.0f;
+                glm::vec3 viewCellRight = glm::normalize(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
+                glm::vec3 viewCellUp = glm::normalize(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
+                glm::vec3 viewCellNormal = glm::normalize(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
+                if (viewCellSize.x == 0.0f) {
+                    viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
+                } else if (viewCellSize.y == 0.0f) {
+                    viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
+                } else if (viewCellSize.z == 0.0f) {
+                    viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
+                }
+                glm::vec3 viewCellPos = glm::vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
-        cameraPos = position;
-        glm::vec3 originalCameraForward = cameraForward;
-        float rotation = 55.0f * ((rand() / float(RAND_MAX)) * 2.0f - 1.0f);
-        cameraForward = glm::rotate(cameraForward, glm::radians(rotation), cameraUp);
-        cameraForward = glm::rotate(cameraForward, glm::radians((55.0f - std::abs(rotation)) * ((rand() / float(RAND_MAX)) > 0.5f ? 1.0f : -1.0f)), cameraRight);
+                const glm::vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
+                const glm::vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
+                const glm::vec3 faceNormals[6] = { viewCellNormal, viewCellRight, -viewCellNormal, -viewCellRight, viewCellUp, -viewCellUp };
+                const glm::vec3 faceSizes[6] = {
+                    glm::vec3(viewCellSize.x,  viewCellSize.y,  viewCellSize.z),
+                    glm::vec3(viewCellSize.z,  viewCellSize.y,  viewCellSize.x),
+                    glm::vec3(viewCellSize.x,  viewCellSize.y,  viewCellSize.z),
+                    glm::vec3(viewCellSize.z,  viewCellSize.y,  viewCellSize.x),
+                    glm::vec3(viewCellSize.x,  viewCellSize.z,  viewCellSize.y),
+                    glm::vec3(viewCellSize.x,  viewCellSize.z,  viewCellSize.y)
+                };
 
-        {
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
-                throw std::runtime_error("failed to begin recording command buffer!");
+                viewCellNormal = faceNormals[k];
+                viewCellRight = faceRights[k];
+                viewCellUp = faceUps[k];
+                viewCellSize = faceSizes[k];
+                viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5f;
+
+                if (i < 4) {
+                    position = glm::vec4(viewCellPos + (corners[i].x * 0.5f) * viewCellSize.x * viewCellRight + (corners[i].y * 0.5f) * viewCellSize.y * viewCellUp, 1.0f);
+                } else {
+                    position = glm::vec4(viewCellPos + (haltonPoints[i - 4].x - 0.5f) * viewCellSize.x * viewCellRight + (haltonPoints[i - 4].y - 0.5f) * viewCellSize.y * viewCellUp, 1.0f);
+                }
+
+                cameraPos = position;
+                originalCameraForward = cameraForward;
+                float rotation = 55.0f * ((rand() / float(RAND_MAX)) * 2.0f - 1.0f);
+                cameraForward = glm::rotate(cameraForward, glm::radians(rotation), cameraUp);
+                cameraForward = glm::rotate(cameraForward, glm::radians((55.0f - std::abs(rotation)) * ((rand() / float(RAND_MAX)) > 0.5f ? 1.0f : -1.0f)), cameraRight);
+            } else {
+                if (i < 4) {
+                    position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+                } else {
+                    position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+                }
+
+                cameraPos = position;
+                originalCameraForward = cameraForward;
+                float rotation = 55.0f * ((rand() / float(RAND_MAX)) * 2.0f - 1.0f);
+                cameraForward = glm::rotate(cameraForward, glm::radians(rotation), cameraUp);
+                cameraForward = glm::rotate(cameraForward, glm::radians((55.0f - std::abs(rotation)) * ((rand() / float(RAND_MAX)) > 0.5f ? 1.0f : -1.0f)), cameraRight);
             }
-            startNextFrame(0, errorFramebuffer, cb, errorRenderPass);
-            if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
-                throw std::runtime_error("failed to record command buffer!");
+
+            {
+                VkCommandBufferBeginInfo beginInfo = {};
+                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to begin recording command buffer!");
+                }
+                startNextFrame(0, errorFramebuffer, cb, errorRenderPass);
+                if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to record command buffer!");
+                }
+
+                VkSubmitInfo renderCommandBufferSubmitInfo = {};
+                renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                renderCommandBufferSubmitInfo.commandBufferCount = 1;
+                renderCommandBufferSubmitInfo.pCommandBuffers = &cb;
+
+                vkQueueSubmit(window->graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
+                VkResult result;
+                do {
+                    result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);
+                } while(result == VK_TIMEOUT);
+                vkResetFences(window->device, 1, &fence);
             }
 
-            VkSubmitInfo renderCommandBufferSubmitInfo = {};
-            renderCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            renderCommandBufferSubmitInfo.commandBufferCount = 1;
-            renderCommandBufferSubmitInfo.pCommandBuffers = &cb;
+            VkSubmitInfo computeCommandBufferSubmitInfo = {};
+            computeCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            computeCommandBufferSubmitInfo.commandBufferCount = 1;
+            computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffers[0];
 
-            vkQueueSubmit(window->graphicsQueue, 1, &renderCommandBufferSubmitInfo, fence);
+            //vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
+            vkQueueSubmit(window->graphicsQueue, 1, &computeCommandBufferSubmitInfo, fence);
             VkResult result;
             do {
                 result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);
             } while(result == VK_TIMEOUT);
             vkResetFences(window->device, 1, &fence);
-        }
 
-        VkSubmitInfo computeCommandBufferSubmitInfo = {};
-        computeCommandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        computeCommandBufferSubmitInfo.commandBufferCount = 1;
-        computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffers[0];
+            {
+                VkDeviceSize bufferSize = sizeof(unsigned int);
 
-        //vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
-        vkQueueSubmit(window->graphicsQueue, 1, &computeCommandBufferSubmitInfo, fence);
-        VkResult result;
-        do {
-            result = vkWaitForFences(window->device, 1, &fence, VK_TRUE, UINT64_MAX);
-        } while(result == VK_TIMEOUT);
-        vkResetFences(window->device, 1, &fence);
+                VkBuffer hostBuffer;
+                VkDeviceMemory hostBufferMemory;
+                VulkanUtil::createBuffer(
+                    window->physicalDevice,
+                    window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+                );
 
-        {
-            VkDeviceSize bufferSize = sizeof(unsigned int);
+                VulkanUtil::copyBuffer(
+                    window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, errorBuffer,
+                    hostBuffer, bufferSize
+                );
 
-            VkBuffer hostBuffer;
-            VkDeviceMemory hostBufferMemory;
-            VulkanUtil::createBuffer(
-                window->physicalDevice,
-                window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-            );
+                void *data;
+                vkMapMemory(window->device, hostBufferMemory, 0, bufferSize, 0, &data);
+                unsigned int *n = (unsigned int*) data;
+                error += n[0];
+                if (n[0] > maxError) {
+                    maxErrorCameraForward = cameraForward;
+                    maxErrorCameraPos = cameraPos;
+                    maxError = n[0];
+                }
 
-            VulkanUtil::copyBuffer(
-                window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, errorBuffer,
-                hostBuffer, bufferSize
-            );
+                n[0] = 0;       // Reset error counter
 
-            void *data;
-            vkMapMemory(window->device, hostBufferMemory, 0, bufferSize, 0, &data);
-            unsigned int *n = (unsigned int*) data;
-            error += n[0];
-            if (n[0] > maxError) {
-                maxErrorCameraForward = cameraForward;
-                maxErrorCameraPos = cameraPos;
-                maxError = n[0];
+                VulkanUtil::copyBuffer(
+                    window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, hostBuffer, errorBuffer, bufferSize
+                );
+
+                vkUnmapMemory(window->device, hostBufferMemory);
+                vkDestroyBuffer(window->device, hostBuffer, nullptr);
+                vkFreeMemory(window->device, hostBufferMemory, nullptr);
             }
 
-            n[0] = 0;       // Reset error counter
-
-            VulkanUtil::copyBuffer(
-                window->device, visibilityManager->transferCommandPool, visibilityManager->transferQueue, hostBuffer, errorBuffer, bufferSize
-            );
-
-            vkUnmapMemory(window->device, hostBufferMemory);
-            vkDestroyBuffer(window->device, hostBuffer, nullptr);
-            vkFreeMemory(window->device, hostBufferMemory, nullptr);
+            cameraForward = originalCameraForward;
         }
-
-        cameraForward = originalCameraForward;
     }
-    error /= float(haltonPoints.size() + 4);
+    error /= float(haltonPoints.size() + 4) * sides;
 
     return error;
 }
