@@ -68,7 +68,7 @@ void main() {
     vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
 
     #ifdef USE_3D_VIEW_CELL
-        const int faceIndex = int(launchIndex / int(gl_LaunchSizeNV.x / 6.0f));
+        const int faceIndex = int(launchIndex / float(gl_LaunchSizeNV.x / 6.0f));
         
         const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
         const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };

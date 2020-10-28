@@ -129,8 +129,9 @@ void main() {
             d[2] = normalize(normalize(d[1] + cross(vec, d[1])) + normalize(d[0] + cross(d[0], vec)));
         }
 
-        samplePos = currentWP + ABS_DELTA *  d[currentEdgeSampleIndex];
+        samplePos = currentWP + ABS_DELTA * d[currentEdgeSampleIndex];
     } else {
+        /*
         vec3 offsetA = -normalize((nextWP - currentWP) + (lastWP - currentWP));
         vec3 offsetB = -normalize((currentWP - nextWP) + (lastWP - nextWP));
         float absDelta = mod(currentVertexSamplePosIndex, 2.0f) == 0 ? ABS_DELTA : ABS_DELTA * 0.1f;
@@ -139,6 +140,7 @@ void main() {
             currentWP + offsetA * absDelta,
             currentVertexSamplePosIndex / float(ABS_NUM_SAMPLES_PER_EDGE)
         );
+        */
         
         samplePos = mix(
             nextWP + ABS_DELTA * normalize(cross(normalize(nextWP - rayOrigin), nextWP - currentWP)),// + offsetA * absDelta,
