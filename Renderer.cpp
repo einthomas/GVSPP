@@ -176,7 +176,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         se[0].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
         se[0].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
         std::stol(se[0].at("RASTER_NUM_HEMICUBES")),
-        std::stol(se[0].at("RAY_COUNT_TERMINATION_THRESHOLD")),
+        std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
         std::stol(se[0].at("ABS_MAX_SUBDIVISION_STEPS")),
@@ -1430,6 +1430,10 @@ Settings VulkanRenderer::loadSettingsFile() {
 
     int entryIndex = 0;
     for (const auto &entry : std::filesystem::directory_iterator("settings")) {
+        if (entry.is_directory()) {
+            continue;
+        }
+
         se.push_back({});
 
         //std::ifstream file("settings.txt");
@@ -1558,7 +1562,7 @@ void VulkanRenderer::startVisibilityThread() {
                     se[i].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
                     se[i].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
                     std::stol(se[i].at("RASTER_NUM_HEMICUBES")),
-                    std::stol(se[i].at("RAY_COUNT_TERMINATION_THRESHOLD")),
+                    std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
                     std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
                     std::stol(se[i].at("ABS_MAX_SUBDIVISION_STEPS")),

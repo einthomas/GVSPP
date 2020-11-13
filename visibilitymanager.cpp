@@ -27,7 +27,7 @@ VisibilityManager::VisibilityManager(
     bool USE_RECURSIVE_EDGE_SUBDIVISION,
     bool USE_HYBRID_VISIBILITY_SAMPLING,
     long RASTER_NUM_HEMICUBES,
-    long RAY_COUNT_TERMINATION_THRESHOLD,
+    long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT,
     long NEW_TRIANGLE_TERMINATION_THRESHOLD,
     long RANDOM_RAYS_PER_ITERATION,
     long MAX_SUBDIVISION_STEPS,
@@ -56,7 +56,7 @@ VisibilityManager::VisibilityManager(
     USE_RECURSIVE_EDGE_SUBDIVISION(USE_RECURSIVE_EDGE_SUBDIVISION),
     USE_HYBRID_VISIBILITY_SAMPLING(USE_HYBRID_VISIBILITY_SAMPLING),
     RASTER_NUM_HEMICUBES(RASTER_NUM_HEMICUBES),
-    RAY_COUNT_TERMINATION_THRESHOLD(RAY_COUNT_TERMINATION_THRESHOLD),
+    NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT(NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
     ABS_MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
@@ -2355,6 +2355,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     resetAtomicBuffers();
     //gpuHashSet->reset();
     statistics.push_back(Statistics(1000000));
+    int terminationThresholdCounter = 0;
 
     rasterVisibility->statistics = &statistics.back();
 
@@ -2623,9 +2624,15 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
         }
 
         if (USE_TERMINATION_CRITERION) {
+            if (pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD) {
+                terminationThresholdCounter++;
+            } else {
+                terminationThresholdCounter = 0;
+            }
+            std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
+
             if (
-                statistics.back().getTotalTracedRays() >= RAY_COUNT_TERMINATION_THRESHOLD ||
-                pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD
+                terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT
             ) {
                 statistics.back().endOperation(VISIBILITY_SAMPLING);
                 statistics.back().print();
