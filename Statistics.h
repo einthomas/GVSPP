@@ -32,7 +32,7 @@ public:
     void print();
     void startOperation(OPERATION_TYPE operationType);
     void endOperation(OPERATION_TYPE operationType);
-    long getTotalTracedRays();
+    long long getTotalTracedRays();
     long getPVSSize();
     void reset();
     static void printElapsedTimes(const std::array<uint64_t, 11> &elapsedTimes);

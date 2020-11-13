@@ -578,7 +578,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION;
     //VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * int(pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1);
     if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        absOutputBufferSize = sizeof(Sample) * (MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
+        absOutputBufferSize = sizeof(Sample) * (long long)(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
     } else {
         //absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
         absOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;

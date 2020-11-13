@@ -52,7 +52,7 @@ void Statistics::print() {
         "Rand Rays", "ABS Rays", "ABS RS Rays", "ES Rays", "ES RS Rays", "Total Rays", "Rand Tri",
         "ABS Tri", "ABS RS Tri", "ES Tri", "ES RS Tri", "PVS Size", "New Tri"
     );
-    std::array<long, 14> sums;
+    std::array<long long, 14> sums;
     for (int i = 0; i < sums.size(); i++) {
         sums[i] = 0;
     }
@@ -124,8 +124,8 @@ void Statistics::endOperation(OPERATION_TYPE operationType) {
     elapsedTimes[operationType] += std::chrono::duration_cast<std::chrono::nanoseconds>(end - startTimes[operationType]).count();
 }
 
-long Statistics::getTotalTracedRays() {
-    long sum = 0;
+long long Statistics::getTotalTracedRays() {
+    long long sum = 0;
     for (auto e : entries) {
         sum += e.totalRays();
     }

@@ -3,30 +3,30 @@
 
 class StatisticsEntry {
 public:
-    long rasterHemicubes = 0;
+    long long rasterHemicubes = 0;
 
-    long rnsRays = 0;
-    long absRays = 0;
-    long absRsRays = 0;
-    long edgeSubdivRays = 0;
-    long edgeSubdivRsRays = 0;
+    long long rnsRays = 0;
+    long long absRays = 0;
+    long long absRsRays = 0;
+    long long edgeSubdivRays = 0;
+    long long edgeSubdivRsRays = 0;
 
-    long rnsTris = 0;
-    long absTris = 0;
-    long absRsTris = 0;
-    long edgeSubdivTris = 0;
-    long edgeSubdivRsTris = 0;
+    long long rnsTris = 0;
+    long long absTris = 0;
+    long long absRsTris = 0;
+    long long edgeSubdivTris = 0;
+    long long edgeSubdivRsTris = 0;
 
-    long newTriangles = 0;
-    long pvsSize = 0;
+    long long newTriangles = 0;
+    long long pvsSize = 0;
 
-    long numShaderExecutions = 0;
+    long long numShaderExecutions = 0;
 
-    long totalRays() {
+    long long totalRays() {
         return rnsRays + absRays + absRsRays + edgeSubdivRays + edgeSubdivRsRays;
     }
 
-    long totalFoundTriangles() {
+    long long totalFoundTriangles() {
         return rnsTris + absTris + absRsTris + edgeSubdivTris + edgeSubdivRsTris;
     }
 };
