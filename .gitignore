@@ -9,3 +9,4 @@ abs_rs_halton.vs
 new.vs
 old.vs
 *pvs.txt
+defines.glsl
