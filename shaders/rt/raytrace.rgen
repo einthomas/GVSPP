@@ -20,7 +20,11 @@ layout(binding = 4, set = 0) readonly buffer haltonPoints {
     float points[];
 };
 layout(binding = 5, set = 0) uniform viewCellProperties {
-    mat4 model;
+    vec3 pos;
+    vec3 size;
+    vec3 right;
+    vec3 up;
+    vec3 normal;
 } viewCell;
 layout(binding = 6, set = 0) writeonly buffer randomSamplingOutputBuffer {
     Sample randomSamplingOutput[];
@@ -49,23 +53,11 @@ void main() {
     // Calculate 1D launch index
     uint launchIndex = gl_LaunchIDNV.x;
 
-    // Get view cell coordinate system
-    vec3 viewCellSize = vec3(
-        length(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-        length(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-        length(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-    ) * 2.0f;
-    vec3 viewCellRight = normalize(vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-    vec3 viewCellUp = normalize(vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-    vec3 viewCellNormal = normalize(vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-    if (viewCellSize.x == 0.0f) {
-        viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-    } else if (viewCellSize.y == 0.0f) {
-        viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-    } else if (viewCellSize.z == 0.0f) {
-        viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
-    }
-    vec3 viewCellPos = vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+    vec3 viewCellSize = viewCell.size * 2.0f;
+    vec3 viewCellRight = viewCell.right;
+    vec3 viewCellUp = viewCell.up;
+    vec3 viewCellNormal = viewCell.normal;
+    vec3 viewCellPos = viewCell.pos;
 
     #ifdef USE_3D_VIEW_CELL
         const int faceIndex = int(launchIndex / float(gl_LaunchSizeNV.x / 6.0f));
@@ -89,12 +81,9 @@ void main() {
         viewCellPos = viewCellPos + viewCellNormal * viewCellSize.z * 0.5;
     #endif
 
-    vec3 rayOrigin;
-    vec3 rayDir;
-
     // Map Halton point to point on view cell
     vec2 haltonPoint = vec2(points[launchIndex * 4] - 0.5f, points[launchIndex * 4 + 1] - 0.5f);
-    rayOrigin = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
+    vec3 rayOrigin = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
 
     for (int i = 0; i < 1; i++) {
         // Use a different Halton point to calculate the ray direction
@@ -104,7 +93,7 @@ void main() {
         // Map Halton point to point on hemisphere
         float phi = 2.0 * 3.1415926 * haltonPoint.x;
         float r = sqrt(max(1.0 - haltonPoint.y * haltonPoint.y, 0.0));
-        rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
+        vec3 rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
 
         // Transform direction to view cell coordinate system
         rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);

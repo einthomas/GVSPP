@@ -61,6 +61,6 @@ USE_3D_VIEW_CELL false
 
 
 --- SCENE ---
-CALCPVS_NOSTORE pvs.txt
-BISTRO
+LOADPVS pvs.txt
+CANYON
 0

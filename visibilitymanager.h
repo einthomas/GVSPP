@@ -91,7 +91,7 @@ public:
         const std::vector<VkBuffer> &uniformBuffers,
         int numThreads,
         std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
-        std::vector<glm::mat4> viewCellMatrices,
+        std::vector<ViewCell> viewCells,
         VkCommandPool graphicsCommandPool,
         VkQueue graphicsQueue,
         uint32_t frameBufferWidth,
@@ -99,8 +99,6 @@ public:
         VkFormat depthFormat
     );
     ~VisibilityManager();
-
-    void addViewCell(glm::mat4 model);
 
     template<int T>
     std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, std::array<float, T> lastHaltonPoints) {

@@ -65,7 +65,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     }
     std::cout << "========================================" << std::endl << std::endl;
 
-    viewCellMatrices = loadSceneFile(settings);
+    viewCells = loadSceneFile(settings);
 
     createDescriptorSetLayout();
     {
@@ -194,7 +194,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         uniformBuffers,
         NUM_THREADS,
         window->deviceUUID,
-        viewCellMatrices,
+        viewCells,
         window->graphicsCommandPool,
         window->graphicsQueue,
         window->swapChainImageSize.width,
@@ -1235,7 +1235,7 @@ void VulkanRenderer::startNextFrame(
     if (viewCellRendering) {
         vkCmdPushConstants(
             commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-            (std::array<glm::mat4, 1> { visibilityManager->viewCells[currentViewCellIndex].model }).data()
+            (std::array<glm::mat4, 1> { viewCellMatrices[currentViewCellIndex] }).data()
         );
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &viewCellGeometry[currentViewCellIndex].vertexBuffer, offsets);
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
@@ -1303,10 +1303,13 @@ void VulkanRenderer::nextCorner() {
     offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
     offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
-    cameraPos = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
+    //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
+    cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos
+            + visibilityManager->viewCells[currentViewCellIndex].size.x * visibilityManager->viewCells[currentViewCellIndex].right * offset.x
+            + visibilityManager->viewCells[currentViewCellIndex].size.y * visibilityManager->viewCells[currentViewCellIndex].up * offset.y;
+
     //std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
-
 }
 
 void VulkanRenderer::nextViewCell() {
@@ -1338,18 +1341,15 @@ void VulkanRenderer::printCamera() {
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
-    cameraForward = glm::cross(
-        glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[0])),
-        glm::normalize(glm::vec3(visibilityManager->viewCells[currentViewCellIndex].model[1]))
-    );
+    cameraForward = visibilityManager->viewCells[currentViewCellIndex].normal;
+    std::cout << glm::to_string(visibilityManager->viewCells[currentViewCellIndex].normal) << std::endl;
 }
 
 void VulkanRenderer::initVisibilityManager() {
-
 }
 
-std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
-    std::vector<glm::mat4> viewCellMatrices;
+std::vector<ViewCell> VulkanRenderer::loadSceneFile(Settings settings) {
+    std::vector<ViewCell> viewCells;
 
     std::string scene = settings.modelName;
     int viewCellIndex = settings.viewCellIndex;
@@ -1390,6 +1390,16 @@ std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
 
             viewCellMatrices.push_back(model);
 
+            ViewCell viewCell(
+                pos,
+                size,
+                glm::rotateY(glm::rotateX(glm::vec3(1.0f, 0.0f, 0.0f), rotation.x), rotation.y),
+                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 1.0f, 0.0f), rotation.x), rotation.y),
+                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 0.0f, 1.0f), rotation.x), rotation.y)
+            );
+            viewCell.pos += viewCell.right * size.x + viewCell.up * size.y + viewCell.normal * size.z;   // translate such that the bottom left corner is at the position read from scenes.txt
+            viewCells.push_back(viewCell);
+
             if (line.length() == 0) {
                 break;
             } else {
@@ -1422,7 +1432,7 @@ std::vector<glm::mat4> VulkanRenderer::loadSceneFile(Settings settings) {
     std::cout << "Model: " << modelPath << " (" << int(indices.size() / 3.0f) << " triangles)" << std::endl;
     std::cout << "========================================" << std::endl << std::endl;
 
-    return viewCellMatrices;
+    return viewCells;
 }
 
 Settings VulkanRenderer::loadSettingsFile() {
@@ -1527,7 +1537,14 @@ void VulkanRenderer::writeShaderDefines(int settingsIndex) {
 
 void VulkanRenderer::startVisibilityThread() {
     // Calculate the PVS
-    //if (!loadPVS) {
+    if (loadPVS && ! storePVS) {
+        loadPVSFromFile(pvsStorageFile);
+
+        currentViewCellIndex = 0;
+        cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
+        createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+        updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+    } else {
         std::ofstream pvsFile;
         if (storePVS) {
             pvsFile.open(pvsStorageFile);
@@ -1580,25 +1597,20 @@ void VulkanRenderer::startVisibilityThread() {
                     uniformBuffers,
                     NUM_THREADS,
                     window->deviceUUID,
-                    viewCellMatrices,
+                    viewCells,
                     window->graphicsCommandPool,
                     window->graphicsQueue,
                     window->swapChainImageSize.width,
                     window->swapChainImageSize.height,
                     window->findDepthFormat()
                 );
-
-                //settingsIndex++;
             }
 
             for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
                 std::cout << "View cell " << k << ":" << std::endl;
                 std::vector<int> pvs;
                 if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                    glm::vec3 cameraForward = glm::cross(
-                        glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[0])),
-                        glm::normalize(glm::vec3(visibilityManager->viewCells[k].model[1]))
-                    );
+                    glm::vec3 cameraForward = visibilityManager->viewCells[currentViewCellIndex].normal;
                     pvs = nirensteinSampler->run(
                         visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
                         visibilityManager->generateHaltonPoints2d<2>({5, 7}, 1000, {0.0f,0.0f})
@@ -1610,13 +1622,12 @@ void VulkanRenderer::startVisibilityThread() {
                 }
 
                 if (storePVS) {
-                    // Write view cell model matrix to the PVS file
-                    for (int x = 0; x < 4; x++) {
-                        for (int y = 0; y < 4; y++) {
-                            pvsFile << visibilityManager->viewCells[k].model[x][y] << ";";
-                        }
-                    }
-                    pvsFile << "|";
+                    pvsFile << visibilityManager->viewCells[k].pos.x << "," << visibilityManager->viewCells[k].pos.y << "," << visibilityManager->viewCells[k].pos.z << ";";
+                    pvsFile << visibilityManager->viewCells[k].size.x << "," << visibilityManager->viewCells[k].size.y << "," << visibilityManager->viewCells[k].size.z << ";";
+                    pvsFile << visibilityManager->viewCells[k].right.x << "," << visibilityManager->viewCells[k].right.y << "," << visibilityManager->viewCells[k].right.z << ";";
+                    pvsFile << visibilityManager->viewCells[k].up.x << "," << visibilityManager->viewCells[k].up.y << "," << visibilityManager->viewCells[k].up.z << ";";
+                    pvsFile << visibilityManager->viewCells[k].normal.x << "," << visibilityManager->viewCells[k].normal.y << "," << visibilityManager->viewCells[k].normal.z << ";";
+                    pvsFile << "\n";
 
                     // Write pvs to the PVS file
                     std::ostringstream oss;
@@ -1712,84 +1723,11 @@ void VulkanRenderer::startVisibilityThread() {
                 }
             }
 
-            if (loadPVS) {
-                // Color all vertices red
-                for (int i = 0; i < indices.size(); i++) {
-                    vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
-                }
-
-                std::ifstream pvsFile(pvsStorageFile);
-                std::string line;
-                int viewCellIndex = 0;
-                while (std::getline(pvsFile, line)) {
-                    shadedPVS.push_back({});
-                    for (int i = 0; i < indices.size(); i++) {
-                        shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
-                    }
-
-                    // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
-                    pvsTriangleIDs.push_back({});
-                    std::string pvsString = line.substr(line.find("|") + 1);
-                    std::stringstream ss(pvsString);
-                    for (int triangleID; ss >> triangleID;) {
-                        pvsTriangleIDs[viewCellIndex].push_back(triangleID);
-
-                        shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                        shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                        shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
-
-                        if (ss.peek() == ';') {
-                            ss.ignore();
-                        }
-                    }
-
-                    {
-                        // Load a box model for the current view cell
-                        std::vector<Vertex> viewCellGeomtryVertices;
-
-                        tinyobj::attrib_t attrib;
-                        std::vector<tinyobj::shape_t> shapes;
-                        std::vector<tinyobj::material_t> materials;
-                        std::string warn, err;
-
-                        std::string viewCellModelPath = "models/box/box.obj";
-                        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
-                            throw std::runtime_error((warn + err).c_str());
-                        }
-
-                        for (const auto &shape : shapes) {
-                            for (const auto &index : shape.mesh.indices) {
-                                Vertex vertex = {};
-                                vertex.pos = {
-                                    attrib.vertices[3 * index.vertex_index + 0],
-                                    attrib.vertices[3 * index.vertex_index + 1],
-                                    attrib.vertices[3 * index.vertex_index + 2]
-                                };
-                                vertex.normal = {
-                                    attrib.normals[3 * index.normal_index + 0],
-                                    attrib.normals[3 * index.normal_index + 1],
-                                    attrib.normals[3 * index.normal_index + 2]
-                                };
-                                vertex.color = { 1.0f, 1.0f, 1.0f };
-
-                                viewCellGeomtryVertices.push_back(vertex);
-                            }
-                        }
-
-                        VkBuffer vertexBuffer;
-                        VkDeviceMemory vertexBufferMemory;
-                        createVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
-                        updateVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
-                        viewCellGeometry.emplace_back(vertexBuffer, vertexBufferMemory);
-                    }
-
-                    viewCellIndex++;
-                }
-                pvsFile.close();
-            }
+            loadPVSFromFile(pvsStorageFile);
 
             currentViewCellIndex = 0;
-            cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+            //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+            cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
             createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
             updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
@@ -1815,7 +1753,8 @@ void VulkanRenderer::startVisibilityThread() {
                 currentViewCellIndex++;
                 currentViewCellIndex %= visibilityManager->viewCells.size();
                 currentViewCellCornerView = 0;
-                cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+                //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+                cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
                 updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
 
                 alignCameraWithViewCellNormal();
@@ -1825,7 +1764,7 @@ void VulkanRenderer::startVisibilityThread() {
             //std::cout << maxError << std::endl;
             //std::cout << totalError << std::endl;
         }
-    //}
+    }
 
     // Temporary
     /*
@@ -1873,6 +1812,7 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         for (int i = 0; i < haltonPoints.size() + 4; i++) {
             glm::vec4 position;
             if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
+                /*
                 glm::vec3 viewCellSize = glm::vec3(
                     length(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
                     length(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
@@ -1889,6 +1829,13 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
                     viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
                 }
                 glm::vec3 viewCellPos = glm::vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
+                */
+
+                glm::vec3 viewCellSize = viewCell.size;
+                glm::vec3 viewCellRight = viewCell.right;
+                glm::vec3 viewCellUp = viewCell.up;
+                glm::vec3 viewCellNormal = viewCell.normal;
+                glm::vec3 viewCellPos = viewCell.pos;
 
                 const glm::vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
                 const glm::vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
@@ -1921,9 +1868,12 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
                 cameraForward = glm::rotate(cameraForward, glm::radians((55.0f - std::abs(rotation)) * ((rand() / float(RAND_MAX)) > 0.5f ? 1.0f : -1.0f)), cameraRight);
             } else {
                 if (i < 4) {
-                    position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+                    position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * corners[i].x + viewCell.size.y * viewCell.up * corners[i].y, 1.0f);
+                    //position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
                 } else {
-                    position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+                    glm::vec2 offset = glm::vec2(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f);
+                    position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y, 1.0f);
+                    //position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
                 }
 
                 cameraPos = position;
@@ -2013,4 +1963,123 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
     error /= float(haltonPoints.size() + 4) * sides;
 
     return error;
+}
+
+void VulkanRenderer::loadPVSFromFile(std::string file) {
+    visibilityManager->viewCells.clear();
+
+    // Color all vertices red
+    for (int i = 0; i < indices.size(); i++) {
+        vertices[indices[i]].color = glm::vec3(1.0f, 0.0f, 0.0f);
+    }
+
+    // Each line contains a description of a view cell and its associated PVS
+    std::ifstream pvsFile(file);
+    std::string line;
+    int viewCellIndex = 0;
+    int lineCounter = 0;
+    while (std::getline(pvsFile, line)) {
+        std::stringstream ss(line);
+
+        if (lineCounter % 2 == 0) {
+            // Load view cell data (position, size, and frame)
+            ViewCell viewCell;
+            int i = 0;
+            int k = 0;
+            glm::vec3 v;
+            for (float f; ss >> f;) {
+                v[i] = f;
+                if (ss.peek() == ',') {
+                    i++;
+                    ss.ignore();
+                } else if (ss.peek() == ';') {
+                    if (k == 0) {
+                        viewCell.pos = v;
+                    } else if (k == 1) {
+                        viewCell.size = v;
+                    } else if (k == 2) {
+                        viewCell.right = v;
+                    } else if (k == 3) {
+                        viewCell.up = v;
+                    } else if (k == 4) {
+                        viewCell.normal = v;
+                    }
+
+                    i = 0;
+                    k++;
+                    ss.ignore();
+                } else if (ss.peek() == '|') {
+                    ss.ignore();
+                    break;
+                }
+            }
+            visibilityManager->viewCells.push_back(viewCell);
+        } else {
+            // Load PVS
+            shadedPVS.push_back({});
+            for (int i = 0; i < indices.size(); i++) {
+                shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
+            }
+
+            // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
+            pvsTriangleIDs.push_back({});
+
+            for (int triangleID; ss >> triangleID;) {
+                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+
+                if (ss.peek() == ';') {
+                    ss.ignore();
+                }
+            }
+
+            {
+                // Load a box model for the current view cell
+                std::vector<Vertex> viewCellGeomtryVertices;
+
+                tinyobj::attrib_t attrib;
+                std::vector<tinyobj::shape_t> shapes;
+                std::vector<tinyobj::material_t> materials;
+                std::string warn, err;
+
+                std::string viewCellModelPath = "models/box/box.obj";
+                if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, viewCellModelPath.c_str())) {
+                    throw std::runtime_error((warn + err).c_str());
+                }
+
+                for (const auto &shape : shapes) {
+                    for (const auto &index : shape.mesh.indices) {
+                        Vertex vertex = {};
+                        vertex.pos = {
+                            attrib.vertices[3 * index.vertex_index + 0],
+                            attrib.vertices[3 * index.vertex_index + 1],
+                            attrib.vertices[3 * index.vertex_index + 2]
+                        };
+                        vertex.normal = {
+                            attrib.normals[3 * index.normal_index + 0],
+                            attrib.normals[3 * index.normal_index + 1],
+                            attrib.normals[3 * index.normal_index + 2]
+                        };
+                        vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                        viewCellGeomtryVertices.push_back(vertex);
+                    }
+                }
+
+                VkBuffer vertexBuffer;
+                VkDeviceMemory vertexBufferMemory;
+                createVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                updateVertexBuffer(viewCellGeomtryVertices, vertexBuffer, vertexBufferMemory);
+                viewCellGeometry.emplace_back(vertexBuffer, vertexBufferMemory);
+            }
+
+            viewCellIndex++;
+        }
+
+        lineCounter++;
+    }
+    pvsFile.close();
 }

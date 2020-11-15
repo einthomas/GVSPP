@@ -45,7 +45,7 @@ VisibilityManager::VisibilityManager(
     const std::vector<VkBuffer> &uniformBuffers,
     int numThreads,
     std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
-    std::vector<glm::mat4> viewCellMatrices,
+    std::vector<ViewCell> viewCells,
     VkCommandPool graphicsCommandPool,
     VkQueue graphicsQueue,
     uint32_t frameBufferWidth,
@@ -64,16 +64,14 @@ VisibilityManager::VisibilityManager(
     NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
-    MAX_TRIANGLE_COUNT(indices.size() / 3.0f)
+    MAX_TRIANGLE_COUNT(indices.size() / 3.0f),
+    viewCells(viewCells)
 {
     this->logicalDevice = logicalDevice;
     this->physicalDevice = physicalDevice;
     this->numThreads = numThreads;
     this->deviceUUID = deviceUUID;
 
-    for (auto m : viewCellMatrices) {
-        addViewCell(m);
-    }
     rayVertices.resize(viewCells.size());
 
     if (GPU_SET_TYPE == 0) {
@@ -222,10 +220,6 @@ VisibilityManager::VisibilityManager(
 
 VisibilityManager::~VisibilityManager() {
     releaseResources();
-}
-
-void VisibilityManager::addViewCell(glm::mat4 model) {
-    viewCells.push_back(ViewCell(model));
 }
 
 void VisibilityManager::copyHaltonPointsToBuffer(int threadId) {
@@ -2375,35 +2369,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().endOperation(GPU_HASH_SET_RESIZE);
         }
 
-        if (i == 0 && USE_HYBRID_VISIBILITY_SAMPLING) {
-            glm::vec3 cameraForward = glm::cross(
-                glm::normalize(glm::vec3(viewCells[viewCellIndex].model[0])),
-                glm::normalize(glm::vec3(viewCells[viewCellIndex].model[1]))
-            );
-            int numSamples = rasterVisibility->run(
-                viewCells[viewCellIndex], cameraForward,
-                generateHaltonPoints2d<2>({5, 7}, RASTER_NUM_HEMICUBES, {0.0f, 0.0f})
-            );
-            if (numSamples > 0) {
-                // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * numSamples;
-
-                // Copy the intersected triangles GPU buffer to the host buffer
-                if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                        randomSamplingOutputHostBuffer[threadId], bufferSize
-                    );
-                }
-
-                Sample *s = (Sample*)randomSamplingOutputPointer[0];
-                absSampleQueue.insert(absSampleQueue.end(), s, s + numSamples);
-
-                statistics.back().entries.back().rasterHemicubes += RASTER_NUM_HEMICUBES + 4;
-                statistics.back().entries.back().pvsSize = numSamples;
-                statistics.back().addLine();
-            }
-        } else {
+        {
             // Execute random sampling
             statistics.back().startOperation(RANDOM_SAMPLING);
             ShaderExecutionInfo randomSampleInfo = randomSample(RANDOM_RAYS_PER_ITERATION / 1.0f, threadId, viewCellIndex);

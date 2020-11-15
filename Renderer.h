@@ -166,7 +166,7 @@ private:
     std::string pvsStorageFile;
     bool loadPVS;
     bool storePVS;
-    std::vector<glm::mat4> viewCellMatrices;
+    std::vector<ViewCell> viewCells;
     //std::thread visibilityThread;
     std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
@@ -174,13 +174,15 @@ private:
     float maxError;
 
     void initVisibilityManager();
-    std::vector<glm::mat4> loadSceneFile(Settings settings);
+    std::vector<ViewCell> loadSceneFile(Settings settings);
     Settings loadSettingsFile();
     void writeShaderDefines(int settingsIndex);
     float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
+    void loadPVSFromFile(std::string file);
 
     NirensteinSampler *nirensteinSampler;
     std::vector<glm::vec3> viewCellSizes;
+    std::vector<glm::mat4> viewCellMatrices;
 };
 
 #endif // RENDERER_H

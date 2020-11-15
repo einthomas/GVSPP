@@ -178,7 +178,7 @@ int RasterVisibility::run(const ViewCell &viewCell, glm::vec3 cameraForward, con
         offset.x = i % 2 == 0 ? -1.0f : 1.0f;
         offset.y = int(i / 2) % 2 == 0 ? -1.0f : 1.0f;
         offset.z = 0.0f;
-        cornerPositions[i] = viewCell.model * glm::vec4(offset, 1.0f);
+        cornerPositions[i] = viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y;
     }
 
     divideHaltonRandom(viewCell, cameraForward, haltonPoints);
@@ -251,9 +251,12 @@ void RasterVisibility::divideHaltonRandom(
     for (int i = 0; i < haltonPoints.size() + 4; i++) {
         glm::vec4 position;
         if (i < 4) {
-            position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+            position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * corners[i].x + viewCell.size.y * viewCell.up * corners[i].y, 1.0f);
+            //position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
         } else {
-            position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+            glm::vec2 offset = glm::vec2(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f);
+            position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y, 1.0f);
+            //position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
         }
 
         // Update cube position uniform

@@ -364,7 +364,8 @@ std::vector<int> NirensteinSampler::run(const ViewCell &viewCell, glm::vec3 view
         offset.x = i % 2 == 0 ? -1.0f : 1.0f;
         offset.y = int(i / 2) % 2 == 0 ? -1.0f : 1.0f;
         offset.z = 0.0f;
-        cornerPositions[i] = viewCell.model * glm::vec4(offset, 1.0f);
+        //cornerPositions[i] = viewCell.model * glm::vec4(offset, 1.0f);
+        cornerPositions[i] = viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y;
     }
 
     if (USE_ADAPTIVE_DIVIDE) {
@@ -705,11 +706,9 @@ void NirensteinSampler::divideAdaptive(
             positions[0] + ((positions[3] - positions[0]) / 2.0f) + ((positions[3] - positions[0]) / 2.0f) *         (rand() / float(RAND_MAX)) * 0.0f
         };
 
-        //std::cout << glm::to_string(viewCell.model * glm::vec4(-1.0f,-1.0f,0.0f,1.0f)) << std::endl;
-        //std::cout << glm::to_string(viewCell.model * glm::vec4(1.0f,1.0f,0.0f,1.0f)) << std::endl;
 
-        glm::vec3 corner0 = viewCell.model * glm::vec4(-1.0f,-1.0f,0.0f,1.0f);
-        glm::vec3 corner1 = viewCell.model * glm::vec4(1.0f,1.0f,0.0f,1.0f);
+        glm::vec3 corner0 = viewCell.pos + viewCell.size.x * viewCell.right * -1.0f + viewCell.size.y * viewCell.up * -1.0f;
+        glm::vec3 corner1 = viewCell.pos + viewCell.size.x * viewCell.right + viewCell.size.y * viewCell.up;
         for (int i = 0; i < newPositions.size(); i++) {
             newPositions[i] = glm::clamp(
                 newPositions[i],
@@ -772,9 +771,12 @@ void NirensteinSampler::divideHaltonRandom(
     for (int i = 0; i < haltonPoints.size() + 4; i++) {
         glm::vec4 position;
         if (i < 4) {
-            position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
+            position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * corners[i].x + viewCell.size.y * viewCell.up * corners[i].y, 1.0f);
+            //position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
         } else {
-            position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
+            glm::vec2 offset = glm::vec2(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f);
+            position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y, 1.0f);
+            //position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
         }
         renderCubePositions.push_back({ position.x, position.y, position.z });
 

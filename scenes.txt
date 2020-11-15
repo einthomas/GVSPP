@@ -53,7 +53,6 @@ CANYON models/canyon/canyon_normals.obj
 6598.41 2195.44 2997.27
 100 80 0
 0 180 0
-
 5248.77 2045.44 2747.72
 200 50 0
 0 180 0
@@ -71,9 +70,8 @@ ESTEST models/estest/estest.obj
 0 0 0
 1 1 0
 0 180 0
-
 0 0 0
-1 1 0
+1 2 0
 0 180 0
 
 CITY4M models/city4m/city4m.obj
