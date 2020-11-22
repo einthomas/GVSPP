@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
 
-#include <cuda_runtime.h>
+//#include <cuda_runtime.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 #ifdef _WIN64
@@ -88,6 +88,7 @@ public:
 
 class CUDAUtil {
 public:
+    /*
     static int countNotZero(int *array, int size);
     static int setIntersection(int *set, int size);
     static int calculateLargestSetSize(int *set, int size);
@@ -241,8 +242,9 @@ private:
             throw std::runtime_error("Failed to retrieve handle for buffer!");
         }
         return (void *)(uintptr_t)fd;
-    #endif /* _WIN64 */
+    #endif
     }
+     */
 };
 
 #endif // CUDAUTIL_H

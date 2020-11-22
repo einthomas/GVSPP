@@ -4,6 +4,9 @@ out
 .vs
 screenshot.png
 *.spv
+cmake-build-debug
+cmake-build-release
+.idea
 
 abs_rs_halton.vs
 new.vs

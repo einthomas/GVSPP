@@ -129,9 +129,11 @@ VisibilityManager::VisibilityManager(
         }
     }
 
+    /*
     int cudaDevice = CUDAUtil::initCuda(deviceUUID.data(), VK_UUID_SIZE);
     cudaStream_t cudaStream;
     cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
+    */
 
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
@@ -1770,7 +1772,7 @@ void VisibilityManager::createABSDescriptorSetLayout() {
 void VisibilityManager::createEdgeSubdivDescriptorSets(int threadId) {
     std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
-    VkDescriptorBufferInfo edgeSubdivOutputBufferInfo = {};        // TODO: Move descriptor set creation to method
+    VkDescriptorBufferInfo edgeSubdivOutputBufferInfo = {};
     edgeSubdivOutputBufferInfo.buffer = edgeSubdivOutputBuffer[threadId];
     edgeSubdivOutputBufferInfo.offset = 0;
     edgeSubdivOutputBufferInfo.range = VK_WHOLE_SIZE;
@@ -2595,7 +2597,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             } else {
                 terminationThresholdCounter = 0;
             }
-            std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
+            //std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
 
             if (
                 terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT

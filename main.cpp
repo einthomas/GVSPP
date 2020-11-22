@@ -1,11 +1,5 @@
-//#include <QGuiApplication>
-//#include <QtGlobal>
-//#include <QVulkanInstance>
 #include <iostream>
 #include <random>
-//#include <QLoggingCategory>
-
-//#include "Window.h"
 #include "GLFWVulkanWindow.h"
 #include "Renderer.h"
 

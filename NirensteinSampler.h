@@ -8,7 +8,7 @@
 #include "Vertex.h"
 #include "viewcell.h"
 #include "GLFWVulkanWindow.h"
-#include "CUDAUtil.h"
+//#include "CUDAUtil.h"
 
 class NirensteinSampler {
 public:
@@ -93,7 +93,7 @@ private:
     VkBuffer currentPvsBuffer;
     VkDeviceMemory currentPvsBufferMemory;
     int *currentPvsCuda;
-    cudaExternalMemory_t currentPvsCudaMemory = {};
+    //cudaExternalMemory_t currentPvsCudaMemory = {};
     VkBuffer uniformBuffer;
     VkDeviceMemory uniformBufferMemory;
     VkBuffer triangleIDBuffer;

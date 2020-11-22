@@ -17,7 +17,7 @@
 #include "sample.h"
 #include "pvs.h"
 #include "Statistics.h"
-#include "CUDAUtil.h"
+//#include "CUDAUtil.h"
 #include "gpuHashTable/linearprobing.h"
 
 #include <algorithm>
@@ -254,6 +254,7 @@ private:
     std::vector<void*> pvsPointer;
     std::vector<VkBuffer> pvsCapacityUniformBuffer;
     std::vector<VkDeviceMemory> pvsCapacityUniformMemory;
+    /*
     int *pvsCuda;
     cudaExternalMemory_t pvsCudaMemory = {};
     float *haltonCuda;
@@ -265,6 +266,7 @@ private:
     cudaExternalMemory_t absOutputCudaMemory = {};
     Sample *edgeSubdivOutputCuda;
     cudaExternalMemory_t edgeSubdivOutputCudaMemory = {};
+     */
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;

@@ -32,22 +32,6 @@ struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 projection;
 };
 
-/*
-VulkanRenderer::VulkanRenderer(QVulkanWindow *w)
-    : window(w), visibilityManager(RAYS_PER_ITERATION)
-{
-    const QVector<int> counts = w->supportedSampleCounts();
-    qDebug() << "Supported sample counts:" << counts;
-    for (int s = 16; s >= 4; s /= 2) {
-        if (counts.contains(s)) {
-            qDebug("Requesting sample count %d", s);
-            window->setSampleCount(s);
-            break;
-        }
-    }
-}
-*/
-
 VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     : window(w), visibilityManager()
 {
@@ -250,8 +234,8 @@ void VulkanRenderer::releaseResources() {
 
     vkDestroyBuffer(device, vertexBuffer, nullptr);
     vkFreeMemory(device, vertexBufferMemory, nullptr);
-    vkDestroyBuffer(device, shadedVertexBuffer, nullptr);
-    vkFreeMemory(device, shadedVertexBufferMemory, nullptr);
+    vkDestroyBuffer(device, pvsVerticesBuffer, nullptr);
+    vkFreeMemory(device, pvsVerticesBufferMemory, nullptr);
     vkDestroyBuffer(device, indexBuffer, nullptr);
     vkFreeMemory(device, indexBufferMemory, nullptr);
     vkDestroyBuffer(device, rayVertexBuffer, nullptr);
@@ -328,7 +312,6 @@ void VulkanRenderer::createGraphicsPipeline(
     rasterizerInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerInfo.lineWidth = 1.0f;
     rasterizerInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    //rasterizerInfo.cullMode = VK_CULL_MODE_NONE;        // TODO: Activate back face culling
     rasterizerInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizerInfo.depthClampEnable = VK_FALSE;
@@ -810,7 +793,7 @@ void VulkanRenderer::createTextureImage() {
     stbi_image_free(pixels);
 
     // Create image object
-    /*      // TODO
+    /*
     createImage(
         static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), VK_FORMAT_R8G8B8A8_SRGB,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -1219,8 +1202,9 @@ void VulkanRenderer::startNextFrame(
     );
 
     // Draw scene
+    VkBuffer vertexBuffers[] = { pvsVerticesBuffer };
     VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shadedVertexBuffer, offsets);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdPushConstants(
         commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
         (std::array<glm::mat4, 1> { glm::mat4(1.0f) }).data()
@@ -1229,7 +1213,13 @@ void VulkanRenderer::startNextFrame(
         commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
         (std::array<VkBool32, 1> { shadedRendering }).data()
     );
-    vkCmdDraw(commandBuffer, static_cast<uint32_t>(shadedPVS[currentViewCellIndex].size()), 1, 0, 0);
+
+    if (se[settingsIndex].at("ERROR_VISUALIZATION") == "true") {
+        vkCmdDraw(commandBuffer, static_cast<uint32_t>(pvsVertices[currentViewCellIndex].size()), 1, 0, 0);
+    } else {
+        vkCmdBindIndexBuffer(commandBuffer, pvsIndicesBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(pvsIndices[currentViewCellIndex].size()), 1, 0, 0, 0);
+    }
 
     // Draw view cell
     if (viewCellRendering) {
@@ -1316,13 +1306,61 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellIndex++;
     currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
-    updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+    /*
     if (
         (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
         || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
-        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
     }
+    */
+
+    if (se[0].at("ERROR_VISUALIZATION") == "true") {
+        updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+    } else {
+        vkDestroyBuffer(window->device, pvsIndicesBuffer, nullptr);
+        vkFreeMemory(window->device, pvsIndicesBufferMemory, nullptr);
+
+        VulkanUtil::createBuffer(
+                window->physicalDevice,
+                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        VkDeviceSize bufferSize = sizeof(pvsIndices[currentViewCellIndex][0]) * pvsIndices[currentViewCellIndex].size();
+
+        // Create staging buffer using host-visible memory
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        VulkanUtil::createBuffer(
+                window->physicalDevice,
+                window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        // Copy index data to the staging buffer
+        void *data;
+        vkMapMemory(window->device, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+        memcpy(data, pvsIndices[currentViewCellIndex].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+        vkUnmapMemory(window->device, stagingBufferMemory);
+
+        // Copy index data from the staging buffer to the index buffer
+        VulkanUtil::copyBuffer(
+                window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer,
+                pvsIndicesBuffer, bufferSize
+        );
+
+        vkDestroyBuffer(window->device, stagingBuffer, nullptr);
+        vkFreeMemory(window->device, stagingBufferMemory, nullptr);
+    }
+    vkDestroyBuffer(window->device, pvsVerticesBuffer, nullptr);
+    vkFreeMemory(window->device, pvsVerticesBufferMemory, nullptr);
+    createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+    updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+
+    alignCameraWithViewCellNormal();
+    nextCorner();
+
     std::cout
         << "View cell " << currentViewCellIndex << ": "
         << pvsTriangleIDs[currentViewCellIndex].size() << "/" << int(indices.size() / 3.0f)
@@ -1342,7 +1380,6 @@ void VulkanRenderer::printCamera() {
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
     cameraForward = visibilityManager->viewCells[currentViewCellIndex].normal;
-    std::cout << glm::to_string(visibilityManager->viewCells[currentViewCellIndex].normal) << std::endl;
 }
 
 void VulkanRenderer::initVisibilityManager() {
@@ -1537,13 +1574,52 @@ void VulkanRenderer::writeShaderDefines(int settingsIndex) {
 
 void VulkanRenderer::startVisibilityThread() {
     // Calculate the PVS
-    if (loadPVS && ! storePVS) {
+    if (loadPVS && !storePVS) {
         loadPVSFromFile(pvsStorageFile);
 
         currentViewCellIndex = 0;
         cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
-        createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
-        updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+
+        if (se[0].at("ERROR_VISUALIZATION") == "false") {
+            VulkanUtil::createBuffer(
+                window->physicalDevice,
+                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            );
+
+            VkDeviceSize bufferSize = sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size();
+
+            // Create staging buffer using host-visible memory
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            VulkanUtil::createBuffer(
+                window->physicalDevice,
+                window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            );
+
+            // Copy index data to the staging buffer
+            void *data;
+            vkMapMemory(window->device, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+            memcpy(data, pvsIndices[currentViewCellIndex].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+            vkUnmapMemory(window->device, stagingBufferMemory);
+
+            // Copy index data from the staging buffer to the index buffer
+            VulkanUtil::copyBuffer(
+                window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer,
+                pvsIndicesBuffer, bufferSize
+            );
+
+            vkDestroyBuffer(window->device, stagingBuffer, nullptr);
+            vkFreeMemory(window->device, stagingBufferMemory, nullptr);
+        }
+        createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+        updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+
+        /*
+        createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+        updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+        */
     } else {
         std::ofstream pvsFile;
         if (storePVS) {
@@ -1557,11 +1633,11 @@ void VulkanRenderer::startVisibilityThread() {
             std::cout << "-------------------------" << std::endl;
             std::cout << std::endl;
             if (i > 0 && se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") != "true") {
-                shadedPVS.clear();
+                pvsVertices.clear();
                 pvsTriangleIDs.clear();
                 viewCellGeometry.clear();
-                vkDestroyBuffer(window->device, shadedVertexBuffer, nullptr);
-                vkFreeMemory(window->device, shadedVertexBufferMemory, nullptr);
+                vkDestroyBuffer(window->device, pvsVerticesBuffer, nullptr);
+                vkFreeMemory(window->device, pvsVerticesBufferMemory, nullptr);
                 writeShaderDefines(i);
                 system(se[0].at("SHADER_COMPILE_SCRIPT").c_str());
 
@@ -1644,28 +1720,49 @@ void VulkanRenderer::startVisibilityThread() {
                     }
 
                     int viewCellIndex = k;
-                    shadedPVS.push_back({});
-                    for (int i = 0; i < indices.size(); i++) {
-                        shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
-                    }
+                    pvsVertices.push_back({});
 
-                    // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
-                    pvsTriangleIDs.push_back({});
-                    if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                        for (int triangleID : pvs) {
-                            pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+                    if (se[i].at("ERROR_VISUALIZATION") == "true") {
+                        for (int i = 0; i < indices.size(); i++) {
+                            pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
+                        }
 
-                            shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
+                        pvsTriangleIDs.push_back({});
+                        if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
+                            for (int triangleID : pvs) {
+                                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                                pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                                pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                                pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            }
+                        } else {
+                            for (int triangleID : visibilityManager->pvs.pvsVector) {
+                                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                                pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                                pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                                pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            }
                         }
                     } else {
+                        pvsIndices.push_back({});
+                        std::unordered_map<Vertex, uint32_t> uniqueVertices;
+                        int ind = 0;
                         for (int triangleID : visibilityManager->pvs.pvsVector) {
                             pvsTriangleIDs[viewCellIndex].push_back(triangleID);
 
-                            shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            for (int i = 0; i < 3; i++) {
+                                Vertex vertex = vertices[indices[3 * triangleID + i]];
+                                if (uniqueVertices.count(vertex) == 0) {
+                                    uniqueVertices[vertex] = ind;     // Store index of the vertex
+                                    pvsVertices[viewCellIndex].push_back(vertex);
+                                    ind++;
+                                }
+
+                                pvsIndices[viewCellIndex].push_back(uniqueVertices[vertex]);
+                            }
                         }
                     }
 
@@ -1728,41 +1825,77 @@ void VulkanRenderer::startVisibilityThread() {
             currentViewCellIndex = 0;
             //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
             cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
-            createVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
-            updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+            createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+            updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
 
             // Create and fill ray visualization buffers
             if (
                 (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
                 || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
             ) {
-                createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
-                updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, shadedVertexBufferMemory);
+                createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
+                updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
             }
 
-            // Calculate avg. and max. pixel error across all view cells
-            auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
-            totalError = 0.0f;
-            maxError = 0.0f;
-            for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
-                float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
-                std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
-                //std::cout << error << std::endl;
-                totalError += error / visibilityManager->viewCells.size();
+            if (se[i].at("ERROR_VISUALIZATION") == "false") {
+                VulkanUtil::createBuffer(
+                    window->physicalDevice,
+                    window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                );
 
-                currentViewCellIndex++;
-                currentViewCellIndex %= visibilityManager->viewCells.size();
-                currentViewCellCornerView = 0;
-                //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
-                cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
-                updateVertexBuffer(shadedPVS[currentViewCellIndex], shadedVertexBuffer, shadedVertexBufferMemory);
+                VkDeviceSize bufferSize = sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size();
 
-                alignCameraWithViewCellNormal();
+                // Create staging buffer using host-visible memory
+                VkBuffer stagingBuffer;
+                VkDeviceMemory stagingBufferMemory;
+                VulkanUtil::createBuffer(
+                    window->physicalDevice,
+                    window->device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                );
+
+                // Copy index data to the staging buffer
+                void *data;
+                vkMapMemory(window->device, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
+                memcpy(data, pvsIndices[currentViewCellIndex].data(), (size_t) bufferSize);  // Copy vertex data to mapped memory
+                vkUnmapMemory(window->device, stagingBufferMemory);
+
+                // Copy index data from the staging buffer to the index buffer
+                VulkanUtil::copyBuffer(
+                    window->device, window->graphicsCommandPool, window->graphicsQueue, stagingBuffer,
+                    pvsIndicesBuffer, bufferSize
+                );
+
+                vkDestroyBuffer(window->device, stagingBuffer, nullptr);
+                vkFreeMemory(window->device, stagingBufferMemory, nullptr);
             }
-            std::cout << "Average total pixel error: " << totalError << std::endl;
-            std::cout << "Max. pixel error: " << maxError << std::endl;
-            //std::cout << maxError << std::endl;
-            //std::cout << totalError << std::endl;
+
+            if (se[i].at("ERROR_VISUALIZATION") == "true") {
+                // Calculate avg. and max. pixel error across all view cells
+                auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
+                totalError = 0.0f;
+                maxError = 0.0f;
+                for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+                    float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
+                    std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
+                    //std::cout << error << std::endl;
+                    totalError += error / visibilityManager->viewCells.size();
+
+                    currentViewCellIndex++;
+                    currentViewCellIndex %= visibilityManager->viewCells.size();
+                    currentViewCellCornerView = 0;
+                    //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+                    cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
+                    updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+
+                    alignCameraWithViewCellNormal();
+                }
+                std::cout << "Average total pixel error: " << totalError << std::endl;
+                std::cout << "Max. pixel error: " << maxError << std::endl;
+                //std::cout << maxError << std::endl;
+                //std::cout << totalError << std::endl;
+            }
         }
     }
 
@@ -1789,6 +1922,8 @@ void VulkanRenderer::startVisibilityThread() {
 }
 
 float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints) {
+    shadedRendering = false;
+
     float error = 0;
 
     VkCommandBuffer cb;
@@ -1962,6 +2097,8 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
     }
     error /= float(haltonPoints.size() + 4) * sides;
 
+    shadedRendering = true;
+
     return error;
 }
 
@@ -2016,23 +2153,48 @@ void VulkanRenderer::loadPVSFromFile(std::string file) {
             visibilityManager->viewCells.push_back(viewCell);
         } else {
             // Load PVS
-            shadedPVS.push_back({});
-            for (int i = 0; i < indices.size(); i++) {
-                shadedPVS[viewCellIndex].push_back(vertices[indices[i]]);
-            }
+            pvsVertices.push_back({});
 
             // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
             pvsTriangleIDs.push_back({});
+            if (se[0].at("ERROR_VISUALIZATION") == "true") {
+                for (int i = 0; i < indices.size(); i++) {
+                    pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
+                }
 
-            for (int triangleID; ss >> triangleID;) {
-                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+                for (int triangleID; ss >> triangleID;) {
+                    pvsTriangleIDs[viewCellIndex].push_back(triangleID);
 
-                shadedPVS[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                shadedPVS[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                shadedPVS[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                    pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                    pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                    pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
 
-                if (ss.peek() == ';') {
-                    ss.ignore();
+                    if (ss.peek() == ';') {
+                        ss.ignore();
+                    }
+                }
+            } else {
+                pvsIndices.push_back({});
+                std::unordered_map<Vertex, uint32_t> uniqueVertices;
+                int ind = 0;
+                for (int triangleID; ss >> triangleID;) {
+                    pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+
+                    for (int i = 0; i < 3; i++) {
+                        Vertex vertex = vertices[indices[3 * triangleID + i]];
+                        vertex.color = glm::vec3(0.0f, 1.0f, 0.0f);
+                        if (uniqueVertices.count(vertex) == 0) {
+                            uniqueVertices[vertex] = ind;     // Store index of the vertex
+                            pvsVertices[viewCellIndex].push_back(vertex);
+                            ind++;
+                        }
+
+                        pvsIndices[viewCellIndex].push_back(uniqueVertices[vertex]);
+                    }
+
+                    if (ss.peek() == ';') {
+                        ss.ignore();
+                    }
                 }
             }
 

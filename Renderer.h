@@ -85,16 +85,18 @@ private:
 
     std::unordered_map<Vertex, uint32_t> uniqueVertices;
     std::vector<Vertex> vertices;
-    std::vector<Vertex> shadedVertices;
     std::vector<std::vector<int>> pvsTriangleIDs;
-    std::vector<std::vector<Vertex>> shadedPVS;
+    std::vector<std::vector<Vertex>> pvsVertices;
+    std::vector<std::vector<uint32_t>> pvsIndices;
     std::vector<ViewCellGeometry> viewCellGeometry;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
-    VkBuffer shadedVertexBuffer;
-    VkDeviceMemory shadedVertexBufferMemory;
+    VkBuffer pvsVerticesBuffer;
+    VkDeviceMemory pvsVerticesBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    VkBuffer pvsIndicesBuffer;
+    VkDeviceMemory pvsIndicesBufferMemory;
     VkBuffer rayVertexBuffer;
     VkDeviceMemory rayVertexBufferMemory;
     VkBuffer errorBuffer;
@@ -133,7 +135,6 @@ private:
     );
     void createVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
     void updateVertexBuffer(std::vector<Vertex> &vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
-    void createShadedVertexBuffer();
     void createIndexBuffer();
     void createErrorBuffer();
 
@@ -161,7 +162,7 @@ private:
     void updateUniformBuffer(uint32_t swapChainImageIndex);
 
     // Visibility
-    bool shadedRendering = false;
+    bool shadedRendering = true;
     bool viewCellRendering = false;
     std::string pvsStorageFile;
     bool loadPVS;

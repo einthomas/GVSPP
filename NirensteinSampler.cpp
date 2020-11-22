@@ -2,7 +2,7 @@
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "viewcell.h"
-#include "CUDAUtil.h"
+//#include "CUDAUtil.h"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -685,12 +685,17 @@ void NirensteinSampler::divideAdaptive(
     */
 
     startTotal = std::chrono::steady_clock::now();
+
+    float nirensteinCriterion = 0.0f;
+    /*
     int numCommonIDs = CUDAUtil::setIntersection(currentPvsCuda, MAX_NUM_TRIANGLES);
     int largestSetSize = CUDAUtil::calculateLargestSetSize(currentPvsCuda, MAX_NUM_TRIANGLES);
     cudaTime += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTotal).count();
+
     float nirensteinCriterion = 1.0f - float(numCommonIDs) / float(largestSetSize);
     //std::cout << "numCommonIDs " << numCommonIDs << " largestSetSize " << largestSetSize << std::endl;
     std::cout << "nirensteinCriterion " << nirensteinCriterion << " " << numCommonIDs << " " << ERROR_THRESHOLD << std::endl;
+     */
 
     if (nirensteinCriterion > ERROR_THRESHOLD) {
         numSubdivisions++;
@@ -1385,6 +1390,8 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
         currentPvsBuffer, currentPvsBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
     */
+
+    /*
     CUDAUtil::createExternalBuffer(
         sizeof(int) * numTriangles * 5,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -1395,6 +1402,7 @@ void NirensteinSampler::createBuffers(const int numTriangles) {
         (void**)&currentPvsCuda, currentPvsCudaMemory,
         currentPvsBufferMemory, sizeof(int) * numTriangles * 5, logicalDevice
     );
+     */
 
     resetPVS();
 

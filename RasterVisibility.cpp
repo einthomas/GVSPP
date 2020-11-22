@@ -2,7 +2,7 @@
 #include "vulkanutil.h"
 #include "Vertex.h"
 #include "viewcell.h"
-#include "CUDAUtil.h"
+//#include "CUDAUtil.h"
 #include "Statistics.h"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -695,6 +695,8 @@ void RasterVisibility::createBuffers(const int numTriangles) {
         currentPvsBuffer, currentPvsBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
     */
+
+    /*
     CUDAUtil::createExternalBuffer(
         sizeof(int) * numTriangles * 5,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -705,6 +707,7 @@ void RasterVisibility::createBuffers(const int numTriangles) {
         (void**)&currentPvsCuda, currentPvsCudaMemory,
         currentPvsBufferMemory, sizeof(int) * numTriangles * 5, logicalDevice
     );
+    */
 
     resetPVS();
 
