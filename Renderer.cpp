@@ -170,7 +170,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         vertexBuffer,
         vertices,
         uniformBuffers,
-        NUM_THREADS,
         window->deviceUUID,
         viewCells,
         window->graphicsCommandPool,
@@ -669,7 +668,6 @@ void VulkanRenderer::createComputeCommandBuffer() {
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        //allocInfo.commandPool = visibilityManager->commandPool[0];
         allocInfo.commandPool = window->graphicsCommandPool;
         allocInfo.commandBufferCount = 1;
         vkAllocateCommandBuffers(window->device, &allocInfo, &computeCommandBuffers[i]);
@@ -1570,7 +1568,6 @@ void VulkanRenderer::startVisibilityThread() {
                     vertexBuffer,
                     vertices,
                     uniformBuffers,
-                    NUM_THREADS,
                     window->deviceUUID,
                     viewCells,
                     window->graphicsCommandPool,
@@ -1584,7 +1581,7 @@ void VulkanRenderer::startVisibilityThread() {
             for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
                 std::cout << "View cell " << k << ":" << std::endl;
                 std::vector<int> pvs;
-                visibilityManager->rayTrace(indices, 0, k);
+                visibilityManager->rayTrace(indices, k);
                 // Fetch the PVS from the GPU
                 visibilityManager->fetchPVS();
 

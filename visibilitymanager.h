@@ -5,8 +5,6 @@
 #include <vector>
 #include <array>
 #include <unordered_set>
-#include <thread>
-#include <mutex>
 #include <atomic>
 #include <random>
 #include <map>
@@ -56,12 +54,12 @@ public:
     bool visualizeABSRays = false;
     VkQueue computeQueue;
     VkQueue transferQueue;
-    std::vector<VkCommandPool> commandPool;
+    VkCommandPool commandPool;
     VkCommandPool transferCommandPool;
     std::vector<Statistics> statistics;
-    std::vector<VkBuffer> randomSamplingOutputBuffer;
-    std::vector<VkBuffer> pvsBuffer;
-    std::vector<VkBuffer> triangleCounterBuffer;
+    VkBuffer randomSamplingOutputBuffer;
+    VkBuffer pvsBuffer;
+    VkBuffer triangleCounterBuffer;
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
@@ -80,7 +78,6 @@ public:
         VkBuffer vertexBuffer,
         const std::vector<Vertex> &vertices,
         const std::vector<VkBuffer> &uniformBuffers,
-        int numThreads,
         std::array<uint8_t, VK_UUID_SIZE> deviceUUID,
         std::vector<ViewCell> viewCells,
         VkCommandPool graphicsCommandPool,
@@ -133,14 +130,13 @@ public:
 
         return haltonPoints;
     }
-    void rayTrace(const std::vector<uint32_t> &indices, int threadId, int viewCellIndex);
+    void rayTrace(const std::vector<uint32_t> &indices, int viewCellIndex);
     void releaseResources();
     void fetchPVS();
     void printAverageStatistics();
 
 private:
     int pvsSize = 0;
-    int numThreads;
 
     const bool USE_TERMINATION_CRITERION;
     const long NEW_TRIANGLE_TERMINATION_THRESHOLD;
@@ -164,18 +160,17 @@ private:
     glm::vec4 lastHaltonPoints;
     std::random_device rd;
     std::mt19937 gen;
-    std::mutex *queueSubmitMutex;
     std::atomic<int> tracedRays;
 
     VkPhysicalDevice physicalDevice;
     VkDevice logicalDevice;
     std::array<uint8_t, VK_UUID_SIZE> deviceUUID;
 
-    std::vector<VkCommandBuffer> commandBuffer;
-    std::vector<VkCommandBuffer> commandBufferABS;
-    std::vector<VkCommandBuffer> commandBufferCompute;
-    std::vector<VkCommandBuffer> commandBufferHaltonCompute;
-    std::vector<VkFence> commandBufferFence;
+    VkCommandBuffer commandBuffer;
+    VkCommandBuffer commandBufferABS;
+    VkCommandBuffer commandBufferCompute;
+    VkCommandBuffer commandBufferHaltonCompute;
+    VkFence commandBufferFence;
     VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties;
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
@@ -187,13 +182,13 @@ private:
     VkPipelineLayout pipelineHaltonComputeLayout;
 
     VkDescriptorPool descriptorPool;
-    std::vector<VkDescriptorSet> descriptorSet;
+    VkDescriptorSet descriptorSet;
     VkDescriptorSetLayout descriptorSetLayout;
-    std::vector<VkDescriptorSet> descriptorSetABS;
+    VkDescriptorSet descriptorSetABS;
     VkDescriptorSetLayout descriptorSetLayoutABS;
-    std::vector<VkDescriptorSet> descriptorSetCompute;
+    VkDescriptorSet descriptorSetCompute;
     VkDescriptorSetLayout descriptorSetLayoutCompute;
-    std::vector<VkDescriptorSet> descriptorSetHaltonCompute;
+    VkDescriptorSet descriptorSetHaltonCompute;
     VkDescriptorSetLayout descriptorSetLayoutHaltonCompute;
 
     VkImageView storageImageView;
@@ -201,27 +196,26 @@ private:
     VkDeviceMemory shaderBindingTableMemory;
     VkBuffer shaderBindingTableABS;
     VkDeviceMemory shaderBindingTableMemoryABS;
-    std::vector<VkBuffer> haltonPointsBuffer;
-    std::vector<VkDeviceMemory> haltonPointsBufferMemory;
-    std::vector<VkBuffer> viewCellBuffer;
-    std::vector<VkDeviceMemory> viewCellBufferMemory;
+    VkBuffer haltonPointsBuffer;
+    VkDeviceMemory haltonPointsBufferMemory;
+    VkBuffer viewCellBuffer;
+    VkDeviceMemory viewCellBufferMemory;
 
-    std::vector<VkDeviceMemory> randomSamplingOutputBufferMemory;
-    std::vector<VkBuffer> absWorkingBuffer;
-    std::vector<VkDeviceMemory> absWorkingBufferMemory;
-    std::vector<void*> absOutputPointer;
-    std::vector<VkDeviceMemory> triangleCounterBufferMemory;
-    std::vector<VkBuffer> randomSamplingOutputHostBuffer;
-    std::vector<VkDeviceMemory> randomSamplingOutputHostBufferMemory;
-    std::vector<void*> randomSamplingOutputPointer;
+    VkDeviceMemory randomSamplingOutputBufferMemory;
+    VkBuffer absWorkingBuffer;
+    VkDeviceMemory absWorkingBufferMemory;
+    VkDeviceMemory triangleCounterBufferMemory;
+    VkBuffer randomSamplingOutputHostBuffer;
+    VkDeviceMemory randomSamplingOutputHostBufferMemory;
+    void* randomSamplingOutputPointer;
 
-    std::vector<VkBuffer> pvsBulkInsertBuffer;
-    std::vector<VkDeviceMemory> pvsBulkInsertBufferMemory;
+    VkBuffer pvsBulkInsertBuffer;
+    VkDeviceMemory pvsBulkInsertBufferMemory;
 
-    std::vector<VkDeviceMemory> pvsBufferMemory;
+    VkDeviceMemory pvsBufferMemory;
     std::vector<void*> pvsPointer;
-    std::vector<VkBuffer> pvsCapacityUniformBuffer;
-    std::vector<VkDeviceMemory> pvsCapacityUniformMemory;
+    VkBuffer pvsCapacityUniformBuffer;
+    VkDeviceMemory pvsCapacityUniformMemory;
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;
@@ -249,10 +243,7 @@ private:
     void createTopLevelAS();
     void buildAS(const VkBuffer instanceBuffer, const VkGeometryNV *geometry);
     void createDescriptorSetLayout();
-    void createDescriptorSets(
-        VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<VkBuffer> &uniformBuffers,
-        int threadId
-    );
+    void createDescriptorSets(VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<VkBuffer> &uniformBuffers);
     void createDescriptorPool();
     void createPipeline(
         const std::array<VkPipelineShaderStageCreateInfo, 3> &shaderStages,
@@ -267,26 +258,25 @@ private:
         uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex
     );
     void createCommandBuffers();
-    void copyHaltonPointsToBuffer(int threadId);
+    void copyHaltonPointsToBuffer();
     void updateViewCellBuffer(int viewCellIndex);
     void createBuffers(const std::vector<uint32_t> &indices);
     void createDescriptorSets();
     void createRandomSamplingPipeline();
     void createABSDescriptorSetLayout();
-    void createABSDescriptorSets(VkBuffer vertexBuffer, int threadId);
+    void createABSDescriptorSets(VkBuffer vertexBuffer);
     void createABSPipeline();
-    void createComputeDescriptorSets(int threadId);
+    void createComputeDescriptorSets();
     void createComputeDescriptorSetLayout();
     void createComputePipeline();
-    void createHaltonComputeDescriptorSets(int threadId);
+    void createHaltonComputeDescriptorSets();
     void createHaltonComputeDescriptorSetLayout();
     void createHaltonComputePipeline();
-    ViewCell getViewCellTile(int numThreads, int viewCellIndex, int threadId);
     void resetPVSGPUBuffer();
     void resetAtomicBuffers();
     void resizePVSBuffer(int newSize);
     void generateHaltonSequence(int n, float rand);
 
-    ShaderExecutionInfo randomSample(int numRays, int threadId, int viewCellIndex);
-    ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId, int viewCellIndex);
+    ShaderExecutionInfo randomSample(int numRays, int viewCellIndex);
+    ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int viewCellIndex);
 };

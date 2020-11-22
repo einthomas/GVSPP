@@ -57,8 +57,6 @@ public:
     void startVisibilityThread();
 
 private:
-    const int NUM_THREADS = 1;
-
     //QVulkanWindow *window;
     GLFWVulkanWindow *window;
     std::vector<std::map<std::string, std::string>> se;
@@ -166,8 +164,6 @@ private:
     bool loadPVS;
     bool storePVS;
     std::vector<ViewCell> viewCells;
-    //std::thread visibilityThread;
-    std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
     float totalError;
     float maxError;
