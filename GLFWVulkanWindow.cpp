@@ -31,7 +31,6 @@ void GLFWVulkanWindow::initVulkan() {
 void GLFWVulkanWindow::initRenderer() {
     renderer = new VulkanRenderer(this);
     renderer->startVisibilityThread();
-    //renderer->nirenstein();
 }
 
 void GLFWVulkanWindow::createSurface() {

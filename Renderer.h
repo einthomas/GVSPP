@@ -13,8 +13,6 @@
 
 #include "viewcell.h"
 
-class NirensteinSampler;
-
 struct Settings {
     std::string modelName;
     int viewCellIndex;
@@ -181,7 +179,6 @@ private:
     float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
     void loadPVSFromFile(std::string file);
 
-    NirensteinSampler *nirensteinSampler;
     std::vector<glm::vec3> viewCellSizes;
     std::vector<glm::mat4> viewCellMatrices;
 };
