@@ -2002,7 +2002,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         VkDeviceSize bufferSize = sizeof(triangles[0]) * triangles.size();
 
         // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;                 // TODO: Create staging buffer beforehand and reuse it
+        VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         VulkanUtil::createBuffer(
             physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

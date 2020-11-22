@@ -170,9 +170,6 @@ private:
     unsigned int pvsBufferCapacity;
 
     GPUHashSet *gpuHashSet;
-    //int* hashTablePVS;
-    //char *inserted;
-    //char *device_inserted;
     int hashTableCapacity;
     RasterVisibility *rasterVisibility;
 
