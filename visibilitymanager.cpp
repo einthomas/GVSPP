@@ -22,11 +22,9 @@ struct UniformBufferObjectMultiView {
 
 VisibilityManager::VisibilityManager(
     bool USE_TERMINATION_CRITERION,
-    bool USE_RECURSIVE_EDGE_SUBDIVISION,
     long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT,
     long NEW_TRIANGLE_TERMINATION_THRESHOLD,
     long RANDOM_RAYS_PER_ITERATION,
-    long MAX_SUBDIVISION_STEPS,
     long NUM_ABS_SAMPLES,
     long REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
     long MAX_BULK_INSERT_BUFFER_SIZE,
@@ -49,11 +47,9 @@ VisibilityManager::VisibilityManager(
     VkFormat depthFormat
 ):
     USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
-    USE_RECURSIVE_EDGE_SUBDIVISION(USE_RECURSIVE_EDGE_SUBDIVISION),
     NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT(NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
-    ABS_MAX_SUBDIVISION_STEPS(MAX_SUBDIVISION_STEPS),
     NUM_ABS_SAMPLES(NUM_ABS_SAMPLES + 9),
     NUM_REVERSE_SAMPLING_SAMPLES(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE),
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
@@ -448,17 +444,11 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
     absWorkingBuffer.resize(numThreads);
     absWorkingBufferMemory.resize(numThreads);
 
-    edgeSubdivOutputBuffer.resize(numThreads);
-    edgeSubdivOutputBufferMemory.resize(numThreads);
-    edgeSubdivOutputHostBuffer.resize(numThreads);
-    edgeSubdivOutputHostBufferMemory.resize(numThreads);
-
     haltonPointsBuffer.resize(numThreads);
     haltonPointsBufferMemory.resize(numThreads);
 
     randomSamplingOutputPointer.resize(numThreads);
     absOutputPointer.resize(numThreads);
-    edgeSubdivOutputPointer.resize(numThreads);
 
     pvsBuffer.resize(numThreads);
     pvsBufferMemory.resize(numThreads);
@@ -480,39 +470,19 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize absOutputBufferSize;
     VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION;
-    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        absOutputBufferSize = sizeof(Sample) * (long long)(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
-    } else {
-        //absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
-        absOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
-    }
-    VkDeviceSize edgeSubdivOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
+    //absOutputBufferSize = sizeof(Sample) * std::min(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * NUM_REVERSE_SAMPLING_SAMPLES, MAX_TRIANGLE_COUNT);
+    absOutputBufferSize = sizeof(Sample) * MAX_TRIANGLE_COUNT;
     VkDeviceSize randomSamplingOutputBufferSize = std::max(sizeof(Sample) * std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT), absOutputBufferSize);
 
     VkDeviceSize viewCellBufferSize = sizeof(viewCells[0]) * viewCells.size();
     for (int i = 0; i < numThreads; i++) {
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            VulkanUtil::createBuffer(
-                physicalDevice,
-                logicalDevice, randomSamplingOutputBufferSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-            );
-            VulkanUtil::createBuffer(
-                physicalDevice,
-                logicalDevice, randomSamplingOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, randomSamplingOutputHostBuffer[i], randomSamplingOutputHostBufferMemory[i],
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-            );
-            vkMapMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
-        } else {
-            VulkanUtil::createBuffer(
-                physicalDevice,
-                logicalDevice, randomSamplingOutputBufferSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-            );
-            vkMapMemory(logicalDevice, randomSamplingOutputBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
-        }
+        VulkanUtil::createBuffer(
+            physicalDevice,
+            logicalDevice, randomSamplingOutputBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            randomSamplingOutputBuffer[i], randomSamplingOutputBufferMemory[i], VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+        );
+        vkMapMemory(logicalDevice, randomSamplingOutputBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
 
         VulkanUtil::createBuffer(
             physicalDevice,
@@ -528,22 +498,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             absWorkingBuffer[i], absWorkingBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-
-        // Edge subdivision buffers
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            VulkanUtil::createBuffer(
-                physicalDevice,
-                logicalDevice, edgeSubdivOutputBufferSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-            );
-            VulkanUtil::createBuffer(
-                physicalDevice,
-                logicalDevice, edgeSubdivOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, edgeSubdivOutputHostBuffer[i], edgeSubdivOutputHostBufferMemory[i],
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-            );
-            vkMapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], 0, edgeSubdivOutputBufferSize, 0, &edgeSubdivOutputPointer[i]);
-        }
 
         // Create halton points buffer using GPU memory
         VulkanUtil::createBuffer(
@@ -869,29 +823,27 @@ void VisibilityManager::initRayTracing(
 
     createDescriptorSetLayout();
     createABSDescriptorSetLayout();
-    createEdgeSubdivDescriptorSetLayout();
     createComputeDescriptorSetLayout();
     createHaltonComputeDescriptorSetLayout();
 
     descriptorSet.resize(numThreads);
     descriptorSetABS.resize(numThreads);
-    descriptorSetEdgeSubdiv.resize(numThreads);
     descriptorSetCompute.resize(numThreads);
     descriptorSetHaltonCompute.resize(numThreads);
     for (int i = 0; i < numThreads; i++) {   // TODO: Cleanup
-        std::array<VkDescriptorSetLayout, 5> d = {
-            descriptorSetLayout, descriptorSetLayoutABS, descriptorSetLayoutEdgeSubdiv,
+        std::array<VkDescriptorSetLayout, 4> d = {
+            descriptorSetLayout, descriptorSetLayoutABS,
             descriptorSetLayoutCompute, descriptorSetLayoutHaltonCompute
         };
         VkDescriptorSetAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = 5;
+        allocInfo.descriptorSetCount = 4;
         allocInfo.pSetLayouts = d.data();
 
         // Allocate descriptor sets
-        std::array<VkDescriptorSet, 5> dd = {
-            descriptorSet[i], descriptorSetABS[i], descriptorSetEdgeSubdiv[i],
+        std::array<VkDescriptorSet, 4> dd = {
+            descriptorSet[i], descriptorSetABS[i],
             descriptorSetCompute[i], descriptorSetHaltonCompute[i]
         };
         if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, dd.data()) != VK_SUCCESS) {
@@ -899,9 +851,8 @@ void VisibilityManager::initRayTracing(
         }
         descriptorSet[i] = dd[0];
         descriptorSetABS[i] = dd[1];
-        descriptorSetEdgeSubdiv[i] = dd[2];
-        descriptorSetCompute[i] = dd[3];
-        descriptorSetHaltonCompute[i] = dd[4];
+        descriptorSetCompute[i] = dd[2];
+        descriptorSetHaltonCompute[i] = dd[3];
     }
 
     for (int i = 0; i < numThreads; i++) {
@@ -915,14 +866,6 @@ void VisibilityManager::initRayTracing(
     }
     createABSPipeline();
     createShaderBindingTable(shaderBindingTableABS, shaderBindingTableMemoryABS, pipelineABS);
-
-    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        for (int i = 0; i < numThreads; i++) {
-            createEdgeSubdivDescriptorSets(i);
-        }
-        createEdgeSubdivPipeline();
-        createShaderBindingTable(shaderBindingTableEdgeSubdiv, shaderBindingTableMemoryEdgeSubdiv, pipelineEdgeSubdiv);
-    }
 
     for (int i = 0; i < numThreads; i++) {
         createHaltonComputeDescriptorSets(i);
@@ -1359,41 +1302,6 @@ void VisibilityManager::createABSPipeline() {
     vkDestroyShaderModule(logicalDevice, rayMissShaderStageInfo.module, nullptr);
 }
 
-void VisibilityManager::createEdgeSubdivPipeline() {
-    // Load shaders
-    VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = {};
-    rayGenShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    rayGenShaderStageInfo.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-    rayGenShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_subdiv.rgen.spv");
-    rayGenShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo rayClosestHitShaderStageInfo = {};
-    rayClosestHitShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    rayClosestHitShaderStageInfo.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
-    rayClosestHitShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_abs.rchit.spv");
-    rayClosestHitShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo rayMissShaderStageInfo = {};
-    rayMissShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    rayMissShaderStageInfo.stage = VK_SHADER_STAGE_MISS_BIT_NV;
-    rayMissShaderStageInfo.module = VulkanUtil::createShader(logicalDevice, "shaders/rt/raytrace_abs.rmiss.spv");
-    rayMissShaderStageInfo.pName = "main";
-
-    std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages = {};
-    shaderStages[RT_SHADER_INDEX_RAYGEN] = rayGenShaderStageInfo;
-    shaderStages[RT_SHADER_INDEX_CLOSEST_HIT] = rayClosestHitShaderStageInfo;
-    shaderStages[RT_SHADER_INDEX_MISS] = rayMissShaderStageInfo;
-
-    createPipeline(
-        shaderStages, pipelineEdgeSubdivLayout, pipelineEdgeSubdiv,
-        { descriptorSetLayout, descriptorSetLayoutABS, descriptorSetLayoutEdgeSubdiv }, { }
-    );
-
-    vkDestroyShaderModule(logicalDevice, rayGenShaderStageInfo.module, nullptr);
-    vkDestroyShaderModule(logicalDevice, rayClosestHitShaderStageInfo.module, nullptr);
-    vkDestroyShaderModule(logicalDevice, rayMissShaderStageInfo.module, nullptr);
-}
-
 void VisibilityManager::createComputePipeline() {
     VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
     pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1518,29 +1426,6 @@ void VisibilityManager::createHaltonComputePipeline() {
     }
 }
 
-void VisibilityManager::createEdgeSubdivDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding edgeSubdivOutputBinding = {};
-    edgeSubdivOutputBinding.binding = 0;
-    edgeSubdivOutputBinding.descriptorCount = 1;
-    edgeSubdivOutputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    edgeSubdivOutputBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
-
-    std::array<VkDescriptorSetLayoutBinding, 1> bindings = {
-        edgeSubdivOutputBinding
-    };
-    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(
-            logicalDevice, &layoutInfo, nullptr, &descriptorSetLayoutEdgeSubdiv
-        ) != VK_SUCCESS
-    ) {
-        throw std::runtime_error("failed to create rt descriptor set layout edge subdivision");
-    }
-}
-
 void VisibilityManager::createABSDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding absWorkingBufferBinding = {};
     absWorkingBufferBinding.binding = 0;
@@ -1562,29 +1447,6 @@ void VisibilityManager::createABSDescriptorSetLayout() {
     ) {
         throw std::runtime_error("failed to create rt descriptor set layout ABS");
     }
-}
-
-void VisibilityManager::createEdgeSubdivDescriptorSets(int threadId) {
-    std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
-
-    VkDescriptorBufferInfo edgeSubdivOutputBufferInfo = {};
-    edgeSubdivOutputBufferInfo.buffer = edgeSubdivOutputBuffer[threadId];
-    edgeSubdivOutputBufferInfo.offset = 0;
-    edgeSubdivOutputBufferInfo.range = VK_WHOLE_SIZE;
-    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = descriptorSetEdgeSubdiv[threadId];
-    descriptorWrites[0].dstBinding = 0;
-    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[0].descriptorCount = 1;
-    descriptorWrites[0].pBufferInfo = &edgeSubdivOutputBufferInfo;
-
-    vkUpdateDescriptorSets(
-        logicalDevice,
-        static_cast<uint32_t>(descriptorWrites.size()),
-        descriptorWrites.data(),
-        0,
-        VK_NULL_HANDLE
-    );
 }
 
 void VisibilityManager::createComputeDescriptorSets(int threadId) {
@@ -1777,14 +1639,6 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int threadId, i
     if (visualizeRandomRays) {
         VkDeviceSize bufferSize = sizeof(Sample) * numTriangles;
 
-        // Copy the intersected triangles GPU buffer to the host buffer
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            VulkanUtil::copyBuffer(
-                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                randomSamplingOutputHostBuffer[threadId], bufferSize
-            );
-        }
-
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         for (int i = 0; i < numTriangles; i++) {
             rayVertices[viewCellIndex].push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
@@ -1879,11 +1733,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
         unsigned int *n = (unsigned int*) data;
         numRsTriangles = n[1];
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            numTriangles = n[0];
-        } else {
-            numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
-        }
+        numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
         numRsRays = n[3];
         pvsSize = n[4];
 
@@ -1905,14 +1755,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
     if (visualizeABSRays) {
         // Copy intersected triangles from VRAM to CPU accessible buffer
         VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            VulkanUtil::copyBuffer(
-                logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                randomSamplingOutputHostBuffer[threadId], bufferSize
-            );
-        }
 
         Sample *s = (Sample*)randomSamplingOutputPointer[0];
         // Visualize ABS rays
@@ -1957,146 +1799,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
     return { numTriangles, numRsTriangles, numRays, numRsRays};
     //return triangles.size() * 9 * 2;
-}
-
-ShaderExecutionInfo VisibilityManager::edgeSubdivide(int numSamples, int threadId, int viewCellIndex) {
-    // Reset atomic triangle counter
-    {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 4;
-
-        // Create staging buffer using host-visible memory
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice, logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            stagingBuffer, stagingBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        // Copy triangles data to the staging buffer
-        unsigned int numTriangles[4] = { 0, 0, 0, 0 };
-        void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);    // Map buffer memory into CPU accessible memory
-        memcpy(data, &numTriangles, (size_t) bufferSize);  // Copy vertex data to mapped memory
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-        // Copy triangles data from the staging buffer to GPU-visible absWorkingBuffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, stagingBuffer,
-            triangleCounterBuffer[threadId], bufferSize
-        );
-
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
-    }
-
-    // Record and execute a command buffer for running the actual edge subdivision on the GPU
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(commandBufferEdgeSubdiv[threadId], &beginInfo);
-    vkCmdBindPipeline(commandBufferEdgeSubdiv[threadId], VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipelineEdgeSubdiv);
-    vkCmdBindDescriptorSets(
-        commandBufferEdgeSubdiv[threadId], VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipelineEdgeSubdivLayout, 0, 1,
-        &descriptorSet[threadId], 0, nullptr
-    );
-    vkCmdBindDescriptorSets(
-        commandBufferEdgeSubdiv[threadId], VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipelineEdgeSubdivLayout, 1, 1,
-        &descriptorSetABS[threadId], 0, nullptr
-    );
-    vkCmdBindDescriptorSets(
-        commandBufferEdgeSubdiv[threadId], VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipelineEdgeSubdivLayout, 2, 1,
-        &descriptorSetEdgeSubdiv[threadId], 0, nullptr
-    );
-    vkCmdTraceRaysNV(
-        commandBufferEdgeSubdiv[threadId],
-        shaderBindingTableEdgeSubdiv, bindingOffsetRayGenShader,
-        shaderBindingTableEdgeSubdiv, bindingOffsetMissShader, bindingStride,
-        shaderBindingTableEdgeSubdiv, bindingOffsetHitShader, bindingStride,
-        VK_NULL_HANDLE, 0, 0,
-        numSamples, 1, 1
-    );
-    vkEndCommandBuffer(commandBufferEdgeSubdiv[threadId]);
-
-    VulkanUtil::executeCommandBuffer(
-        logicalDevice, computeQueue, commandBufferEdgeSubdiv[threadId],
-        commandBufferFence[threadId], queueSubmitMutex
-    );
-
-    // Get number of intersected triangles from the GPU
-    unsigned int numTriangles;
-    unsigned int numRsTriangles;
-    unsigned int numRays;
-    unsigned int numRsRays;
-    {
-        VkDeviceSize bufferSize = sizeof(unsigned int) * 5;
-
-        VkBuffer hostBuffer;
-        VkDeviceMemory hostBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, hostBuffer, hostBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, triangleCounterBuffer[threadId],
-            hostBuffer, bufferSize
-        );
-
-        void *data;
-        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
-        unsigned int *n = (unsigned int*) data;
-        numRsTriangles = n[1];
-        numTriangles = n[0] - numRsTriangles;       // In this case, n[0] contains the number of ALL triangles (rs and non-rs)
-        numRays = n[2];
-        numRsRays = n[3];
-        pvsSize = n[4];
-
-        vkUnmapMemory(logicalDevice, hostBufferMemory);
-        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
-        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
-    }
-
-    if (visualizeEdgeSubdivRays) {
-        // Copy intersected triangles from VRAM to CPU accessible buffer
-        VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, edgeSubdivOutputBuffer[threadId],
-            edgeSubdivOutputHostBuffer[threadId], bufferSize
-        );
-
-        Sample *s = (Sample*)edgeSubdivOutputPointer[0];
-        for (int i = 0; i < numTriangles + numRsTriangles; i++) {
-            if (s[i].triangleID != -1) {
-                rayVertices[viewCellIndex].push_back({
-                    s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(0.0f)
-                });
-                rayVertices[viewCellIndex].push_back({
-                    s[i].hitPos, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(0.0f)
-                });
-            }
-        }
-    }
-
-    /*
-    {
-        //VkDeviceSize bufferSize = sizeof(Sample) * numSamples * int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
-        VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
-
-        // Copy the intersected triangles GPU buffer to the host buffer
-        VulkanUtil::copyBuffer(
-            logicalDevice, commandPool[threadId], computeQueue, edgeSubdivOutputBuffer[threadId],
-            edgeSubdivOutputHostBuffer[threadId], bufferSize, queueSubmitMutex
-        );
-        //std::cout << bufferSize << " " << (bufferSize / 1000.0f) / 1000.0f << std::endl;
-    }
-    */
-
-    return { numTriangles, numRsTriangles, numRays, numRsRays };
-    //return numSamples * int(pow(2, MAX_SUBDIVISION_STEPS) + 1);
 }
 
 void VisibilityManager::createShaderBindingTable(
@@ -2181,12 +1883,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
 
                 // Copy the intersected triangles GPU buffer to the host buffer
-                if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                        randomSamplingOutputHostBuffer[threadId], bufferSize
-                    );
-                }
 
                 Sample *s = (Sample*)randomSamplingOutputPointer[0];
                 absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
@@ -2238,95 +1934,19 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().entries.back().absTris += absInfo.numTriangles;
             statistics.back().entries.back().absRsTris += absInfo.numRsTriangles;
 
-            if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-                if (absInfo.numRsTriangles > 0) {
-                    // Copy intersected triangles from VRAM to CPU accessible buffer
-                    VkDeviceSize bufferSize = sizeof(Sample) * absInfo.numRsTriangles;
-                    VkDeviceSize srcBufferOffset = sizeof(Sample) * absInfo.numRays;
+            if (absInfo.numTriangles + absInfo.numRsTriangles > 0) {
+                // Copy intersected triangles from VRAM to CPU accessible buffer
+                VkDeviceSize bufferSize = sizeof(Sample) * (absInfo.numTriangles + absInfo.numRsTriangles);
 
-                    // Copy the intersected triangles GPU buffer to the host buffer
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                        randomSamplingOutputHostBuffer[threadId], bufferSize, srcBufferOffset
-                    );
-
-                    Sample *s = (Sample*)randomSamplingOutputPointer[0];
-                    absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numRsTriangles);
-                }
-            } else {
-                if (absInfo.numTriangles + absInfo.numRsTriangles > 0) {
-                    // Copy intersected triangles from VRAM to CPU accessible buffer
-                    VkDeviceSize bufferSize = sizeof(Sample) * (absInfo.numTriangles + absInfo.numRsTriangles);
-
-                    // Copy the intersected triangles GPU buffer to the host buffer
-                    statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
-                    /*
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, absOutputBuffer[threadId],
-                        absOutputHostBuffer[threadId], bufferSize
-                    );
-                    */
-                    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-                        VulkanUtil::copyBuffer(
-                            logicalDevice, transferCommandPool, transferQueue, randomSamplingOutputBuffer[threadId],
-                            randomSamplingOutputHostBuffer[threadId], bufferSize
-                        );
-                    }
-                    statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
-
-                    Sample *s = (Sample*)randomSamplingOutputPointer[0];
-                    absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
-                }
+                // Copy the intersected triangles GPU buffer to the host buffer
+                statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
+                Sample *s = (Sample*)randomSamplingOutputPointer[0];
+                absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
+                statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
             }
 
             statistics.back().entries.back().pvsSize = pvsSize;
             statistics.back().update();
-
-            if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-                // Execute edge subdivision
-                if (GPU_SET_TYPE == 1) {
-                    statistics.back().startOperation(GPU_HASH_SET_RESIZE);
-                    int potentialNewTriangles = std::min(
-                        absWorkingVector.size() * NUM_ABS_SAMPLES * ((size_t)std::pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1) * NUM_REVERSE_SAMPLING_SAMPLES,
-                        (size_t)MAX_TRIANGLE_COUNT - pvsSize
-                    );
-                    if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                        resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
-                    }
-                    statistics.back().endOperation(GPU_HASH_SET_RESIZE);
-                }
-
-                statistics.back().startOperation(EDGE_SUBDIVISION);
-                //ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numTriangles, threadId, viewCellIndex);
-                ShaderExecutionInfo edgeSubdivideInfo = edgeSubdivide(absInfo.numRays, threadId, viewCellIndex);
-                statistics.back().endOperation(EDGE_SUBDIVISION);
-
-                statistics.back().entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
-                statistics.back().entries.back().edgeSubdivRays += edgeSubdivideInfo.numRays;
-                statistics.back().entries.back().edgeSubdivRsRays += edgeSubdivideInfo.numRsRays;
-                statistics.back().entries.back().edgeSubdivTris += edgeSubdivideInfo.numTriangles;
-                statistics.back().entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
-
-                statistics.back().startOperation(EDGE_SUBDIVISION_INSERT);
-
-                if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
-                    // Copy intersected triangles from VRAM to CPU accessible buffer
-                    VkDeviceSize bufferSize = sizeof(Sample) * (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
-
-                    // Copy the intersected triangles GPU buffer to the host buffer
-                    VulkanUtil::copyBuffer(
-                        logicalDevice, transferCommandPool, transferQueue, edgeSubdivOutputBuffer[threadId],
-                        edgeSubdivOutputHostBuffer[threadId], bufferSize
-                    );
-
-                    Sample *s = (Sample*)edgeSubdivOutputPointer[0];
-                    absSampleQueue.insert(absSampleQueue.end(), s, s + edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles);
-                }
-                statistics.back().endOperation(EDGE_SUBDIVISION_INSERT);
-
-                statistics.back().entries.back().pvsSize = pvsSize;
-                statistics.back().update();
-            }
         }
 
         if (USE_TERMINATION_CRITERION) {
@@ -2374,14 +1994,6 @@ void VisibilityManager::releaseResources() {
         vkDestroyBuffer(logicalDevice, absWorkingBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, absWorkingBufferMemory[i], nullptr);
 
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            vkDestroyBuffer(logicalDevice, edgeSubdivOutputBuffer[i], nullptr);
-            vkFreeMemory(logicalDevice, edgeSubdivOutputBufferMemory[i], nullptr);
-            vkUnmapMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i]);
-            vkDestroyBuffer(logicalDevice, edgeSubdivOutputHostBuffer[i], nullptr);
-            vkFreeMemory(logicalDevice, edgeSubdivOutputHostBufferMemory[i], nullptr);
-        }
-
         vkDestroyBuffer(logicalDevice, triangleCounterBuffer[i], nullptr);
         vkFreeMemory(logicalDevice, triangleCounterBufferMemory[i], nullptr);
 
@@ -2396,11 +2008,10 @@ void VisibilityManager::releaseResources() {
         VkCommandBuffer commandBuffers[] = {
             commandBuffer[i],
             commandBufferABS[i],
-            commandBufferEdgeSubdiv[i],
             commandBufferCompute[i],
             commandBufferHaltonCompute[i]
         };
-        vkFreeCommandBuffers(logicalDevice, commandPool[i], 5, commandBuffers);
+        vkFreeCommandBuffers(logicalDevice, commandPool[i], 4, commandBuffers);
 
         vkDestroyCommandPool(logicalDevice, commandPool[i], nullptr);
     }
@@ -2408,26 +2019,13 @@ void VisibilityManager::releaseResources() {
     vkDestroyBuffer(logicalDevice, pvsCapacityUniformBuffer[0], nullptr);
     vkFreeMemory(logicalDevice, pvsCapacityUniformMemory[0], nullptr);
 
-    /*
-    cudaDestroyExternalMemory(pvsCudaMemory);
-    cudaDestroyExternalMemory(haltonCudaMemory);
-    cudaDestroyExternalMemory(randomSamplingOutputCudaMemory);
-    cudaDestroyExternalMemory(absOutputCudaMemory);
-    cudaDestroyExternalMemory(edgeSubdivOutputCudaMemory);
-    */
-
     vkDestroyBuffer(logicalDevice, shaderBindingTable, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemory, nullptr);
     vkDestroyBuffer(logicalDevice, shaderBindingTableABS, nullptr);
     vkFreeMemory(logicalDevice, shaderBindingTableMemoryABS, nullptr);
-    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        vkDestroyBuffer(logicalDevice, shaderBindingTableEdgeSubdiv, nullptr);
-        vkFreeMemory(logicalDevice, shaderBindingTableMemoryEdgeSubdiv, nullptr);
-    }
 
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutABS, nullptr);
-    vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutEdgeSubdiv, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutCompute, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutHaltonCompute, nullptr);
 
@@ -2435,10 +2033,7 @@ void VisibilityManager::releaseResources() {
     vkDestroyPipelineLayout(logicalDevice, pipelineLayout, nullptr);
     vkDestroyPipeline(logicalDevice, pipelineABS, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineABSLayout, nullptr);
-    if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-        vkDestroyPipeline(logicalDevice, pipelineEdgeSubdiv, nullptr);
-        vkDestroyPipelineLayout(logicalDevice, pipelineEdgeSubdivLayout, nullptr);
-    }
+
     vkDestroyPipeline(logicalDevice, pipelineCompute, nullptr);
     vkDestroyPipelineLayout(logicalDevice, pipelineComputeLayout, nullptr);
     vkDestroyPipeline(logicalDevice, pipelineHaltonCompute, nullptr);
@@ -2495,7 +2090,6 @@ void VisibilityManager::fetchPVS() {
 void VisibilityManager::createCommandBuffers() {
     commandBuffer.resize(numThreads);
     commandBufferABS.resize(numThreads);
-    commandBufferEdgeSubdiv.resize(numThreads);
     commandBufferCompute.resize(numThreads);
     commandBufferHaltonCompute.resize(numThreads);
     commandBufferFence.resize(numThreads);
@@ -2513,10 +2107,6 @@ void VisibilityManager::createCommandBuffers() {
 
         if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBufferABS[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate rt command buffer abs!");
-        }
-
-        if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBufferEdgeSubdiv[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate rt command buffer edge subdiv!");
         }
 
         if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBufferCompute[i]) != VK_SUCCESS) {

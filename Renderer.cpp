@@ -155,11 +155,9 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     }
     visibilityManager = new VisibilityManager(
         se[0].at("USE_TERMINATION_CRITERION") == "true",
-        se[0].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
-        std::stol(se[0].at("ABS_MAX_SUBDIVISION_STEPS")),
         std::stol(se[0].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
         numReverseSamplingSamples,
         std::stol(se[0].at("MAX_BULK_INSERT_BUFFER_SIZE")),
@@ -1173,8 +1171,7 @@ void VulkanRenderer::startNextFrame(
 
     // Draw ray visualizations
     if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
@@ -1230,14 +1227,6 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellIndex++;
     currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
-    /*
-    if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
-    ) {
-        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
-    }
-    */
 
     if (se[0].at("ERROR_VISUALIZATION") == "true") {
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
@@ -1476,16 +1465,12 @@ void VulkanRenderer::writeShaderDefines(int settingsIndex) {
     shaderDefinesFile.open("shaders/rt/defines.glsl");
     shaderDefinesFile << "const float ABS_DELTA = " << se[settingsIndex].at("ABS_DELTA") << ";\n";
     shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se[settingsIndex].at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
-    shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se[settingsIndex].at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
     shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se[settingsIndex].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
     shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se[settingsIndex].at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
     shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se[settingsIndex].at("REVERSE_SAMPLING_METHOD") << "\n";
     shaderDefinesFile << "#define SET_TYPE " << se[settingsIndex].at("SET_TYPE") << "\n";
     if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
         shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
-    }
-    if (se[settingsIndex].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
-        shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
     }
     shaderDefinesFile.close();
 }
@@ -1570,11 +1555,9 @@ void VulkanRenderer::startVisibilityThread() {
                 }
                 visibilityManager = new VisibilityManager(
                     se[i].at("USE_TERMINATION_CRITERION") == "true",
-                    se[i].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
                     std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
-                    std::stol(se[i].at("ABS_MAX_SUBDIVISION_STEPS")),
                     std::stol(se[i].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
                     numReverseSamplingSamples,
                     std::stol(se[i].at("MAX_BULK_INSERT_BUFFER_SIZE")),
@@ -1720,8 +1703,7 @@ void VulkanRenderer::startVisibilityThread() {
 
             // Create and fill ray visualization buffers
             if (
-                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-                || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
             ) {
                 createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
                 updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);

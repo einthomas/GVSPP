@@ -54,7 +54,6 @@ public:
     std::vector<std::vector<Vertex>> rayVertices;
     bool visualizeRandomRays = false;
     bool visualizeABSRays = false;
-    bool visualizeEdgeSubdivRays = false;
     VkQueue computeQueue;
     VkQueue transferQueue;
     std::vector<VkCommandPool> commandPool;
@@ -66,11 +65,9 @@ public:
 
     VisibilityManager(
         bool USE_TERMINATION_CRITERION,
-        bool USE_RECURSIVE_EDGE_SUBDIVISION,
         long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT,
         long NEW_TRIANGLE_TERMINATION_THRESHOLD,
         long RANDOM_RAYS_PER_ITERATION,
-        long ABS_MAX_SUBDIVISION_STEPS,
         long NUM_ABS_SAMPLES,
         long REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE,
         long MAX_BULK_INSERT_BUFFER_SIZE,
@@ -146,7 +143,6 @@ private:
     int numThreads;
 
     const bool USE_TERMINATION_CRITERION;
-    const bool USE_RECURSIVE_EDGE_SUBDIVISION;
     const long NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT;
     const long NUM_ABS_SAMPLES;
@@ -158,7 +154,6 @@ private:
     const long RANDOM_RAYS_PER_ITERATION;
     const int MIN_ABS_TRIANGLES_PER_ITERATION = 1;
     const long MAX_ABS_TRIANGLES_PER_ITERATION = 100000;
-    const long ABS_MAX_SUBDIVISION_STEPS;
     const uint32_t RT_SHADER_INDEX_RAYGEN = 0;
     const uint32_t RT_SHADER_INDEX_MISS = 1;
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
@@ -178,7 +173,6 @@ private:
 
     std::vector<VkCommandBuffer> commandBuffer;
     std::vector<VkCommandBuffer> commandBufferABS;
-    std::vector<VkCommandBuffer> commandBufferEdgeSubdiv;
     std::vector<VkCommandBuffer> commandBufferCompute;
     std::vector<VkCommandBuffer> commandBufferHaltonCompute;
     std::vector<VkFence> commandBufferFence;
@@ -187,8 +181,6 @@ private:
     VkPipelineLayout pipelineLayout;
     VkPipeline pipelineABS;
     VkPipelineLayout pipelineABSLayout;
-    VkPipeline pipelineEdgeSubdiv;
-    VkPipelineLayout pipelineEdgeSubdivLayout;
     VkPipeline pipelineCompute;
     VkPipelineLayout pipelineComputeLayout;
     VkPipeline pipelineHaltonCompute;
@@ -199,8 +191,6 @@ private:
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkDescriptorSet> descriptorSetABS;
     VkDescriptorSetLayout descriptorSetLayoutABS;
-    std::vector<VkDescriptorSet> descriptorSetEdgeSubdiv;
-    VkDescriptorSetLayout descriptorSetLayoutEdgeSubdiv;
     std::vector<VkDescriptorSet> descriptorSetCompute;
     VkDescriptorSetLayout descriptorSetLayoutCompute;
     std::vector<VkDescriptorSet> descriptorSetHaltonCompute;
@@ -211,8 +201,6 @@ private:
     VkDeviceMemory shaderBindingTableMemory;
     VkBuffer shaderBindingTableABS;
     VkDeviceMemory shaderBindingTableMemoryABS;
-    VkBuffer shaderBindingTableEdgeSubdiv;
-    VkDeviceMemory shaderBindingTableMemoryEdgeSubdiv;
     std::vector<VkBuffer> haltonPointsBuffer;
     std::vector<VkDeviceMemory> haltonPointsBufferMemory;
     std::vector<VkBuffer> viewCellBuffer;
@@ -222,11 +210,6 @@ private:
     std::vector<VkBuffer> absWorkingBuffer;
     std::vector<VkDeviceMemory> absWorkingBufferMemory;
     std::vector<void*> absOutputPointer;
-    std::vector<VkBuffer> edgeSubdivOutputBuffer;
-    std::vector<VkDeviceMemory> edgeSubdivOutputBufferMemory;
-    std::vector<VkBuffer> edgeSubdivOutputHostBuffer;
-    std::vector<VkDeviceMemory> edgeSubdivOutputHostBufferMemory;
-    std::vector<void*> edgeSubdivOutputPointer;
     std::vector<VkDeviceMemory> triangleCounterBufferMemory;
     std::vector<VkBuffer> randomSamplingOutputHostBuffer;
     std::vector<VkDeviceMemory> randomSamplingOutputHostBufferMemory;
@@ -239,19 +222,6 @@ private:
     std::vector<void*> pvsPointer;
     std::vector<VkBuffer> pvsCapacityUniformBuffer;
     std::vector<VkDeviceMemory> pvsCapacityUniformMemory;
-    /*
-    int *pvsCuda;
-    cudaExternalMemory_t pvsCudaMemory = {};
-    float *haltonCuda;
-    cudaExternalMemory_t haltonCudaMemory = {};
-
-    Sample *randomSamplingOutputCuda;
-    cudaExternalMemory_t randomSamplingOutputCudaMemory = {};
-    Sample *absOutputCuda;
-    cudaExternalMemory_t absOutputCudaMemory = {};
-    Sample *edgeSubdivOutputCuda;
-    cudaExternalMemory_t edgeSubdivOutputCudaMemory = {};
-     */
 
     AccelerationStructure bottomLevelAS;
     AccelerationStructure topLevelAS;
@@ -305,9 +275,6 @@ private:
     void createABSDescriptorSetLayout();
     void createABSDescriptorSets(VkBuffer vertexBuffer, int threadId);
     void createABSPipeline();
-    void createEdgeSubdivPipeline();
-    void createEdgeSubdivDescriptorSetLayout();
-    void createEdgeSubdivDescriptorSets(int threadId);
     void createComputeDescriptorSets(int threadId);
     void createComputeDescriptorSetLayout();
     void createComputePipeline();
@@ -322,5 +289,4 @@ private:
 
     ShaderExecutionInfo randomSample(int numRays, int threadId, int viewCellIndex);
     ShaderExecutionInfo adaptiveBorderSample(const std::vector<Sample> &absWorkingVector, int threadId, int viewCellIndex);
-    ShaderExecutionInfo edgeSubdivide(int numSamples, int threadId, int viewCellIndex);
 };

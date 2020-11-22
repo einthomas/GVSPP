@@ -69,26 +69,11 @@ layout(location = 0) rayPayloadNV vec4 hitInfo;
 
 int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
     int index = -1;
-    
-    #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
-        if (targetSampleReached) {
-            if (insert(randomSamplingOutput[launchIndex].triangleID)) {
-                index = int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1));
-                randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
-            }
-            randomSamplingOutput[launchIndex] = s;
-        } else {
-            if (insert(s.triangleID)) {
-                randomSamplingOutput[int(gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1))] = s;
-            }
-        }
-    #else
-        if (insert(s.triangleID)) {
-            atomicAdd(rsTriangleCounter, 1);
-            randomSamplingOutput[int(atomicAdd(triangleCounter, 1))] = s;
-        }
-    #endif
-    
+    if (insert(s.triangleID)) {
+        atomicAdd(rsTriangleCounter, 1);
+        randomSamplingOutput[int(atomicAdd(triangleCounter, 1))] = s;
+    }
+
     return index;
 }
 
@@ -186,74 +171,21 @@ void main() {
 
         int triangleID = int(hitInfo.w);
         vec3 hitPoint = hitInfo.xyz;
-        #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
-            // If the recursive edge subdivision strategy is used, samples are stored in randomSamplingOutput at index
-            // launchIndex. Each two samples surrounding the same triangle form an edge, which is recursively
-            // subdivided if rays through such samples hit different triangles. The subdivision is performed
-            // in the raytrace_subdiv.rgen shader
 
-            #ifdef USE_3D_VIEW_CELL
-                randomSamplingOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-                if (triangleID != -1) {
-                    atomicAdd(triangleCounter, 1);
-                }
-            #else
-                if (triangleID != -1) {
-                    atomicAdd(triangleCounter, 1);
-                    randomSamplingOutput[launchIndex] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-                } else {
-                    triangleID = -1;
-                    randomSamplingOutput[launchIndex] = Sample(-1, rayOrigin, hitPoint, samplePos);
-                }
-            #endif
-
-            // Reverse sampling
-            Sample foundSample;
-            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                bool discontinuityFound = reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-            #elif REVERSE_SAMPLING_METHOD == 1
-                vec3 v[3] = { currentWP, nextWP, lastWP };
-                bool discontinuityFound = reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-            #endif
-
-            // If a discontinuity has been found but no ray was traced through the original sample, the
-            // edge that would be subdivided would span from the current triangle, for which ABS samples
-            // are generated, to the sample that lies on the occluding triangle that caused the discontinuity.
-            // This is not intended, therefore the triangleID of the sample at launchIndex is set to -2
-            if (discontinuityFound && foundSample.triangleID == -2 && triangleID != -1) {
-                if (insert(randomSamplingOutput[launchIndex].triangleID)) {
-                    uint index = gl_LaunchSizeNV.x + atomicAdd(rsTriangleCounter, 1);
-                    randomSamplingOutput[index] = randomSamplingOutput[launchIndex];
-                }
-                randomSamplingOutput[launchIndex].triangleID = -2;
-            }
-        #else
-            // Reverse sampling
-            Sample foundSample;
-            #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-                reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-            #elif REVERSE_SAMPLING_METHOD == 1
-                vec3 v[3] = { currentWP, nextWP, lastWP };
-                reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-            #endif
-            
-            if (triangleID != -1 && insert(triangleID)) {
-                uint index = atomicAdd(triangleCounter, 1);
-                randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-            }
-            /*
-            if (triangleID != -1 && s.triangleID == 597294) {
-                insert(triangleID);
-                uint index = atomicAdd(triangleCounter, 1);
-                randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
-            }
-            */
+        // Reverse sampling
+        Sample foundSample;
+        #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
+            reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+        #elif REVERSE_SAMPLING_METHOD == 1
+            vec3 v[3] = { currentWP, nextWP, lastWP };
+            reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
         #endif
+
+        if (triangleID != -1 && insert(triangleID)) {
+            uint index = atomicAdd(triangleCounter, 1);
+            randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);
+        }
     #ifndef USE_3D_VIEW_CELL
-        } else {
-            #ifdef USE_RECURSIVE_EDGE_SUBDIVISION
-                randomSamplingOutput[launchIndex] = Sample(-2, vec3(-1.0f),vec3(-1.0f),vec3(-1.0f));
-            #endif
         }
     #endif
 }
