@@ -13,7 +13,6 @@
 #include "viewcell.h"
 #include "sample.h"
 #include "Vertex.h"
-#include "gpuHashTable/linearprobing.h"
 
 struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
@@ -124,73 +123,9 @@ VisibilityManager::VisibilityManager(
         }
     }
 
-    /*
-    int cudaDevice = CUDAUtil::initCuda(deviceUUID.data(), VK_UUID_SIZE);
-    cudaStream_t cudaStream;
-    cudaStreamCreateWithFlags(&cudaStream, cudaStreamNonBlocking);
-    */
-
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
     generateHaltonSequence(RANDOM_RAYS_PER_ITERATION * 4.0f, rand() / float(RAND_MAX));
-
-    /*
-    generateHaltonSequence(300, rand() / float(RAND_MAX));
-    glm::vec4 h;
-    {
-        VkDeviceSize bufferSize = sizeof(glm::vec4) * 300;
-
-        VkBuffer hostBuffer;
-        VkDeviceMemory hostBufferMemory;
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-
-        VulkanUtil::copyBuffer(
-            logicalDevice, transferCommandPool, transferQueue, haltonPointsBuffer[0],
-            hostBuffer, bufferSize//, sizeof(glm::vec4) * (30 - 1)
-        );
-
-        void *data;
-        vkMapMemory(logicalDevice, hostBufferMemory, 0, bufferSize, 0, &data);
-        float *n = (float*) data;
-        for (int i = 0; i < 1200; i += 4) {
-            std::cout << n[i] << ";" << n[i + 1] << ";" << n[i + 2] << ";"  << n[i + 3] << ";" << std::endl;
-        }
-        //h = glm::vec4(n[0], n[1], n[2], n[3]);
-
-        vkUnmapMemory(logicalDevice, hostBufferMemory);
-        vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
-        vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
-    }
-
-
-    //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda);
-    for(int i = 0; i < 5; i++) {
-        auto a = generateHaltonPoints2d<2>({2, 3}, 100, {rand() / float(RAND_MAX), 0.0f});
-        for (auto v : a) {
-            //std::cout << glm::to_string(v) << std::endl;
-            std::cout << v[0] << ";" << v[1] << std::endl;
-        }
-    }
-    */
-
-
-    // Halton generation benchmark (CUDA, Compute Shader, CPU)
-    /*
-    uint64_t avgHaltonTime = 0;
-    const int NUM_HALTON_SAMPLES = 100;
-    for (int i = 0; i < NUM_HALTON_SAMPLES; i++) {
-        auto start = std::chrono::steady_clock::now();
-        CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, 0);
-        //generateHaltonSequence(RAYS_PER_ITERATION, (i + 1) * RAYS_PER_ITERATION);
-        auto end = std::chrono::steady_clock::now();
-        avgHaltonTime += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    }
-    std::cout << "avg halton time " << avgHaltonTime / float(NUM_HALTON_SAMPLES) << std::endl;
-    */
 }
 
 VisibilityManager::~VisibilityManager() {
@@ -545,7 +480,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 
     VkDeviceSize absOutputBufferSize;
     VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION;
-    //VkDeviceSize absWorkingBufferSize = sizeof(Sample) * MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES * int(pow(2, ABS_MAX_SUBDIVISION_STEPS) + 1);
     if (USE_RECURSIVE_EDGE_SUBDIVISION) {
         absOutputBufferSize = sizeof(Sample) * (long long)(MAX_ABS_TRIANGLES_PER_ITERATION * NUM_ABS_SAMPLES + MAX_TRIANGLE_COUNT);
     } else {
@@ -580,23 +514,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             vkMapMemory(logicalDevice, randomSamplingOutputBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
         }
 
-        /*
-        CUDAUtil::createExternalBuffer(
-            randomSamplingOutputBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, randomSamplingOutputBuffer[i],
-            randomSamplingOutputBufferMemory[i], logicalDevice, physicalDevice
-        );
-        */
-        /*
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, randomSamplingOutputBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, randomSamplingOutputHostBuffer[i], randomSamplingOutputHostBufferMemory[i],
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
-        );
-        vkMapMemory(logicalDevice, randomSamplingOutputHostBufferMemory[i], 0, randomSamplingOutputBufferSize, 0, &randomSamplingOutputPointer[i]);
-        */
-
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, sizeof(unsigned int) * 5,
@@ -613,24 +530,7 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         );
 
         // Edge subdivision buffers
-        /*
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, edgeSubdivOutputBufferSize,
-            //logicalDevice, sizeof(Sample) * MAX_EDGE_SUBDIV_RAYS * (std::pow(2, MAX_SUBDIVISION_STEPS) + 1),
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            edgeSubdivOutputBuffer[i], edgeSubdivOutputBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-        */
         if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            /*
-            CUDAUtil::createExternalBuffer(
-                edgeSubdivOutputBufferSize,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, edgeSubdivOutputBuffer[i],
-                edgeSubdivOutputBufferMemory[i], logicalDevice, physicalDevice
-            );
-            */
             VulkanUtil::createBuffer(
                 physicalDevice,
                 logicalDevice, edgeSubdivOutputBufferSize,
@@ -651,56 +551,21 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             haltonPointsBuffer[i], haltonPointsBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        /*
-        CUDAUtil::createExternalBuffer(
-            haltonSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, haltonPointsBuffer[i],
-            haltonPointsBufferMemory[i], logicalDevice, physicalDevice
-        );
-        */
-
-        /*
-        CUDAUtil::createExternalBuffer(
-            pvsSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pvsBuffer[i],
-            pvsBufferMemory[i], logicalDevice, physicalDevice
-        );
-        */
 
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, pvsSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, pvsBuffer[i], pvsBufferMemory[i],
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        //vkMapMemory(logicalDevice, pvsBufferMemory[i], 0, pvsSize, 0, &pvsPointer[i]);
 
         resetPVSGPUBuffer();
         resetAtomicBuffers();
-
-        /*
-        CUDAUtil::createExternalBuffer(
-            pvsSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, triangleIDTempBuffer[i],
-            triangleIDTempBufferMemory[i], logicalDevice, physicalDevice
-        );
-        */
 
         VulkanUtil::createBuffer(
             physicalDevice,
             logicalDevice, viewCellBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             viewCellBuffer[i], viewCellBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-
-        /*
-        VulkanUtil::createBuffer(
-            physicalDevice,
-            logicalDevice, pvsBulkInsertBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            pvsBulkInsertBuffer[i], pvsBulkInsertBufferMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-        */
     }
 
     {
@@ -716,49 +581,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
         memcpy(data, &pvsBufferCapacity, sizeof(pvsBufferCapacity));
         vkUnmapMemory(logicalDevice, pvsCapacityUniformMemory[0]);
     }
-
-    /*
-    CUDAUtil::createExternalBuffer(
-        pvsSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, randomSamplingOutputBuffer[0],
-        randomSamplingOutputBufferMemory[0], logicalDevice, physicalDevice
-    );
-    */
-        /*
-        CUDAUtil::importCudaExternalMemory(
-            (void**)&pvsCuda, pvsCudaMemory,
-            pvsBufferMemory[0], pvsSize, logicalDevice
-        );
-        */
-    /*
-    CUDAUtil::importCudaExternalMemory(
-        (void**)&triangleIDTempCuda, triangleIDTempCudaMemory,
-        triangleIDTempBufferMemory[0], pvsSize, logicalDevice
-    );
-    */
-
-        /*
-        CUDAUtil::importCudaExternalMemory(
-            (void**)&haltonCuda, haltonCudaMemory,
-            haltonPointsBufferMemory[0], haltonSize, logicalDevice
-        );
-
-        CUDAUtil::importCudaExternalMemory(
-            (void**)&randomSamplingOutputCuda, randomSamplingOutputCudaMemory,
-            randomSamplingOutputBufferMemory[0], randomSamplingOutputBufferSize, logicalDevice
-        );
-        CUDAUtil::importCudaExternalMemory(
-            (void**)&absOutputCuda, absOutputCudaMemory,
-            absOutputBufferMemory[0], absOutputBufferSize, logicalDevice
-        );
-        if (USE_RECURSIVE_EDGE_SUBDIVISION) {
-            CUDAUtil::importCudaExternalMemory(
-                (void**)&edgeSubdivOutputCuda, edgeSubdivOutputCudaMemory,
-                edgeSubdivOutputBufferMemory[0], edgeSubdivOutputBufferSize, logicalDevice
-            );
-        }
-        */
 
     // Reset atomic counters
     {
@@ -2353,24 +2175,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().entries.back().rnsRays += randomSampleInfo.numRays;
 
             statistics.back().startOperation(RANDOM_SAMPLING_INSERT);
-            {
-                /*
-                std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(
-                    pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                    randomSampleInfo.numTriangles
-                );
-                */
-                /*
-                pvsSize = CUDAUtil::work2(
-                    gpuHashSet, pvsCuda, randomSamplingIDOutputCuda, randomSamplingOutputCuda, newSamples, pvsSize,
-                    randomSampleInfo.numTriangles
-                );
-                if (newSamples.size() > 0) {
-                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
-                }
-                */
-            }
+
             if (randomSampleInfo.numTriangles > 0) {
                 // Copy intersected triangles from VRAM to CPU accessible buffer
                 VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
@@ -2432,26 +2237,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             statistics.back().entries.back().absRsRays += absInfo.numRsRays;
             statistics.back().entries.back().absTris += absInfo.numTriangles;
             statistics.back().entries.back().absRsTris += absInfo.numRsTriangles;
-
-
-            {
-                /*
-                std::vector<Sample> newSamples;
-                pvsSize = CUDAUtil::work(
-                    pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
-                    absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
-                );
-                */
-                /*
-                pvsSize = CUDAUtil::work2(
-                    gpuHashSet, pvsCuda, absIDOutputCuda, absOutputCuda, newSamples, pvsSize,
-                    absWorkingVector.size() * NUM_ABS_SAMPLES + absInfo.numRsTriangles
-                );
-                if (newSamples.size() > 0) {
-                    absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
-                }
-                */
-            }
 
             if (USE_RECURSIVE_EDGE_SUBDIVISION) {
                 if (absInfo.numRsTriangles > 0) {
@@ -2523,24 +2308,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
                 statistics.back().entries.back().edgeSubdivRsTris += edgeSubdivideInfo.numRsTriangles;
 
                 statistics.back().startOperation(EDGE_SUBDIVISION_INSERT);
-                {
-                    /*
-                    std::vector<Sample> newSamples;
-                    pvsSize = CUDAUtil::work(
-                        pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
-                        edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
-                    );
-                    */
-                    /*
-                    pvsSize = CUDAUtil::work2(
-                        gpuHashSet, pvsCuda, edgeSubdivIDOutputCuda, edgeSubdivOutputCuda, newSamples, pvsSize,
-                        edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles
-                    );
-                    if (newSamples.size() > 0) {
-                        absSampleQueue.insert(absSampleQueue.end(), newSamples.begin(), newSamples.end());
-                    }
-                    */
-                }
 
                 if (edgeSubdivideInfo.numTriangles + edgeSubdivideInfo.numRsTriangles > 0) {
                     // Copy intersected triangles from VRAM to CPU accessible buffer
@@ -2579,7 +2346,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
             }
 
             // Generate new Halton points
-            //CUDAUtil::generateHaltonSequence(RAYS_PER_ITERATION, haltonCuda, RAYS_PER_ITERATION * (i + 1));
             statistics.back().startOperation(HALTON_GENERATION);
             generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
             statistics.back().endOperation(HALTON_GENERATION);

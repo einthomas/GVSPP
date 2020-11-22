@@ -17,8 +17,6 @@
 #include "sample.h"
 #include "pvs.h"
 #include "Statistics.h"
-//#include "CUDAUtil.h"
-#include "gpuHashTable/linearprobing.h"
 
 #include <algorithm>
 #include <math.h>
@@ -166,9 +164,6 @@ private:
     const uint32_t RT_SHADER_INDEX_CLOSEST_HIT = 2;
 
     unsigned int pvsBufferCapacity;
-
-    GPUHashSet *gpuHashSet;
-    int hashTableCapacity;
 
     std::vector<std::vector<float>> haltonPoints;
     glm::vec4 lastHaltonPoints;
