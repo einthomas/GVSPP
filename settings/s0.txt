@@ -3,7 +3,7 @@
     The shader compile script is executed during runtime since a number of settings are written to
     defines.glsl
 */
-SHADER_COMPILE_SCRIPT shaders\\compileShaders.bat
+SHADER_COMPILE_SCRIPT shaders/compileShaders.sh shaders
 
 USE_NIRENSTEIN_VISIBILITY_SAMPLING false
 NIRENSTEIN_ERROR_THRESHOLD 0.15

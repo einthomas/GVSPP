@@ -7,9 +7,11 @@ screenshot.png
 cmake-build-debug
 cmake-build-release
 .idea
+external
 
 abs_rs_halton.vs
 new.vs
 old.vs
 *pvs.txt
 defines.glsl
+

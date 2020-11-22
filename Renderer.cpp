@@ -17,6 +17,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 #include <filesystem>
+#include <iterator>
 
 #include "vulkanutil.h"
 #include "Renderer.h"
@@ -1369,11 +1370,11 @@ void VulkanRenderer::printCamera() {
     std::cout << "camera pos: " << glm::to_string(cameraPos) << std::endl;
     std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
     std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
-    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << glm::degrees(std::acosf(-cameraForward.z)) << std::endl;
+    std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << glm::degrees(std::acos(-cameraForward.z)) << std::endl;
 
     std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
     std::cout << "1 1 0" << std::endl;
-    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acosf(-cameraForward.z)) << " 0" << std::endl;
+    std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acos(-cameraForward.z)) << " 0" << std::endl;
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
@@ -1403,6 +1404,9 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(Settings settings) {
     std::ifstream file("scenes.txt");
     std::string line;
     while (std::getline(file, line)) {
+        if (!line.empty() && line[line.size() - 1] == '\r') {
+            line.erase(line.size() - 1);
+        }
         if (i == 3) {
             glm::vec3 pos = v[0];
             glm::vec3 size = v[1] * 0.5f;
@@ -1507,7 +1511,11 @@ Settings VulkanRenderer::loadSettingsFile() {
                     readSettings = true;
                     readSceneDefinition = false;
                 } else if (readSettings) {
-                    se[entryIndex][line.substr(0, line.find(" "))] = line.substr(line.find(" ") + 1, line.length());
+                    std::string value = line.substr(line.find(" ") + 1, line.length());
+                    if (!value.empty() && value[value.size() - 1] == '\r') {
+                        value.erase(value.size() - 1);
+                    }
+                    se[entryIndex][line.substr(0, line.find(" "))] = value;
                 } else if (readSceneDefinition) {
                     if (line.rfind("CALCPVS_NOSTORE", 0) == 0) {
                         loadPVS = false;

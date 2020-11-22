@@ -64,10 +64,17 @@ void GLFWVulkanWindow::createInstance() {
         createInfo.enabledLayerCount = 0;
     }
 
+    /*
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     createInfo.enabledExtensionCount = glfwExtensionCount;
     createInfo.ppEnabledExtensionNames = glfwExtensions;
+     */
+
+    std::vector<const char *> instanceExtensions = {VK_KHR_SURFACE_EXTENSION_NAME};
+    instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+    createInfo.enabledExtensionCount = (uint32_t) instanceExtensions.size();
+    createInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
     // Get list of supported extensions
     uint32_t extensionCount = 0;
@@ -76,17 +83,16 @@ void GLFWVulkanWindow::createInstance() {
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
     // Print supported extensions
-    /*
+
     std::cout << "available extensions:" << std::endl;
+    std::cout << extensionCount << std::endl;
     for (const auto& extension : extensions) {
         std::cout << "\t" << extension.extensionName << std::endl;
     }
-    */
 
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
         throw std::runtime_error("failed to create Vulkan instance");
     }
-
 }
 
 bool GLFWVulkanWindow::checkValidationLayerSupport() {

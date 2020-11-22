@@ -1,3 +1,5 @@
+#define VK_USE_PLATFORM_XCB_KHR
+
 #include <iostream>
 #include <random>
 #include "GLFWVulkanWindow.h"
