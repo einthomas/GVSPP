@@ -3,8 +3,6 @@
 
 #include "Renderer.h"
 
-#include <glm/gtx/string_cast.hpp>
-
 float GLFWVulkanWindow::cameraSpeed = 200.0f;
 
 void GLFWVulkanWindow::initWindow() {

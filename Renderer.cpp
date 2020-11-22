@@ -158,8 +158,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     visibilityManager = new VisibilityManager(
         se[0].at("USE_TERMINATION_CRITERION") == "true",
         se[0].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
-        se[0].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
-        std::stol(se[0].at("RASTER_NUM_HEMICUBES")),
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
@@ -1566,9 +1564,6 @@ void VulkanRenderer::writeShaderDefines(int settingsIndex) {
     if (se[settingsIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
         shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
     }
-    if (se[settingsIndex].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true") {
-        shaderDefinesFile << "#define USE_HYBRID_VISIBILITY_SAMPLING\n";
-    }
     shaderDefinesFile.close();
 }
 
@@ -1653,8 +1648,6 @@ void VulkanRenderer::startVisibilityThread() {
                 visibilityManager = new VisibilityManager(
                     se[i].at("USE_TERMINATION_CRITERION") == "true",
                     se[i].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
-                    se[i].at("USE_HYBRID_VISIBILITY_SAMPLING") == "true",
-                    std::stol(se[i].at("RASTER_NUM_HEMICUBES")),
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
                     std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
