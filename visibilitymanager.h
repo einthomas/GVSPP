@@ -49,8 +49,6 @@ struct ShaderExecutionInfo {
     unsigned int numRsRays;
 };
 
-class RasterVisibility;
-
 class VisibilityManager {
 public:
     std::vector<ViewCell> viewCells;
@@ -171,7 +169,6 @@ private:
 
     GPUHashSet *gpuHashSet;
     int hashTableCapacity;
-    RasterVisibility *rasterVisibility;
 
     std::vector<std::vector<float>> haltonPoints;
     glm::vec4 lastHaltonPoints;

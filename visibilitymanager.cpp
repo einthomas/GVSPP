@@ -14,7 +14,6 @@
 #include "sample.h"
 #include "Vertex.h"
 #include "gpuHashTable/linearprobing.h"
-#include "RasterVisibility.h"
 
 struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
@@ -134,28 +133,6 @@ VisibilityManager::VisibilityManager(
     createBuffers(indices);
     initRayTracing(indexBuffer, vertexBuffer, indices, vertices, uniformBuffers);
     generateHaltonSequence(RANDOM_RAYS_PER_ITERATION * 4.0f, rand() / float(RAND_MAX));
-
-    rasterVisibility = new RasterVisibility(
-        physicalDevice,
-        logicalDevice,
-        graphicsCommandPool,
-        graphicsQueue,
-        frameBufferWidth,
-        frameBufferHeight,
-        depthFormat,
-        computeQueue,
-        commandPool[0],
-        transferQueue,
-        transferCommandPool,
-        vertexBuffer,
-        vertices,
-        indexBuffer,
-        indices,
-        indices.size() / 3.0f,
-        randomSamplingOutputBuffer[0],
-        pvsBuffer[0],
-        triangleCounterBuffer[0]
-    );
 
     /*
     generateHaltonSequence(300, rand() / float(RAND_MAX));
@@ -2348,8 +2325,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int threa
     //gpuHashSet->reset();
     statistics.push_back(Statistics(1000000));
     int terminationThresholdCounter = 0;
-
-    rasterVisibility->statistics = &statistics.back();
 
     std::vector<Sample> absSampleQueue;
     size_t previousPVSSize;
