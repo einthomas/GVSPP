@@ -339,11 +339,6 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
             VulkanUtil::executeCommandBuffer(
                 logicalDevice, computeQueue, commandBufferCompute, commandBufferFence
             );
-
-            /*
-            std::cout << "fetch" << std::endl;
-            fetchPVS();
-            */
         }
 
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
@@ -371,11 +366,6 @@ void VisibilityManager::resizePVSBuffer(int newSize) {
         0,
         VK_NULL_HANDLE
     );
-
-    /*
-    std::cout << "fetch" << std::endl;
-    fetchPVS();
-    */
 
     vkDestroyBuffer(logicalDevice, hostBuffer, nullptr);
     vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
@@ -523,22 +513,6 @@ void VisibilityManager::createBuffers(const std::vector<uint32_t> &indices) {
 void VisibilityManager::createDescriptorSets(
     VkBuffer indexBuffer, VkBuffer vertexBuffer, const std::vector<VkBuffer> &uniformBuffers
 ) {
-    /*
-    VkDescriptorSetAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = rtDescriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &rtDescriptorSetLayout;
-
-    // Allocate descriptor sets
-    if (vkAllocateDescriptorSets(
-            logicalDevice, &allocInfo, &rtDescriptorSets
-        ) != VK_SUCCESS
-    ) {
-        throw std::runtime_error("failed to allocate rt descriptor sets");
-    }
-    */
-
     std::array<VkWriteDescriptorSet, 11> descriptorWrites = {};
 
     VkWriteDescriptorSetAccelerationStructureNV asWriteInfo = {};
@@ -717,14 +691,6 @@ void VisibilityManager::initRayTracing(
 
     VkBuffer instanceBuffer;
     VkDeviceMemory instanceBufferMemory;
-
-    /*
-    glm::mat4x4 m = glm::rotate(
-        glm::mat4(1.0f),
-        glm::radians(0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-    */
 
     glm::mat4x4 model = glm::translate(
         glm::mat4(1.0f),
@@ -1463,22 +1429,6 @@ void VisibilityManager::createComputeDescriptorSetLayout() {
 }
 
 void VisibilityManager::createABSDescriptorSets(VkBuffer vertexBuffer) {
-    /*
-    VkDescriptorSetAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = rtDescriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &rtDescriptorSetLayoutABS;
-
-    // Allocate descriptor sets
-    if (vkAllocateDescriptorSets(
-            logicalDevice, &allocInfo, &rtDescriptorSetsABS
-        ) != VK_SUCCESS
-    ) {
-        throw std::runtime_error("failed to allocate rt descriptor sets ABS");
-    }
-    */
-
     std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
     VkDescriptorBufferInfo absWorkingBufferInfo = {};

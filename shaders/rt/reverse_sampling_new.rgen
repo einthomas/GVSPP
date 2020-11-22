@@ -57,7 +57,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
 
                     int triangleID = int(hitInfo.w);
                     if (triangleID != -1) {
-                        //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                         bool targetSampleReached = foundSample.triangleID == -2;
                         targetSampleReached = false;
                         if (targetSampleReached) {
@@ -82,7 +81,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
 
                 int triangleID = int(hitInfo.w);
                 if (triangleID != -1) {
-                    //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                     bool targetSampleReached = foundSample.triangleID == -2;
                     targetSampleReached = false;
                     if (targetSampleReached) {
@@ -98,7 +96,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
         } else {
             vec3 occludingTriangleVerticesWorldPos[3];
             for (int i = 0; i < 3; i++) {
-                //occludingTriangleVertices[i] = unpackVertexData(indices.i[3 * occludingTriangleID + i]);
                 occludingTriangleVerticesWorldPos[i] = getVertexPos(indices.i[3 * occludingTriangleID + i]);
             }
             bool invalidRayPlaneIntersection = false;
@@ -200,11 +197,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
             }
         }
         #ifdef USE_3D_VIEW_CELL
-        /*
-                if (!invalidRayPlaneIntersection) {
-                    //break;
-                }
-                */
             }
         #endif
     }

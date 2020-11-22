@@ -91,12 +91,7 @@ public:
     template<int T>
     std::vector<glm::vec<T, float, glm::defaultp>> generateHaltonPoints2d(std::array<int, T> bases, int n, std::array<float, T> lastHaltonPoints) {
         std::vector<glm::vec<T, float, glm::defaultp>> haltonPoints;
-
-        //int bases[4] = { 2, 3, 5, 7 };
-
-        //haltonPoints.clear();
         haltonPoints.resize(n);
-
 
         /*
             This is the incremental version to generate the halton squence of
@@ -130,6 +125,7 @@ public:
 
         return haltonPoints;
     }
+
     void rayTrace(const std::vector<uint32_t> &indices, int viewCellIndex);
     void releaseResources();
     void fetchPVS();

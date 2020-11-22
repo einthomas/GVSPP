@@ -63,13 +63,6 @@ void GLFWVulkanWindow::createInstance() {
         createInfo.enabledLayerCount = 0;
     }
 
-    /*
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
-     */
-
     std::vector<const char *> instanceExtensions = {VK_KHR_SURFACE_EXTENSION_NAME};
     instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
     createInfo.enabledExtensionCount = (uint32_t) instanceExtensions.size();

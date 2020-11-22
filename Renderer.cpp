@@ -7,7 +7,6 @@
 
 #include <chrono>
 
-//#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
@@ -104,7 +103,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     createErrorBuffer();
     createComputeDescriptorLayout();
     {
-        std::vector<VkDescriptorSetLayout> layouts;//(window->imageCount, descriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> layouts;
         for (int i = 0; i < window->imageCount; i++) {
             layouts.push_back(descriptorSetLayout);
         }
@@ -1097,16 +1096,6 @@ void VulkanRenderer::startNextFrame(
     renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
     renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
-    /*
-    VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    VkClearDepthStencilValue clearDS = { 1, 0 };
-    VkClearValue clearValues[3] = {};
-    clearValues[0].color = clearValues[2].color = clearColor;
-    clearValues[1].depthStencil = clearDS;
-    renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    renderPassInfo.pClearValues = clearValues;
-    */
-
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
     clearValues[1].depthStencil = { 0.0f, 0 }; //1.0f, 0 };
@@ -1177,16 +1166,7 @@ void VulkanRenderer::startNextFrame(
             &descriptorSets[swapChainImageIndex], 0, nullptr
         );
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &rayVertexBuffer, offsets);
-        /*
-        vkCmdPushConstants(
-            commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-            (std::array<glm::mat4, 1> { glm::mat4(1.0f) }).data()
-        );
-        vkCmdPushConstants(
-            commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
-            (std::array<VkBool32, 1> { shadedRendering }).data()
-        );
-        */
+
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices[currentViewCellIndex].size()), 1, 0, 0);
     }
 
@@ -1516,11 +1496,6 @@ void VulkanRenderer::startVisibilityThread() {
         }
         createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
-
-        /*
-        createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
-        updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
-        */
     } else {
         std::ofstream pvsFile;
         if (storePVS) {
@@ -1795,25 +1770,6 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         for (int i = 0; i < haltonPoints.size() + 4; i++) {
             glm::vec4 position;
             if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
-                /*
-                glm::vec3 viewCellSize = glm::vec3(
-                    length(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-                    length(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-                    length(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-                ) * 2.0f;
-                glm::vec3 viewCellRight = glm::normalize(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-                glm::vec3 viewCellUp = glm::normalize(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-                glm::vec3 viewCellNormal = glm::normalize(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-                if (viewCellSize.x == 0.0f) {
-                    viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-                } else if (viewCellSize.y == 0.0f) {
-                    viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-                } else if (viewCellSize.z == 0.0f) {
-                    viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
-                }
-                glm::vec3 viewCellPos = glm::vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
-                */
-
                 glm::vec3 viewCellSize = viewCell.size;
                 glm::vec3 viewCellRight = viewCell.right;
                 glm::vec3 viewCellUp = viewCell.up;

@@ -33,11 +33,6 @@ bool reverseSampling(uint launchIndex, vec3 v[3], Sample s, vec3 rayOrigin, vec3
             vec3 planePoint = rayOrigin;
 
             // Get the vertices of the intersected, closer triangle
-            /*
-            Vertex v0 = unpackVertexData(indices.i[3 * occludingTriangleID]);
-            Vertex v1 = unpackVertexData(indices.i[3 * occludingTriangleID + 1]);
-            Vertex v2 = unpackVertexData(indices.i[3 * occludingTriangleID + 2]);
-            */
             const vec3 v0WorldPos = getVertexPos(indices.i[3 * occludingTriangleID]);
             const vec3 v1WorldPos = getVertexPos(indices.i[3 * occludingTriangleID + 1]);
             const vec3 v2WorldPos = getVertexPos(indices.i[3 * occludingTriangleID + 2]);
@@ -82,16 +77,6 @@ bool reverseSampling(uint launchIndex, vec3 v[3], Sample s, vec3 rayOrigin, vec3
                 pointOutsideTriangle[1] = p1 + normalize(p1 - p0) * 0.01;
                 //pointOutsideTriangle[1] = p1 + (p1 - p0) * t1;
                 //pointOutsideTriangle[1] += normalize(pointOutsideTriangle[1] - samplePos);
-
-                /*
-                // More sample points outside the occluding triangle
-                const int numPointOutsideTriangle = 16;
-                vec3 pointOutsideTriangle[numPointOutsideTriangle];
-                for (int i = 0; i < 8; i++) {
-                    pointOutsideTriangle[i] = p0 + normalize(p0 - p1) * (10.0 / float((i + 1) * (i + 1)));
-                    pointOutsideTriangle[i + 8] = p1 + normalize(p1 - p0) * (10.0 / float((i + 1) * (i + 1)));
-                }
-                */
 
                 // Intersect a ray through the predicted hit point and the points just outside the triangle, each, with
                 // the view cell

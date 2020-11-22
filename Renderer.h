@@ -1,8 +1,6 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-//#include "qvulkanwindow.h"
-//#include <QVulkanWindow>
 #include <unordered_map>
 #include <set>
 #include <queue>
@@ -28,7 +26,7 @@ struct ViewCellGeometry {
     }
 };
 
-class VulkanRenderer { // : public QVulkanWindowRenderer {
+class VulkanRenderer {
 public:
     glm::vec3 cameraPos;
     glm::vec3 cameraForward;
@@ -57,7 +55,6 @@ public:
     void startVisibilityThread();
 
 private:
-    //QVulkanWindow *window;
     GLFWVulkanWindow *window;
     std::vector<std::map<std::string, std::string>> se;
 

@@ -23,11 +23,7 @@
 #include <VersionHelpers.h>
 #include <dxgi1_2.h>
 #include <aclapi.h>
-#else
-//#include <xcb/xcb.h>
 #endif
-
-//#include "Renderer.h"
 
 class VulkanRenderer;
 
@@ -38,7 +34,6 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
 
-/*
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_NV_RAY_TRACING_EXTENSION_NAME,
@@ -54,25 +49,6 @@ const std::vector<const char*> deviceExtensions = {
 #else
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME
-#endif
-};
-*/
-const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_NV_RAY_TRACING_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE3_EXTENSION_NAME,
-        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-        VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
-        VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-        VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
-        VK_KHR_MULTIVIEW_EXTENSION_NAME,
-        //VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-#ifdef _WIN64
-        VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
-#else
-        VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-        VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME
 #endif /* _WIN64 */
 };
 
