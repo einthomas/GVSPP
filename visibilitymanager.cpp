@@ -21,7 +21,6 @@ struct UniformBufferObjectMultiView {
 };
 
 VisibilityManager::VisibilityManager(
-    bool USE_TERMINATION_CRITERION,
     long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT,
     long NEW_TRIANGLE_TERMINATION_THRESHOLD,
     long RANDOM_RAYS_PER_ITERATION,
@@ -45,7 +44,6 @@ VisibilityManager::VisibilityManager(
     uint32_t frameBufferHeight,
     VkFormat depthFormat
 ):
-    USE_TERMINATION_CRITERION(USE_TERMINATION_CRITERION),
     NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT(NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
     RANDOM_RAYS_PER_ITERATION(RANDOM_RAYS_PER_ITERATION),
@@ -1800,31 +1798,25 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
             statistics.back().update();
         }
 
-        if (USE_TERMINATION_CRITERION) {
-            if (pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD) {
-                terminationThresholdCounter++;
-            } else {
-                terminationThresholdCounter = 0;
-            }
-            //std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
-
-            if (
-                terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT
-            ) {
-                statistics.back().endOperation(VISIBILITY_SAMPLING);
-                statistics.back().print();
-                break;
-            }
-
-            // Generate new Halton points
-            statistics.back().startOperation(HALTON_GENERATION);
-            generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
-            statistics.back().endOperation(HALTON_GENERATION);
+        if (pvsSize - previousPVSSize < NEW_TRIANGLE_TERMINATION_THRESHOLD) {
+            terminationThresholdCounter++;
         } else {
+            terminationThresholdCounter = 0;
+        }
+        //std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
+
+        if (
+            terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT
+        ) {
             statistics.back().endOperation(VISIBILITY_SAMPLING);
             statistics.back().print();
             break;
         }
+
+        // Generate new Halton points
+        statistics.back().startOperation(HALTON_GENERATION);
+        generateHaltonSequence(RANDOM_RAYS_PER_ITERATION, rand() / float(RAND_MAX));
+        statistics.back().endOperation(HALTON_GENERATION);
     }
 }
 

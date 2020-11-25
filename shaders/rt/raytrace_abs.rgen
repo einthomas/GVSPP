@@ -77,13 +77,7 @@ int storeReverseSample(uint launchIndex, Sample s, bool targetSampleReached) {
     return index;
 }
 
-#if REVERSE_SAMPLING_METHOD == 0
-    #include "reverse_sampling_cpu_impl.rgen"
-#elif REVERSE_SAMPLING_METHOD == 1
-    #include "reverse_sampling_gvs.rgen"
-#elif REVERSE_SAMPLING_METHOD == 2
-    #include "reverse_sampling_new.rgen"
-#endif
+#include "reverse_sampling_new.rgen"
 
 void main() {
     const uint launchIndex = gl_LaunchIDNV.x;
@@ -163,13 +157,7 @@ void main() {
 
         // Reverse sampling
         Sample foundSample;
-        #if REVERSE_SAMPLING_METHOD == 0 || REVERSE_SAMPLING_METHOD == 2
-            reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-        #elif REVERSE_SAMPLING_METHOD == 1
-            vec3 v[3] = { currentWP, nextWP, lastWP };
-            reverseSampling(launchIndex, v, s, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
-        #endif
-
+        reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
         if (triangleID != -1 && insert(triangleID)) {
             uint index = atomicAdd(triangleCounter, 1);
             randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);

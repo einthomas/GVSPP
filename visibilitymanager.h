@@ -62,7 +62,6 @@ public:
     VkBuffer triangleCounterBuffer;
 
     VisibilityManager(
-        bool USE_TERMINATION_CRITERION,
         long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT,
         long NEW_TRIANGLE_TERMINATION_THRESHOLD,
         long RANDOM_RAYS_PER_ITERATION,
@@ -134,7 +133,6 @@ public:
 private:
     int pvsSize = 0;
 
-    const bool USE_TERMINATION_CRITERION;
     const long NEW_TRIANGLE_TERMINATION_THRESHOLD;
     const long NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT;
     const long NUM_ABS_SAMPLES;

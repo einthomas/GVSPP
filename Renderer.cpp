@@ -145,15 +145,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
-    int reverseSamplingMethod = std::stoi(se[0].at("REVERSE_SAMPLING_METHOD"));
-    long numReverseSamplingSamples = 15;
-    if (reverseSamplingMethod == 1) {
-        numReverseSamplingSamples = 2;
-    } else if (reverseSamplingMethod == 2) {
-        numReverseSamplingSamples = std::stol(se[0].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
-    }
+    long numReverseSamplingSamples = std::stol(se[0].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     visibilityManager = new VisibilityManager(
-        se[0].at("USE_TERMINATION_CRITERION") == "true",
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
         std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
         std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
@@ -1004,9 +997,6 @@ void VulkanRenderer::createDescriptorPool() {
 }
 
 void VulkanRenderer::createDescriptorSets() {
-    // A descriptor set specifies the actual buffer or image resource (just like a framebuffer
-    // specifies the actual image view). Descriptor sets are allocated from a descriptor pool
-
     // Populate every descriptor
     for (int i = 0; i < window->imageCount; i++) {
         VkDescriptorBufferInfo bufferInfo = {};
@@ -1445,7 +1435,6 @@ void VulkanRenderer::writeShaderDefines(int settingsIndex) {
     shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se[settingsIndex].at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
     shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se[settingsIndex].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
     shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se[settingsIndex].at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
-    shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se[settingsIndex].at("REVERSE_SAMPLING_METHOD") << "\n";
     shaderDefinesFile << "#define SET_TYPE " << se[settingsIndex].at("SET_TYPE") << "\n";
     if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
         shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
@@ -1519,15 +1508,8 @@ void VulkanRenderer::startVisibilityThread() {
 
                 delete visibilityManager;
 
-                int reverseSamplingMethod = std::stoi(se[i].at("REVERSE_SAMPLING_METHOD"));
-                long numReverseSamplingSamples = 15;
-                if (reverseSamplingMethod == 1) {
-                    numReverseSamplingSamples = 2;
-                } else if (reverseSamplingMethod == 2) {
-                    numReverseSamplingSamples = std::stol(se[i].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
-                }
+                long numReverseSamplingSamples = std::stol(se[i].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
                 visibilityManager = new VisibilityManager(
-                    se[i].at("USE_TERMINATION_CRITERION") == "true",
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
                     std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
                     std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
