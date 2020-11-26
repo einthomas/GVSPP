@@ -115,10 +115,13 @@ void main() {
         0               // payload (location = 0)
     );
 
+    // Get the intersected triangle ID
     int triangleID = int(hitInfo.w);
+
+    // If a triangle has been intersected and its ID is not yet part of the PVS, insert it into the PVS
+    // and into the output buffer which is later used to populate the sample buffer on the CPU side
     if (triangleID != -1 && insert(triangleID)) {
         uint index = atomicAdd(triangleCounter, 1);
         randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitInfo.xyz, hitInfo.xyz);
     }
-
 }

@@ -102,6 +102,8 @@ void main() {
     const uint currentEdgeSampleIndex = uint(mod(launchIndex, (ABS_NUM_SAMPLES_PER_EDGE + 3)));
     const vec3 vec = normalize(currentWP - rayOrigin);
     if (currentEdgeSampleIndex < 3) {
+        // Calculate the position of one of the three border polygon vertices close to the
+        // current original vertex
         vec3 d[3];
         d[0] = normalize(cross(vec, nextWP - currentWP));
         d[1] = normalize(cross(vec, currentWP - lastWP));
@@ -114,6 +116,7 @@ void main() {
 
         samplePos = currentWP + ABS_DELTA * d[currentEdgeSampleIndex];
     } else {
+        // Calculate the position of a sample point along an edge of the border polygon
         samplePos = mix(
             nextWP + ABS_DELTA * normalize(cross(normalize(nextWP - rayOrigin), nextWP - currentWP)),// + offsetA * absDelta,
             currentWP + ABS_DELTA * normalize(cross(normalize(currentWP - rayOrigin), nextWP - currentWP)),// + offsetB * absDelta,
@@ -158,6 +161,9 @@ void main() {
         // Reverse sampling
         Sample foundSample;
         reverseSampling(launchIndex, rayOrigin, rayDir, triangleID, samplePos, hitPoint, foundSample);
+
+        // If a triangle has been intersected and its ID is not yet part of the PVS, insert it into the PVS
+        // and into the output buffer which is later used to populate the sample buffer on the CPU side
         if (triangleID != -1 && insert(triangleID)) {
             uint index = atomicAdd(triangleCounter, 1);
             randomSamplingOutput[index] = Sample(triangleID, rayOrigin, hitPoint, samplePos);

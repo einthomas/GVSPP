@@ -1354,7 +1354,7 @@ void VulkanRenderer::startVisibilityThread() {
                 std::vector<int> pvs;
 
                 // Calculate the PVS
-                visibilityManager->rayTrace(indices, k);
+                visibilityManager->rayTrace(k);
 
                 // Fetch the PVS from the GPU
                 visibilityManager->fetchPVS();

@@ -125,7 +125,7 @@ public:
         return haltonPoints;
     }
 
-    void rayTrace(const std::vector<uint32_t> &indices, int viewCellIndex);
+    void rayTrace(int viewCellIndex);
     void releaseResources();
     void fetchPVS();
     void printAverageStatistics();
@@ -268,7 +268,7 @@ private:
     void createHaltonComputePipeline();
     void resetPVSGPUBuffer();
     void resetAtomicBuffers();
-    void resizePVSBuffer(int newSize);
+    void resizeHashSetPVSBuffer(int newSize);
     void generateHaltonSequence(int n, float rand);
 
     ShaderExecutionInfo randomSample(int numRays, int viewCellIndex);

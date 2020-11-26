@@ -4,7 +4,6 @@
 #include <chrono>
 #include <iterator>
 #include <algorithm>
-#include <random>
 #include <unordered_set>
 #include <glm/vec3.hpp>
 
@@ -156,7 +155,6 @@ void VisibilityManager::updateViewCellBuffer(int viewCellIndex) {
 
     void *data;
     vkMapMemory(logicalDevice, stagingBufferMemory, 0, viewCellBufferSize, 0, &data);
-    //memcpy(data, viewCells.data(), (size_t) viewCellBufferSize);
     memcpy(data, &viewCells[viewCellIndex], (size_t) viewCellBufferSize);
     vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
@@ -229,7 +227,7 @@ void VisibilityManager::resetAtomicBuffers() {
     vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
 }
 
-void VisibilityManager::resizePVSBuffer(int newSize) {
+void VisibilityManager::resizeHashSetPVSBuffer(int newSize) {
     std::cout << "Resize PVS GPU hash set: " << pvsBufferCapacity << " -> " << newSize << std::endl;
 
     // Copy PVS buffer to host
@@ -612,16 +610,16 @@ void VisibilityManager::createDescriptorSets(
     descriptorWrites[8].descriptorCount = 1;
     descriptorWrites[8].pBufferInfo = &triangleCounterBufferInfo;
 
-    VkDescriptorBufferInfo testBufferInfo = {};
-    testBufferInfo.buffer = pvsBuffer;
-    testBufferInfo.offset = 0;
-    testBufferInfo.range = VK_WHOLE_SIZE;
+    VkDescriptorBufferInfo pvsBufferInfo = {};
+    pvsBufferInfo.buffer = pvsBuffer;
+    pvsBufferInfo.offset = 0;
+    pvsBufferInfo.range = VK_WHOLE_SIZE;
     descriptorWrites[9].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[9].dstSet = descriptorSet;
     descriptorWrites[9].dstBinding = 9;
     descriptorWrites[9].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descriptorWrites[9].descriptorCount = 1;
-    descriptorWrites[9].pBufferInfo = &testBufferInfo;
+    descriptorWrites[9].pBufferInfo = &pvsBufferInfo;
 
     VkDescriptorBufferInfo pvsBufferCapacityBufferInfo = {};
     pvsBufferCapacityBufferInfo.buffer = pvsCapacityUniformBuffer;
@@ -786,8 +784,6 @@ void VisibilityManager::initRayTracing(
 }
 
 void VisibilityManager::createBottomLevelAS(const VkGeometryNV *geometry) {
-    // The bottom level acceleration structure contains the scene's geometry
-
     VkAccelerationStructureInfoNV accelerationStructureInfo = {};
     accelerationStructureInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
     accelerationStructureInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
@@ -812,7 +808,11 @@ void VisibilityManager::createBottomLevelAS(const VkGeometryNV *geometry) {
     VkMemoryAllocateInfo memoryAllocateInfo = {};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements2.memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(physicalDevice, memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); //deviceLocalMemoryIndex;
+    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(
+        physicalDevice,
+        memoryRequirements2.memoryRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
     vkAllocateMemory(logicalDevice, &memoryAllocateInfo, nullptr, &bottomLevelAS.deviceMemory);
 
     VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo = {};
@@ -848,7 +848,11 @@ void VisibilityManager::createTopLevelAS() {
     VkMemoryAllocateInfo memoryAllocateInfo = {};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = memoryRequirements2.memoryRequirements.size;
-    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(physicalDevice, memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); //deviceLocalMemoryIndex;
+    memoryAllocateInfo.memoryTypeIndex = VulkanUtil::findMemoryType(
+        physicalDevice,
+        memoryRequirements2.memoryRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
     vkAllocateMemory(logicalDevice, &memoryAllocateInfo, nullptr, &topLevelAS.deviceMemory);
 
     VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo = {};
@@ -1028,11 +1032,11 @@ void VisibilityManager::createDescriptorSetLayout() {
     triangleCounterBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     triangleCounterBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
-    VkDescriptorSetLayoutBinding testBufferBinding = {};
-    testBufferBinding.binding = 9;
-    testBufferBinding.descriptorCount = 1;
-    testBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    testBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
+    VkDescriptorSetLayoutBinding pvsBufferBinding = {};
+    pvsBufferBinding.binding = 9;
+    pvsBufferBinding.descriptorCount = 1;
+    pvsBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pvsBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
     VkDescriptorSetLayoutBinding pvsBufferCapacityBinding = {};
     pvsBufferCapacityBinding.binding = 10;
@@ -1050,7 +1054,7 @@ void VisibilityManager::createDescriptorSetLayout() {
         randomSamplingOutputBinding,
         triangleBufferBinding,
         triangleCounterBufferBinding,
-        testBufferBinding,
+        pvsBufferBinding,
         pvsBufferCapacityBinding
     };
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -1141,7 +1145,6 @@ void VisibilityManager::createPipeline(
 }
 
 void VisibilityManager::createRandomSamplingPipeline() {
-    // Load shaders
     VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = {};
     rayGenShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     rayGenShaderStageInfo.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
@@ -1173,7 +1176,6 @@ void VisibilityManager::createRandomSamplingPipeline() {
 }
 
 void VisibilityManager::createABSPipeline() {
-    // Load shaders
     VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = {};
     rayGenShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     rayGenShaderStageInfo.stage = VK_SHADER_STAGE_RAYGEN_BIT_NV;
@@ -1207,6 +1209,7 @@ void VisibilityManager::createABSPipeline() {
 }
 
 void VisibilityManager::createComputePipeline() {
+    // Compute shader used for resizing the PVS buffer, if a hash set is used
     VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo = {};
     pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     pipelineShaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -1484,7 +1487,11 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int viewCellInd
         VkDeviceMemory hostBufferMemory;
         VulkanUtil::createBuffer(
             physicalDevice,
-            logicalDevice, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, hostBuffer, hostBufferMemory,
+            logicalDevice,
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            hostBuffer,
+            hostBufferMemory,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
         );
 
@@ -1515,8 +1522,6 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int viewCellInd
     }
 
     if (visualizeRandomRays) {
-        VkDeviceSize bufferSize = sizeof(Sample) * numTriangles;
-
         Sample *s = (Sample*)randomSamplingOutputPointer;
         for (int i = 0; i < numTriangles; i++) {
             rayVertices[viewCellIndex].push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
@@ -1631,8 +1636,6 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
 
     if (visualizeABSRays) {
         // Copy intersected triangles from VRAM to CPU accessible buffer
-        VkDeviceSize bufferSize = sizeof(Sample) * (numTriangles + numRsTriangles);
-
         Sample *s = (Sample*)randomSamplingOutputPointer;
         // Visualize ABS rays
         for (int i = 0; i < numTriangles + numRsTriangles; i++) {
@@ -1691,7 +1694,8 @@ VkDeviceSize VisibilityManager::copyShaderIdentifier(
     return shaderGroupHandleSize;
 }
 
-void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewCellIndex) {
+// Compute the actual PVS
+void VisibilityManager::rayTrace(int viewCellIndex) {
     updateViewCellBuffer(viewCellIndex);
     resetPVSGPUBuffer();
     resetAtomicBuffers();
@@ -1705,12 +1709,12 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
     for (int i = 0; true; i++) {
         previousPVSSize = pvsSize;
 
-        // Check GPU hash set size
+        // Check GPU hash set size (if used)
         if (GPU_SET_TYPE == 1) {
             statistics.back().startOperation(GPU_HASH_SET_RESIZE);
             int potentialNewTriangles = std::min(RANDOM_RAYS_PER_ITERATION, MAX_TRIANGLE_COUNT - pvsSize);
             if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+                resizeHashSetPVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
             }
             statistics.back().endOperation(GPU_HASH_SET_RESIZE);
         }
@@ -1729,10 +1733,6 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
 
             if (randomSampleInfo.numTriangles > 0) {
                 // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * randomSampleInfo.numTriangles;
-
-                // Copy the intersected triangles GPU buffer to the host buffer
-
                 Sample *s = (Sample*)randomSamplingOutputPointer;
                 absSampleQueue.insert(absSampleQueue.end(), s, s + randomSampleInfo.numTriangles);
             }
@@ -1743,8 +1743,9 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
         statistics.back().update();
 
         // Adaptive Border Sampling. ABS is executed for a maximum of MAX_ABS_TRIANGLES_PER_ITERATION rays at a time as
-        // long as there are a number of MIN_ABS_TRIANGLES_PER_ITERATION unprocessed triangles left
+        // long as there are unprocessed triangles left i.e. absSampleQueue is not empty
         while (absSampleQueue.size() >= MIN_ABS_TRIANGLES_PER_ITERATION) {
+            // Get numAbsRays samples from the queue
             const int numAbsRays = std::min(MAX_ABS_TRIANGLES_PER_ITERATION, (long)absSampleQueue.size());
             std::vector<Sample> absWorkingVector;
             if (numAbsRays == absSampleQueue.size()) {
@@ -1760,7 +1761,7 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
                 absSampleQueue.erase(absSampleQueue.end() - numAbsRays, absSampleQueue.end());
             }
 
-            // Execute ABS
+            // Check GPU hash set size (if used)
             if (GPU_SET_TYPE == 1) {
                 statistics.back().startOperation(GPU_HASH_SET_RESIZE);
                 int potentialNewTriangles = std::min(
@@ -1768,26 +1769,24 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
                     (size_t)MAX_TRIANGLE_COUNT - pvsSize
                 );
                 if (pvsBufferCapacity - pvsSize < potentialNewTriangles) {
-                    resizePVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
+                    resizeHashSetPVSBuffer(1 << int(std::ceil(std::log2(pvsSize + potentialNewTriangles))));
                 }
                 statistics.back().endOperation(GPU_HASH_SET_RESIZE);
             }
 
+            // Execute adaptive border sampling
             statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING);
             ShaderExecutionInfo absInfo = adaptiveBorderSample(absWorkingVector, viewCellIndex);
             statistics.back().endOperation(ADAPTIVE_BORDER_SAMPLING);
 
             statistics.back().entries.back().numShaderExecutions += absWorkingVector.size() * NUM_ABS_SAMPLES;
-            statistics.back().entries.back().absRays += absInfo.numRays; //absWorkingVector.size() * NUM_ABS_SAMPLES;
+            statistics.back().entries.back().absRays += absInfo.numRays;
             statistics.back().entries.back().absRsRays += absInfo.numRsRays;
             statistics.back().entries.back().absTris += absInfo.numTriangles;
             statistics.back().entries.back().absRsTris += absInfo.numRsTriangles;
 
             if (absInfo.numTriangles + absInfo.numRsTriangles > 0) {
                 // Copy intersected triangles from VRAM to CPU accessible buffer
-                VkDeviceSize bufferSize = sizeof(Sample) * (absInfo.numTriangles + absInfo.numRsTriangles);
-
-                // Copy the intersected triangles GPU buffer to the host buffer
                 statistics.back().startOperation(ADAPTIVE_BORDER_SAMPLING_INSERT);
                 Sample *s = (Sample*)randomSamplingOutputPointer;
                 absSampleQueue.insert(absSampleQueue.end(), s, s + absInfo.numTriangles + absInfo.numRsTriangles);
@@ -1803,11 +1802,10 @@ void VisibilityManager::rayTrace(const std::vector<uint32_t> &indices, int viewC
         } else {
             terminationThresholdCounter = 0;
         }
-        //std::cout << terminationThresholdCounter << " " << NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT << std::endl;
 
-        if (
-            terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT
-        ) {
+        // Terminate, if no more than NEW_TRIANGLE_TERMINATION_THRESHOLD new triangles have been found during each of
+        // the last NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT iterations
+        if (terminationThresholdCounter == NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT) {
             statistics.back().endOperation(VISIBILITY_SAMPLING);
             statistics.back().print();
             break;
@@ -1888,8 +1886,8 @@ void VisibilityManager::releaseResources() {
     vkFreeMemory(logicalDevice, bottomLevelAS.deviceMemory, nullptr);
 }
 
+// Get the PVS from the GPU
 void VisibilityManager::fetchPVS() {
-    // Copy the intersected triangles GPU buffer to the host buffer
     VkDeviceSize bufferSize = sizeof(int) * pvsBufferCapacity;
 
     VkBuffer hostBuffer;
