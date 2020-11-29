@@ -84,8 +84,7 @@ VkCommandBuffer VulkanUtil::beginSingleTimeCommands(
 }
 
 void VulkanUtil::endSingleTimeCommands(
-    VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue,
-    std::mutex *mutex
+    VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue
 ) {
     vkEndCommandBuffer(commandBuffer);
 
@@ -102,13 +101,7 @@ void VulkanUtil::endSingleTimeCommands(
     VkFence fence;
     vkCreateFence(logicalDevice, &fenceInfo, NULL, &fence);
 
-    if (mutex != nullptr) {
-        mutex->lock();
-    }
     vkQueueSubmit(queue, 1, &submitInfo, fence);
-    if (mutex != nullptr) {
-        mutex->unlock();
-    }
 
     VkResult result;
     // Wait for the command buffer to complete execution in a loop in case it takes longer to
@@ -195,24 +188,15 @@ VkShaderModule VulkanUtil::createShader(VkDevice logicalDevice, const std::strin
 }
 
 void VulkanUtil::executeCommandBuffer(
-    VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence,
-    std::mutex *mutex
+    VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence
 ) {
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    //std::lock_guard<std::mutex> lock(mutex);
-    if (mutex != nullptr) {
-        mutex->lock();
-    }
     vkQueueSubmit(queue, 1, &submitInfo, fence);
-    if (mutex != nullptr) {
-        mutex->unlock();
-    }
 
-    //vkQueueWaitIdle(window->graphicsQueue());
     VkResult result;
     // Wait for the command buffer to complete execution in a loop in case it takes longer to
     // complete than expected

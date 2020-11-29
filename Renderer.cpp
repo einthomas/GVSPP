@@ -3,28 +3,24 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define STB_IMAGE_IMPLEMENTATION
 
 #include <chrono>
 
-//#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/rotate_vector.hpp>
-#include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 #include <filesystem>
+#include <iterator>
 
 #include "vulkanutil.h"
 #include "Renderer.h"
 #include "sample.h"
 
 #include "viewcell.h"
-
-#include "NirensteinSampler.h"
 
 struct UniformBufferObjectMultiView {
     alignas(64) glm::mat4 model;
@@ -40,11 +36,11 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     Settings settings = loadSettingsFile();
 
     std::cout << "compiling shaders..." << std::endl;
-    system(se[0].at("SHADER_COMPILE_SCRIPT").c_str());
+    system(settingsKeys[0].at("SHADER_COMPILE_SCRIPT").c_str());
 
     std::cout << std::endl << "========================================" << std::endl;
     std::cout << "Settings loaded: " << std::endl;
-    for (const auto &pair : se[0]) {
+    for (const auto &pair : settingsKeys[0]) {
         std::cout << "    " << pair.first << " " << pair.second << std::endl;
     }
     std::cout << "========================================" << std::endl << std::endl;
@@ -105,7 +101,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     createErrorBuffer();
     createComputeDescriptorLayout();
     {
-        std::vector<VkDescriptorSetLayout> layouts;//(window->imageCount, descriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> layouts;
         for (int i = 0; i < window->imageCount; i++) {
             layouts.push_back(descriptorSetLayout);
         }
@@ -113,7 +109,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
             layouts.push_back(computeDescriptorSetLayout);
         }
 
-        //layouts.push_back(nirensteinDescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool;
@@ -148,25 +143,16 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     updateUniformBuffer(0);
     updateUniformBuffer(1);
 
-    int reverseSamplingMethod = std::stoi(se[0].at("REVERSE_SAMPLING_METHOD"));
-    long numReverseSamplingSamples = 15;
-    if (reverseSamplingMethod == 1) {
-        numReverseSamplingSamples = 2;
-    } else if (reverseSamplingMethod == 2) {
-        numReverseSamplingSamples = std::stol(se[0].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
-    }
+    long numReverseSamplingSamples = std::stol(settingsKeys[0].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
     visibilityManager = new VisibilityManager(
-        se[0].at("USE_TERMINATION_CRITERION") == "true",
-        se[0].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
-        std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
-        std::stol(se[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
-        std::stol(se[0].at("RANDOM_RAYS_PER_ITERATION")),
-        std::stol(se[0].at("ABS_MAX_SUBDIVISION_STEPS")),
-        std::stol(se[0].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+        std::stol(settingsKeys[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
+        std::stol(settingsKeys[0].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+        std::stol(settingsKeys[0].at("RANDOM_RAYS_PER_ITERATION")),
+        std::stol(settingsKeys[0].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
         numReverseSamplingSamples,
-        std::stol(se[0].at("MAX_BULK_INSERT_BUFFER_SIZE")),
-        std::stoi(se[0].at("SET_TYPE")),
-        std::stol(se[0].at("INITIAL_HASH_SET_SIZE")),
+        std::stol(settingsKeys[0].at("MAX_BULK_INSERT_BUFFER_SIZE")),
+        std::stoi(settingsKeys[0].at("SET_TYPE")),
+        std::stol(settingsKeys[0].at("INITIAL_HASH_SET_SIZE")),
         window->physicalDevice,
         window->device,
         indexBuffer,
@@ -174,7 +160,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         vertexBuffer,
         vertices,
         uniformBuffers,
-        NUM_THREADS,
         window->deviceUUID,
         viewCells,
         window->graphicsCommandPool,
@@ -187,21 +172,6 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     nextCorner();
     alignCameraWithViewCellNormal();
 
-    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-        nirensteinSampler = new NirensteinSampler(
-            window, visibilityManager->computeQueue, visibilityManager->commandPool[0],
-            visibilityManager->transferQueue, visibilityManager->transferCommandPool, vertexBuffer,
-            vertices, indexBuffer, indices, indices.size() / 3.0f,
-            std::stof(se[0].at("NIRENSTEIN_ERROR_THRESHOLD")),
-            std::stoi(se[0].at("NIRENSTEIN_MAX_SUBDIVISIONS")),
-            se[settingsIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true",
-            se[settingsIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true",
-            visibilityManager->randomSamplingOutputBuffer[0],
-            visibilityManager->pvsBuffer[0],
-            visibilityManager->triangleCounterBuffer[0]
-        );
-    }
-
     VkFenceCreateInfo fenceInfo;
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.pNext = NULL;
@@ -213,16 +183,7 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
     createComputeCommandBuffer();
 }
 
-void VulkanRenderer::initResources() {
-}
-
-void VulkanRenderer::initSwapChainResources() {
-}
-
-void VulkanRenderer::releaseSwapChainResources() {
-}
-
-void VulkanRenderer::releaseResources() {
+VulkanRenderer::~VulkanRenderer() {
     VkDevice device = window->device;
 
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
@@ -349,8 +310,6 @@ void VulkanRenderer::createGraphicsPipeline(
     depthStencilStateInfo.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL; //VK_COMPARE_OP_LESS;//VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencilStateInfo.stencilTestEnable = VK_FALSE;
     depthStencilStateInfo.depthBoundsTestEnable = VK_FALSE;
-    //depthStencil.minDepthBounds = 0.0f; // Optional
-    //depthStencil.maxDepthBounds = 1.0f; // Optional
 
     // Create graphics pipeline
     VkGraphicsPipelineCreateInfo graphicsPipelineInfo = {};
@@ -493,7 +452,7 @@ void VulkanRenderer::createErrorBuffer() {
     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     if (vkCreateSampler(window->device, &samplerInfo, nullptr, &errorColorImageSampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create nirenstein color image sampler!");
+        throw std::runtime_error("failed to create color image sampler!");
     }
 
     std::array<VkImageView, 2> attachments = {
@@ -676,7 +635,7 @@ void VulkanRenderer::createComputeDescriptorLayout() {
             window->device, &layoutInfo, nullptr, &computeDescriptorSetLayout
         ) != VK_SUCCESS
     ) {
-        throw std::runtime_error("failed to create nirenstein compute descriptor set layout");
+        throw std::runtime_error("failed to create compute descriptor set layout");
     }
 }
 
@@ -688,7 +647,6 @@ void VulkanRenderer::createComputeCommandBuffer() {
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        //allocInfo.commandPool = visibilityManager->commandPool[0];
         allocInfo.commandPool = window->graphicsCommandPool;
         allocInfo.commandBufferCount = 1;
         vkAllocateCommandBuffers(window->device, &allocInfo, &computeCommandBuffers[i]);
@@ -709,7 +667,7 @@ void VulkanRenderer::createComputeCommandBuffer() {
     }
 }
 
-void VulkanRenderer::loadModel(std::string modelPath) {
+void VulkanRenderer::loadModel(const std::string& modelPath) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -761,89 +719,6 @@ void VulkanRenderer::loadModel(std::string modelPath) {
     }
 }
 
-void VulkanRenderer::createTextureImage() {
-    // Load texture from file
-    int texWidth, texHeight, texChannels;
-    auto pixels = stbi_load(
-        "models/chalet.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha
-    );
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    if (!pixels) {
-        throw std::runtime_error("failed to load texture image");
-    }
-
-    // Create staging buffer using host-visible memory
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    VulkanUtil::createBuffer(
-        window->physicalDevice,
-        window->device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingBuffer, stagingBufferMemory,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    // Copy image data to the staging buffer
-    void *data;
-    vkMapMemory(window->device, stagingBufferMemory, 0, imageSize, 0, &data);    // Map buffer memory into CPU accessible memory
-    memcpy(data, pixels, static_cast<size_t>(imageSize));   // Copy vertex data to mapped memory
-    vkUnmapMemory(window->device, stagingBufferMemory);
-
-    stbi_image_free(pixels);
-
-    // Create image object
-    /*
-    createImage(
-        static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        window->deviceLocalMemoryIndex(), textureImage, textureImageMemory
-    );
-    */
-
-    // Change image layout to a layout optimal as destination in a transfer operation
-    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
-    transitionImageLayout(
-        commandBuffer, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT
-    );
-    VulkanUtil::endSingleTimeCommands(
-        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
-    );
-
-    // Copy the staging buffer to the texture image
-    copyBufferToImage(
-        stagingBuffer, textureImage, static_cast<uint32_t>(texWidth),
-        static_cast<uint32_t>(texHeight)
-    );
-
-    // Change image layout to a layout optimal for sampling from a shader
-    commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
-    transitionImageLayout(
-        commandBuffer, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-    );
-    VulkanUtil::endSingleTimeCommands(
-        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
-    );
-}
-
-void VulkanRenderer::createTextureImageView() {
-    VkImageViewCreateInfo viewInfo = {};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = textureImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(window->device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create texture image view");
-    }
-}
-
 void VulkanRenderer::createTextureSampler() {
     VkSamplerCreateInfo samplerInfo = {};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -856,7 +731,6 @@ void VulkanRenderer::createTextureSampler() {
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
     samplerInfo.anisotropyEnable = VK_FALSE;
-    //samplerInfo.maxAnisotropy = 16;
 
     samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
@@ -875,100 +749,7 @@ void VulkanRenderer::createTextureSampler() {
     }
 }
 
-void VulkanRenderer::transitionImageLayout(
-    VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout,
-    VkImageLayout newLayout, VkPipelineStageFlags sourceStage, VkPipelineStageFlags destinationStage
-) {
-    VkImageMemoryBarrier barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = sourceStage;
-    barrier.dstAccessMask = destinationStage;
-
-    switch (oldLayout) {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-            barrier.srcAccessMask = 0;
-            break;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            break;
-    }
-
-    switch (newLayout) {
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            if (barrier.srcAccessMask == 0) {
-                barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            }
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            break;
-    }
-
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        sourceStage,
-        destinationStage,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &barrier
-    );
-}
-
-void VulkanRenderer::copyBufferToImage(
-    VkBuffer buffer, VkImage image, uint32_t width, uint32_t height
-) {
-    VkCommandBuffer commandBuffer = VulkanUtil::beginSingleTimeCommands(window->device, window->graphicsCommandPool);
-
-    // Specify which part of the buffer is going to be copied to which part of the image
-    VkBufferImageCopy region = {};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {
-        width,
-        height,
-        1
-    };
-
-    // Copy buffer to image
-    vkCmdCopyBufferToImage(
-        commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region
-    );
-
-    VulkanUtil::endSingleTimeCommands(
-        window->device, commandBuffer, window->graphicsCommandPool, window->graphicsQueue
-    );
-}
-
 void VulkanRenderer::createDescriptorSetLayout() {
-    // A descriptor set layout describes the content of a (list of) descriptor set(s)
-
     // Describe each binding (used in a shader) via a VkDescriptorSetLayoutBinding
     // Uniform buffer descriptor
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
@@ -1026,46 +807,12 @@ void VulkanRenderer::createDescriptorPool() {
 }
 
 void VulkanRenderer::createDescriptorSets() {
-    // A descriptor set specifies the actual buffer or image resource (just like a framebuffer
-    // specifies the actual image view). Descriptor sets are allocated from a descriptor pool
-
-    /*
-    std::vector<VkDescriptorSetLayout> layouts(window->imageCount, descriptorSetLayout);
-    //layouts.push_back(nirensteinDescriptorSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
-    allocInfo.pSetLayouts = layouts.data();
-
-    // Allocate descriptor sets (one descriptor set for each swap chain image)
-    std::vector<VkDescriptorSet> descriptorSets;
-    descriptorSets.resize(layouts.size());
-    if (vkAllocateDescriptorSets(
-            window->device, &allocInfo, descriptorSets.data()
-        ) != VK_SUCCESS
-    ) {
-        throw std::runtime_error("failed to allocate descriptor sets");
-    }
-    for (int i = 0; i < window->imageCount; i++) {
-        this->descriptorSets.push_back(descriptorSets[i]);
-    }
-    */
-    //nirensteinDescriptorSet = descriptorSets[descriptorSets.size() - 1];
-
     // Populate every descriptor
     for (int i = 0; i < window->imageCount; i++) {
         VkDescriptorBufferInfo bufferInfo = {};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObjectMultiView);
-
-        /*
-        VkDescriptorImageInfo imageInfo = {};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImageView;
-        imageInfo.sampler = textureSampler;
-        */
 
         // Define write descriptor sets to copy data to the descriptors (i.e. the device memory)
         std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
@@ -1077,16 +824,6 @@ void VulkanRenderer::createDescriptorSets() {
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[0].descriptorCount = 1;
         descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-        /*
-        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSets[i];
-        descriptorWrites[1].dstBinding = 1;     // layout location in the shader
-        descriptorWrites[1].dstArrayElement = 0;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pImageInfo = &imageInfo;
-        */
 
         vkUpdateDescriptorSets(
             window->device,
@@ -1119,7 +856,7 @@ void VulkanRenderer::createUniformBuffers() {
 }
 
 void VulkanRenderer::updateUniformBuffer(uint32_t swapChainImageIndex) {
-    UniformBufferObjectMultiView ubo;
+    UniformBufferObjectMultiView ubo{};
 
     ubo.model = glm::mat4(1.0f);
 
@@ -1159,19 +896,9 @@ void VulkanRenderer::startNextFrame(
     renderPassInfo.renderArea.extent.width = window->swapChainImageSize.width;
     renderPassInfo.renderArea.extent.height = window->swapChainImageSize.height;
 
-    /*
-    VkClearColorValue clearColor = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    VkClearDepthStencilValue clearDS = { 1, 0 };
-    VkClearValue clearValues[3] = {};
-    clearValues[0].color = clearValues[2].color = clearColor;
-    clearValues[1].depthStencil = clearDS;
-    renderPassInfo.clearValueCount = VK_SAMPLE_COUNT_1_BIT > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    renderPassInfo.pClearValues = clearValues;
-    */
-
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = {{ 0.0f, 0.0f, 0.0f, 1.0f }};
-    clearValues[1].depthStencil = { 0.0f, 0 }; //1.0f, 0 };
+    clearValues[1].depthStencil = { 0.0f, 0 };
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
@@ -1212,7 +939,7 @@ void VulkanRenderer::startNextFrame(
         (std::array<VkBool32, 1> { shadedRendering }).data()
     );
 
-    if (se[settingsIndex].at("ERROR_VISUALIZATION") == "true") {
+    if (settingsKeys[settingsIndex].at("ERROR_VISUALIZATION") == "true") {
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(pvsVertices[currentViewCellIndex].size()), 1, 0, 0);
     } else {
         vkCmdBindIndexBuffer(commandBuffer, pvsIndicesBuffer, 0, VK_INDEX_TYPE_UINT32);
@@ -1229,26 +956,10 @@ void VulkanRenderer::startNextFrame(
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
     }
 
-    // Draw visibility cubes
-    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true" && viewCellRendering) {
-        for (auto pos : nirensteinSampler->renderCubePositions) {
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, pos);
-            model = glm::scale(model, glm::vec3(0.2f));
-
-            vkCmdPushConstants(
-                commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-                (std::array<glm::mat4, 1> { model }).data()
-            );
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &viewCellGeometry[currentViewCellIndex].vertexBuffer, offsets);
-            vkCmdDraw(commandBuffer, 36, 1, 0, 0);
-        }
-    }
-
     // Draw ray visualizations
     if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays)
+        && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
     ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
@@ -1256,16 +967,7 @@ void VulkanRenderer::startNextFrame(
             &descriptorSets[swapChainImageIndex], 0, nullptr
         );
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &rayVertexBuffer, offsets);
-        /*
-        vkCmdPushConstants(
-            commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-            (std::array<glm::mat4, 1> { glm::mat4(1.0f) }).data()
-        );
-        vkCmdPushConstants(
-            commandBuffer, rayVisualizationPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(VkBool32),
-            (std::array<VkBool32, 1> { shadedRendering }).data()
-        );
-        */
+
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(visibilityManager->rayVertices[currentViewCellIndex].size()), 1, 0, 0);
     }
 
@@ -1285,18 +987,20 @@ void VulkanRenderer::showMaxErrorDirection() {
     cameraPos = maxErrorCameraPos;
 }
 
+/*
+ * Positions the camera at the next corner of the current view cell
+ */
 void VulkanRenderer::nextCorner() {
     glm::vec3 offset;
     offset.x = currentViewCellCornerView % 2 == 0 ? -1.0f : 1.0f;
     offset.y = int(currentViewCellCornerView / 2) % 2 == 0 ? -1.0f : 1.0f;
     offset.z = int(currentViewCellCornerView / 4) % 4 == 0 ? -1.0f : 1.0f;
 
-    //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model * glm::vec4(offset, 1.0f);
     cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos
             + visibilityManager->viewCells[currentViewCellIndex].size.x * visibilityManager->viewCells[currentViewCellIndex].right * offset.x
-            + visibilityManager->viewCells[currentViewCellIndex].size.y * visibilityManager->viewCells[currentViewCellIndex].up * offset.y;
+            + visibilityManager->viewCells[currentViewCellIndex].size.y * visibilityManager->viewCells[currentViewCellIndex].up * offset.y
+            + visibilityManager->viewCells[currentViewCellIndex].size.z * visibilityManager->viewCells[currentViewCellIndex].normal * offset.z;
 
-    //std::cout << "camera position: " << glm::to_string(cameraPos) << std::endl;
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
 
@@ -1304,27 +1008,10 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellIndex++;
     currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
-    /*
-    if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-        || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
-    ) {
-        updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
-    }
-    */
 
-    if (se[0].at("ERROR_VISUALIZATION") == "true") {
+    if (settingsKeys[0].at("ERROR_VISUALIZATION") == "true") {
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
     } else {
-        vkDestroyBuffer(window->device, pvsIndicesBuffer, nullptr);
-        vkFreeMemory(window->device, pvsIndicesBufferMemory, nullptr);
-
-        VulkanUtil::createBuffer(
-                window->physicalDevice,
-                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
         VkDeviceSize bufferSize = sizeof(pvsIndices[currentViewCellIndex][0]) * pvsIndices[currentViewCellIndex].size();
 
         // Create staging buffer using host-visible memory
@@ -1367,27 +1054,23 @@ void VulkanRenderer::nextViewCell() {
 
 void VulkanRenderer::printCamera() {
     std::cout << "camera pos: " << glm::to_string(cameraPos) << std::endl;
-    std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
-    std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
-    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << glm::degrees(std::acosf(-cameraForward.z)) << std::endl;
+    //std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
+    //std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
 
-    std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-    std::cout << "1 1 0" << std::endl;
-    std::cout << glm::degrees(std::acosf(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acosf(-cameraForward.z)) << " 0" << std::endl;
+    //std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
+    //std::cout << "1 1 0" << std::endl;
+    //std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acos(-cameraForward.z)) << " 0" << std::endl;
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
     cameraForward = visibilityManager->viewCells[currentViewCellIndex].normal;
 }
 
-void VulkanRenderer::initVisibilityManager() {
-}
-
-std::vector<ViewCell> VulkanRenderer::loadSceneFile(Settings settings) {
+std::vector<ViewCell> VulkanRenderer::loadSceneFile(const Settings &settings) {
     std::vector<ViewCell> viewCells;
 
     std::string scene = settings.modelName;
-    int viewCellIndex = settings.viewCellIndex;
+    int viewCellIndex = 0;
 
     int i = 0;
     int currentViewCell = 0;
@@ -1403,10 +1086,22 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(Settings settings) {
     std::ifstream file("scenes.txt");
     std::string line;
     while (std::getline(file, line)) {
+        if (!line.empty() && line[line.size() - 1] == '\r') {
+            line.erase(line.size() - 1);
+        }
         if (i == 3) {
             glm::vec3 pos = v[0];
             glm::vec3 size = v[1] * 0.5f;
             glm::vec3 rotation = glm::radians(v[2]);
+            rotation.z = 0.0f;
+
+            glm::vec3 right = glm::rotateY(glm::rotateX(glm::vec3(1.0f, 0.0f, 0.0f), rotation.x), rotation.y);
+            glm::vec3 up = glm::rotateY(glm::rotateX(glm::vec3(0.0f, 1.0f, 0.0f), rotation.x), rotation.y);
+            glm::vec3 normal = glm::rotateY(glm::rotateX(glm::vec3(0.0f, 0.0f, 1.0f), rotation.x), rotation.y);
+
+            if (settingsKeys[settingsIndex].at("SPECIFY_VIEW_CELL_CENTER") == "true") {
+                pos -= size.x * right + size.y * up + size.z * normal;
+            }
 
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, pos);
@@ -1425,13 +1120,7 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(Settings settings) {
 
             viewCellMatrices.push_back(model);
 
-            ViewCell viewCell(
-                pos,
-                size,
-                glm::rotateY(glm::rotateX(glm::vec3(1.0f, 0.0f, 0.0f), rotation.x), rotation.y),
-                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 1.0f, 0.0f), rotation.x), rotation.y),
-                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 0.0f, 1.0f), rotation.x), rotation.y)
-            );
+            ViewCell viewCell(pos, size, right, up, normal);
             viewCell.pos += viewCell.right * size.x + viewCell.up * size.y + viewCell.normal * size.z;   // translate such that the bottom left corner is at the position read from scenes.txt
             viewCells.push_back(viewCell);
 
@@ -1479,9 +1168,8 @@ Settings VulkanRenderer::loadSettingsFile() {
             continue;
         }
 
-        se.push_back({});
+        settingsKeys.push_back({});
 
-        //std::ifstream file("settings.txt");
         settingsFilePaths.push_back(entry.path().string());
         std::ifstream file(entry.path());
         std::cout << "Loading settings file " << entry.path() << std::endl;
@@ -1507,7 +1195,11 @@ Settings VulkanRenderer::loadSettingsFile() {
                     readSettings = true;
                     readSceneDefinition = false;
                 } else if (readSettings) {
-                    se[entryIndex][line.substr(0, line.find(" "))] = line.substr(line.find(" ") + 1, line.length());
+                    std::string value = line.substr(line.find(" ") + 1, line.length());
+                    if (!value.empty() && value[value.size() - 1] == '\r') {
+                        value.erase(value.size() - 1);
+                    }
+                    settingsKeys[entryIndex][line.substr(0, line.find(" "))] = value;
                 } else if (readSceneDefinition) {
                     if (line.rfind("CALCPVS_NOSTORE", 0) == 0) {
                         loadPVS = false;
@@ -1525,14 +1217,14 @@ Settings VulkanRenderer::loadSettingsFile() {
                     settings.modelName = line;
 
                     std::getline(file, line);
-                    settings.viewCellIndex = std::stoi(line);
+                    std::string value = line.substr(line.find(" ") + 1, line.length());
+                    if (!value.empty() && value[value.size() - 1] == '\r') {
+                        value.erase(value.size() - 1);
+                    }
+                    settingsKeys[entryIndex][line.substr(0, line.find(" "))] = value;
                 }
             }
         }
-
-        //USE_NIRENSTEIN_VISIBILITY_SAMPLING = se[entryIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true";
-        //USE_NIRENSTEIN_MULTI_VIEW_RENDERING = se[entryIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true";
-        //USE_NIRENSTEIN_ADAPTIVE_DIVIDE = se[entryIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true";
 
         entryIndex++;
     }
@@ -1545,40 +1237,29 @@ Settings VulkanRenderer::loadSettingsFile() {
 void VulkanRenderer::writeShaderDefines(int settingsIndex) {
     std::ofstream shaderDefinesFile;
     shaderDefinesFile.open("shaders/rt/defines.glsl");
-    shaderDefinesFile << "const float ABS_DELTA = " << se[settingsIndex].at("ABS_DELTA") << ";\n";
-    shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << se[settingsIndex].at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
-    shaderDefinesFile << "const int ABS_MAX_SUBDIVISION_STEPS = " << se[settingsIndex].at("ABS_MAX_SUBDIVISION_STEPS") << ";\n";
-    shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << se[settingsIndex].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
-    shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << se[settingsIndex].at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
-    shaderDefinesFile << "#define REVERSE_SAMPLING_METHOD " << se[settingsIndex].at("REVERSE_SAMPLING_METHOD") << "\n";
-    shaderDefinesFile << "#define SET_TYPE " << se[settingsIndex].at("SET_TYPE") << "\n";
-    if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
+    shaderDefinesFile << "const float ABS_DELTA = " << settingsKeys[settingsIndex].at("ABS_DELTA") << ";\n";
+    shaderDefinesFile << "const int ABS_NUM_SAMPLES_PER_EDGE = " << settingsKeys[settingsIndex].at("ABS_NUM_SAMPLES_PER_EDGE") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE = " << settingsKeys[settingsIndex].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE") << ";\n";
+    shaderDefinesFile << "const int REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES = " << settingsKeys[settingsIndex].at("REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES") << ";\n";
+    shaderDefinesFile << "#define SET_TYPE " << settingsKeys[settingsIndex].at("SET_TYPE") << "\n";
+    if (settingsKeys[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
         shaderDefinesFile << "#define USE_3D_VIEW_CELL\n";
-    }
-    if (se[settingsIndex].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true") {
-        shaderDefinesFile << "#define USE_RECURSIVE_EDGE_SUBDIVISION\n";
-    }
-    if (se[settingsIndex].at("NIRENSTEIN_USE_MULTI_VIEW_RENDERING") == "true") {
-        shaderDefinesFile << "#define NIRENSTEIN_USE_MULTI_VIEW_RENDERING\n";
-    }
-    if (se[settingsIndex].at("NIRENSTEIN_USE_ADAPTIVE_DIVIDE") == "true") {
-        shaderDefinesFile << "#define NIRENSTEIN_USE_ADAPTIVE_DIVIDE\n";
     }
     shaderDefinesFile.close();
 }
 
 void VulkanRenderer::startVisibilityThread() {
-    // Calculate the PVS
-    if (loadPVS && !storePVS) {
+    if (loadPVS && !storePVS) {     // Load the PVS from the file specified in the settings file
         loadPVSFromFile(pvsStorageFile);
 
         currentViewCellIndex = 0;
         cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
 
-        if (se[0].at("ERROR_VISUALIZATION") == "false") {
+        if (settingsKeys[0].at("ERROR_VISUALIZATION") == "false") {
             VulkanUtil::createBuffer(
                 window->physicalDevice,
-                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(),
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
             );
 
@@ -1608,55 +1289,44 @@ void VulkanRenderer::startVisibilityThread() {
             vkDestroyBuffer(window->device, stagingBuffer, nullptr);
             vkFreeMemory(window->device, stagingBufferMemory, nullptr);
         }
-        createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
-        updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
 
-        /*
         createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
-        */
-    } else {
+    } else {        // Calculate the PVS
         std::ofstream pvsFile;
         if (storePVS) {
             pvsFile.open(pvsStorageFile);
         }
 
-        for (int i = 0; i < se.size(); i++) {
+        // Process each settings file
+        for (int i = 0; i < settingsKeys.size(); i++) {
             std::cout << std::endl;
             std::cout << "-------------------------" << std::endl;
             std::cout << settingsFilePaths[i] << ":" << std::endl;
             std::cout << "-------------------------" << std::endl;
             std::cout << std::endl;
-            if (i > 0 && se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") != "true") {
+            if (i > 0) {
+                // Create a new visibilityManager
                 pvsVertices.clear();
                 pvsTriangleIDs.clear();
                 viewCellGeometry.clear();
                 vkDestroyBuffer(window->device, pvsVerticesBuffer, nullptr);
                 vkFreeMemory(window->device, pvsVerticesBufferMemory, nullptr);
                 writeShaderDefines(i);
-                system(se[0].at("SHADER_COMPILE_SCRIPT").c_str());
+                system(settingsKeys[0].at("SHADER_COMPILE_SCRIPT").c_str());
 
                 delete visibilityManager;
 
-                int reverseSamplingMethod = std::stoi(se[i].at("REVERSE_SAMPLING_METHOD"));
-                long numReverseSamplingSamples = 15;
-                if (reverseSamplingMethod == 1) {
-                    numReverseSamplingSamples = 2;
-                } else if (reverseSamplingMethod == 2) {
-                    numReverseSamplingSamples = std::stol(se[i].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
-                }
+                long numReverseSamplingSamples = std::stol(settingsKeys[i].at("REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE")) * 4;
                 visibilityManager = new VisibilityManager(
-                    se[i].at("USE_TERMINATION_CRITERION") == "true",
-                    se[i].at("USE_RECURSIVE_EDGE_SUBDIVISION") == "true",
-                    std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
-                    std::stol(se[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
-                    std::stol(se[i].at("RANDOM_RAYS_PER_ITERATION")),
-                    std::stol(se[i].at("ABS_MAX_SUBDIVISION_STEPS")),
-                    std::stol(se[i].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
+                    std::stol(settingsKeys[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT")),
+                    std::stol(settingsKeys[i].at("NEW_TRIANGLE_TERMINATION_THRESHOLD")),
+                    std::stol(settingsKeys[i].at("RANDOM_RAYS_PER_ITERATION")),
+                    std::stol(settingsKeys[i].at("ABS_NUM_SAMPLES_PER_EDGE")) * 3,
                     numReverseSamplingSamples,
-                    std::stol(se[i].at("MAX_BULK_INSERT_BUFFER_SIZE")),
-                    std::stoi(se[i].at("SET_TYPE")),
-                    std::stol(se[i].at("INITIAL_HASH_SET_SIZE")),
+                    std::stol(settingsKeys[i].at("MAX_BULK_INSERT_BUFFER_SIZE")),
+                    std::stoi(settingsKeys[i].at("SET_TYPE")),
+                    std::stol(settingsKeys[i].at("INITIAL_HASH_SET_SIZE")),
                     window->physicalDevice,
                     window->device,
                     indexBuffer,
@@ -1664,7 +1334,6 @@ void VulkanRenderer::startVisibilityThread() {
                     vertexBuffer,
                     vertices,
                     uniformBuffers,
-                    NUM_THREADS,
                     window->deviceUUID,
                     viewCells,
                     window->graphicsCommandPool,
@@ -1675,20 +1344,16 @@ void VulkanRenderer::startVisibilityThread() {
                 );
             }
 
+            // Calculate the PVS for each view cell and store it into a file, if specified
             for (int k = 0; k < visibilityManager->viewCells.size(); k++) {
                 std::cout << "View cell " << k << ":" << std::endl;
                 std::vector<int> pvs;
-                if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                    glm::vec3 cameraForward = visibilityManager->viewCells[currentViewCellIndex].normal;
-                    pvs = nirensteinSampler->run(
-                        visibilityManager->viewCells[k], viewCellSizes[k], cameraForward,
-                        visibilityManager->generateHaltonPoints2d<2>({5, 7}, 1000, {0.0f,0.0f})
-                    );
-                } else {
-                    visibilityManager->rayTrace(indices, 0, k);
-                    // Fetch the PVS from the GPU
-                    visibilityManager->fetchPVS();
-                }
+
+                // Calculate the PVS
+                visibilityManager->rayTrace(k);
+
+                // Fetch the PVS from the GPU
+                visibilityManager->fetchPVS();
 
                 if (storePVS) {
                     pvsFile << visibilityManager->viewCells[k].pos.x << "," << visibilityManager->viewCells[k].pos.y << "," << visibilityManager->viewCells[k].pos.z << ";";
@@ -1700,11 +1365,7 @@ void VulkanRenderer::startVisibilityThread() {
 
                     // Write pvs to the PVS file
                     std::ostringstream oss;
-                    if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                        std::copy(pvs.begin(), pvs.end(), std::ostream_iterator<int>(oss, ";"));
-                    } else {
-                        std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
-                    }
+                    std::copy(visibilityManager->pvs.pvsVector.begin(), visibilityManager->pvs.pvsVector.end(), std::ostream_iterator<int>(oss, ";"));
                     pvsFile << oss.str() << "\n";
                 } else if (!loadPVS) {
                     // Color all vertices red
@@ -1715,29 +1376,19 @@ void VulkanRenderer::startVisibilityThread() {
                     int viewCellIndex = k;
                     pvsVertices.push_back({});
 
-                    if (se[i].at("ERROR_VISUALIZATION") == "true") {
+                    if (settingsKeys[i].at("ERROR_VISUALIZATION") == "true") {
                         for (int i = 0; i < indices.size(); i++) {
                             pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
                         }
 
                         // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
                         pvsTriangleIDs.push_back({});
-                        if (se[i].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                            for (int triangleID : pvs) {
-                                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
+                        for (int triangleID : visibilityManager->pvs.pvsVector) {
+                            pvsTriangleIDs[viewCellIndex].push_back(triangleID);
 
-                                pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                                pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                                pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            }
-                        } else {
-                            for (int triangleID : visibilityManager->pvs.pvsVector) {
-                                pvsTriangleIDs[viewCellIndex].push_back(triangleID);
-
-                                pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                                pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                                pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
-                            }
+                            pvsVertices[viewCellIndex][3 * triangleID].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            pvsVertices[viewCellIndex][3 * triangleID + 1].color = glm::vec3(0.0f, 1.0f, 0.0f);
+                            pvsVertices[viewCellIndex][3 * triangleID + 2].color = glm::vec3(0.0f, 1.0f, 0.0f);
                         }
                     } else {
                         pvsIndices.push_back({});
@@ -1800,40 +1451,43 @@ void VulkanRenderer::startVisibilityThread() {
                     }
                 }
             }
+
             if (storePVS) {
                 pvsFile.close();
             }
 
             // Print average statistics across view cells
             if (visibilityManager->viewCells.size() > 1) {
-                if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") == "true") {
-                    nirensteinSampler->printAverageStatistics();
-                } else {
-                    visibilityManager->printAverageStatistics();
-                }
+                visibilityManager->printAverageStatistics();
             }
 
             loadPVSFromFile(pvsStorageFile);
 
             currentViewCellIndex = 0;
-            //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
             cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
             createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
             updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
 
             // Create and fill ray visualization buffers
             if (
-                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays
-                || visibilityManager->visualizeEdgeSubdivRays) && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays)
+                && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
             ) {
                 createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
                 updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
             }
 
-            if (se[i].at("ERROR_VISUALIZATION") == "false") {
+            // Create vertex and index buffers from the PVS
+            if (settingsKeys[i].at("ERROR_VISUALIZATION") == "false") {
+                size_t maxSize = 0;
+                for (int i = 0; i < pvsIndices.size(); i++) {
+                    maxSize = std::max(maxSize, pvsIndices[i].size());
+                }
+
                 VulkanUtil::createBuffer(
                     window->physicalDevice,
-                    window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    window->device, sizeof(uint32_t) * maxSize, //pvsIndices[currentViewCellIndex].size(),
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                 );
 
@@ -1864,21 +1518,20 @@ void VulkanRenderer::startVisibilityThread() {
                 vkFreeMemory(window->device, stagingBufferMemory, nullptr);
             }
 
-            if (se[i].at("ERROR_VISUALIZATION") == "true") {
-                // Calculate avg. and max. pixel error across all view cells
+            if (settingsKeys[i].at("ERROR_VISUALIZATION") == "true") {
                 auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
                 totalError = 0.0f;
                 maxError = 0.0f;
                 for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
+                    // Calculate avg. and max. pixel error across all view cells
                     float error = calculateError(visibilityManager->viewCells[i], haltonPoints);
                     std::cout << "Average pixel error (view cell " << i << "): " << error << std::endl;
-                    //std::cout << error << std::endl;
                     totalError += error / visibilityManager->viewCells.size();
 
                     currentViewCellIndex++;
                     currentViewCellIndex %= visibilityManager->viewCells.size();
                     currentViewCellCornerView = 0;
-                    //cameraPos = visibilityManager->viewCells[currentViewCellIndex].model[3];
+
                     cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
                     updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
 
@@ -1886,32 +1539,9 @@ void VulkanRenderer::startVisibilityThread() {
                 }
                 std::cout << "Average total pixel error: " << totalError << std::endl;
                 std::cout << "Max. pixel error: " << maxError << std::endl;
-                //std::cout << maxError << std::endl;
-                //std::cout << totalError << std::endl;
             }
         }
     }
-
-    // Temporary
-    /*
-    std::cout << std::endl << std::endl;
-    for (auto s : visibilityManager->statistics) {
-        long a = 0;
-        for (auto e : s.entries) {
-            a += e.totalRays();
-            //std::cout << e.totalRays() << ";" << a << ";" << a / 1000000.0f << ";" << e.pvsSize << std::endl;
-            //std::cout << a << ";" << e.pvsSize << std::endl;
-            printf("%lu;%lu\n", a, e.pvsSize);
-        }
-        std::cout << std::endl << std::endl;
-    }
-
-    if (se[settingsIndex].at("USE_NIRENSTEIN_VISIBILITY_SAMPLING") != "true") {
-        for (int i = 0; i < visibilityManager->viewCells.size(); i++) {
-            std::cout << visibilityManager->statistics[i].elapsedTimes[VISIBILITY_SAMPLING] / 1000000.0f << std::endl;
-        }
-    }
-    */
 }
 
 float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints) {
@@ -1934,31 +1564,12 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
         glm::vec2(1.0f, -1.0f),
         glm::vec2(1.0f, 1.0f)
     };
-    int sides = se[settingsIndex].at("USE_3D_VIEW_CELL") == "true" ? 6 : 1;
+    int sides = settingsKeys[settingsIndex].at("USE_3D_VIEW_CELL") == "true" ? 6 : 1;
     for (int k = 0; k < sides; k++) {
         glm::vec3 originalCameraForward;
         for (int i = 0; i < haltonPoints.size() + 4; i++) {
             glm::vec4 position;
-            if (se[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
-                /*
-                glm::vec3 viewCellSize = glm::vec3(
-                    length(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2])),
-                    length(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2])),
-                    length(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]))
-                ) * 2.0f;
-                glm::vec3 viewCellRight = glm::normalize(glm::vec3(viewCell.model[0][0], viewCell.model[0][1], viewCell.model[0][2]));
-                glm::vec3 viewCellUp = glm::normalize(glm::vec3(viewCell.model[1][0], viewCell.model[1][1], viewCell.model[1][2]));
-                glm::vec3 viewCellNormal = glm::normalize(glm::vec3(viewCell.model[2][0], viewCell.model[2][1], viewCell.model[2][2]));
-                if (viewCellSize.x == 0.0f) {
-                    viewCellRight = normalize(cross(viewCellUp, viewCellNormal));
-                } else if (viewCellSize.y == 0.0f) {
-                    viewCellUp = normalize(cross(viewCellNormal, viewCellRight));
-                } else if (viewCellSize.z == 0.0f) {
-                    viewCellNormal = normalize(cross(viewCellRight, viewCellUp));
-                }
-                glm::vec3 viewCellPos = glm::vec3(viewCell.model[3][0], viewCell.model[3][1], viewCell.model[3][2]);
-                */
-
+            if (settingsKeys[settingsIndex].at("USE_3D_VIEW_CELL") == "true") {
                 glm::vec3 viewCellSize = viewCell.size;
                 glm::vec3 viewCellRight = viewCell.right;
                 glm::vec3 viewCellUp = viewCell.up;
@@ -1997,11 +1608,9 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
             } else {
                 if (i < 4) {
                     position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * corners[i].x + viewCell.size.y * viewCell.up * corners[i].y, 1.0f);
-                    //position = viewCell.model * glm::vec4(corners[i].x, corners[i].y , 0.0f, 1.0f);
                 } else {
                     glm::vec2 offset = glm::vec2(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f);
                     position = glm::vec4(viewCell.pos + viewCell.size.x * viewCell.right * offset.x + viewCell.size.y * viewCell.up * offset.y, 1.0f);
-                    //position = viewCell.model * glm::vec4(haltonPoints[i - 4].x * 2.0f - 1.0f, haltonPoints[i - 4].y * 2.0f - 1.0f, 0.0f, 1.0f);
                 }
 
                 cameraPos = position;
@@ -2040,7 +1649,6 @@ float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector
             computeCommandBufferSubmitInfo.commandBufferCount = 1;
             computeCommandBufferSubmitInfo.pCommandBuffers = &computeCommandBuffers[0];
 
-            //vkQueueSubmit(visibilityManager->computeQueue, 1, &computeCommandBufferSubmitInfo, fence);
             vkQueueSubmit(window->graphicsQueue, 1, &computeCommandBufferSubmitInfo, fence);
             VkResult result;
             do {
@@ -2150,7 +1758,7 @@ void VulkanRenderer::loadPVSFromFile(std::string file) {
 
             // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
             pvsTriangleIDs.push_back({});
-            if (se[0].at("ERROR_VISUALIZATION") == "true") {
+            if (settingsKeys[0].at("ERROR_VISUALIZATION") == "true") {
                 for (int i = 0; i < indices.size(); i++) {
                     pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
                 }

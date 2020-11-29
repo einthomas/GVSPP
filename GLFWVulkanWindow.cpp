@@ -1,3 +1,5 @@
+// Based on https://vulkan-tutorial.com
+
 #include "GLFWVulkanWindow.h"
 #include "vulkanutil.h"
 
@@ -31,7 +33,6 @@ void GLFWVulkanWindow::initVulkan() {
 void GLFWVulkanWindow::initRenderer() {
     renderer = new VulkanRenderer(this);
     renderer->startVisibilityThread();
-    //renderer->nirenstein();
 }
 
 void GLFWVulkanWindow::createSurface() {
@@ -64,10 +65,10 @@ void GLFWVulkanWindow::createInstance() {
         createInfo.enabledLayerCount = 0;
     }
 
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
+    std::vector<const char *> instanceExtensions = {VK_KHR_SURFACE_EXTENSION_NAME};
+    instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+    createInfo.enabledExtensionCount = (uint32_t) instanceExtensions.size();
+    createInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
     // Get list of supported extensions
     uint32_t extensionCount = 0;
@@ -78,6 +79,7 @@ void GLFWVulkanWindow::createInstance() {
     // Print supported extensions
     /*
     std::cout << "available extensions:" << std::endl;
+    std::cout << extensionCount << std::endl;
     for (const auto& extension : extensions) {
         std::cout << "\t" << extension.extensionName << std::endl;
     }
@@ -86,7 +88,6 @@ void GLFWVulkanWindow::createInstance() {
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
         throw std::runtime_error("failed to create Vulkan instance");
     }
-
 }
 
 bool GLFWVulkanWindow::checkValidationLayerSupport() {
@@ -433,38 +434,6 @@ void GLFWVulkanWindow::createImageViews() {
     }
 }
 
-VkShaderModule GLFWVulkanWindow::createShaderModule(const std::vector<char> &shaderCode) {
-    VkShaderModuleCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = shaderCode.size();
-    createInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shader module");
-    }
-
-    return shaderModule;
-}
-
-std::vector<char> GLFWVulkanWindow::readBinaryFile(const std::string &filename) {
-    // Open a binary file with the read position at the end
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file " + filename);
-    }
-
-    // Get the file size from the current read position
-    size_t fileSize = (size_t) file.tellg();
-
-    std::vector<char> buffer(fileSize);
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-
-    file.close();
-    return buffer;
-}
-
 void GLFWVulkanWindow::createRenderPass() {
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
@@ -608,8 +577,6 @@ void GLFWVulkanWindow::mainLoop() {
         // Mark the image as now being in use by this frame
         imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
-        //renderer->visibilityManager->rayTrace(renderer->indices, 0, 0);
-
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         if (vkBeginCommandBuffer(commandBuffers[imageIndex], &beginInfo) != VK_SUCCESS) {
@@ -707,7 +674,6 @@ void GLFWVulkanWindow::createCommandBuffers() {
     }
 }
 
-// https://vulkan-tutorial.com/Depth_buffering
 void GLFWVulkanWindow::createDepthResources() {
     VkFormat format = findDepthFormat();
     VulkanUtil::createImage(
@@ -720,7 +686,6 @@ void GLFWVulkanWindow::createDepthResources() {
     );
 }
 
-// https://vulkan-tutorial.com/Multisampling
 void GLFWVulkanWindow::createColorResources() {
     VkFormat format = swapChainImageFormat;
     VulkanUtil::createImage(
@@ -733,7 +698,6 @@ void GLFWVulkanWindow::createColorResources() {
     );
 }
 
-// https://vulkan-tutorial.com/Depth_buffering
 VkFormat GLFWVulkanWindow::findSupportedFormat(
     const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features
 ) {

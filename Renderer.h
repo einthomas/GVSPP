@@ -1,8 +1,6 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-//#include "qvulkanwindow.h"
-//#include <QVulkanWindow>
 #include <unordered_map>
 #include <set>
 #include <queue>
@@ -12,8 +10,6 @@
 #include "visibilitymanager.h"
 
 #include "viewcell.h"
-
-class NirensteinSampler;
 
 struct Settings {
     std::string modelName;
@@ -30,7 +26,7 @@ struct ViewCellGeometry {
     }
 };
 
-class VulkanRenderer { // : public QVulkanWindowRenderer {
+class VulkanRenderer {
 public:
     glm::vec3 cameraPos;
     glm::vec3 cameraForward;
@@ -40,11 +36,8 @@ public:
     std::vector<uint32_t> indices;
 
     VulkanRenderer(GLFWVulkanWindow *w);
+    virtual ~VulkanRenderer();
 
-    void initResources();
-    void initSwapChainResources();
-    void releaseSwapChainResources();
-    void releaseResources();
     void startNextFrame(
         uint32_t swapChainImageIndex, VkFramebuffer framebuffer, VkCommandBuffer commandBuffer,
         VkRenderPass renderPass
@@ -59,11 +52,8 @@ public:
     void startVisibilityThread();
 
 private:
-    const int NUM_THREADS = 1;
-
-    //QVulkanWindow *window;
     GLFWVulkanWindow *window;
-    std::vector<std::map<std::string, std::string>> se;
+    std::vector<std::map<std::string, std::string>> settingsKeys;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -143,17 +133,8 @@ private:
     void createComputeDescriptorLayout();
     void createComputeCommandBuffer();
 
-    void loadModel(std::string modelPath);
-    void createTextureImage();
-    void createTextureImageView();
+    void loadModel(const std::string& modelPath);
     void createTextureSampler();
-    void transitionImageLayout(
-        VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout,
-        VkImageLayout newLayout,
-        VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
-    );
-    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
     void createDescriptorSetLayout();
     void createDescriptorPool();
@@ -168,20 +149,16 @@ private:
     bool loadPVS;
     bool storePVS;
     std::vector<ViewCell> viewCells;
-    //std::thread visibilityThread;
-    std::vector<std::thread> visibilityThreads;
     VkFramebuffer primitiveIDFramebuffer;
     float totalError;
     float maxError;
 
-    void initVisibilityManager();
-    std::vector<ViewCell> loadSceneFile(Settings settings);
+    std::vector<ViewCell> loadSceneFile(const Settings& settings);
     Settings loadSettingsFile();
     void writeShaderDefines(int settingsIndex);
     float calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints);
     void loadPVSFromFile(std::string file);
 
-    NirensteinSampler *nirensteinSampler;
     std::vector<glm::vec3> viewCellSizes;
     std::vector<glm::mat4> viewCellMatrices;
 };

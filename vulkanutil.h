@@ -6,7 +6,6 @@
 
 #include <string>
 #include <vector>
-#include <mutex>
 
 class VulkanUtil {
 public:
@@ -24,7 +23,7 @@ public:
     );
     static void endSingleTimeCommands(
         VkDevice logicalDevice, VkCommandBuffer commandBuffer, VkCommandPool commandPool,
-        VkQueue queue, std::mutex *mutex = nullptr
+        VkQueue queue
     );
     static uint32_t findMemoryType(
         VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties
@@ -32,8 +31,7 @@ public:
     static uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags queueFlags, int k = -1);
     static VkShaderModule createShader(VkDevice logicalDevice, const std::string &filename);
     static void executeCommandBuffer(
-        VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence,
-        std::mutex *mutex = nullptr
+        VkDevice logicalDevice, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence
     );
     static void createImage(
         VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,

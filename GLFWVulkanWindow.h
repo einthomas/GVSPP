@@ -25,8 +25,6 @@
 #include <aclapi.h>
 #endif
 
-//#include "Renderer.h"
-
 class VulkanRenderer;
 
 const int WIDTH = 1024;
@@ -148,8 +146,6 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     void createImageViews();
-    VkShaderModule createShaderModule(const std::vector<char> &shaderCode);
-    std::vector<char> readBinaryFile(const std::string &filename);
     void createRenderPass();
     void createFramebuffers();
     void createCommandPool();

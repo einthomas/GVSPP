@@ -26,23 +26,6 @@ public:
     bool operator <(const ViewCell& rhs) const {
         return glm::length(rhs.pos) < glm::length(pos);
     }
-
-    /*
-    alignas(64) glm::mat4 model;
-
-    ViewCell();
-    ViewCell(glm::mat4 model);
-
-    bool operator() (const ViewCell& lhs, const ViewCell& rhs) const
-    {
-        return glm::length(lhs.model[3]) < glm::length(lhs.model[3]);
-    }
-
-    bool operator <(const ViewCell& rhs) const
-    {
-        return glm::length(rhs.model[3]) < glm::length(model[3]);
-    }
-    */
 };
 
 #endif // VIEWCELL_H

@@ -39,6 +39,8 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
         #endif
 
         if (occludingTriangleID == -1) {
+            // Reverse sampling if no triangle has been hit
+
             // Get the corners of the view cell
             vec3 corners[4];
             corners[0] = viewCellPos - viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;    // bottom left
@@ -46,6 +48,7 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
             corners[2] = viewCellPos + viewCellRight * viewCellSize.x * 0.5 + viewCellUp * viewCellSize.y * 0.5;    // top right
             corners[3] = viewCellPos + viewCellRight * viewCellSize.x * 0.5 - viewCellUp * viewCellSize.y * 0.5;    // bottom right
 
+            // Trace rays from the four edges of the view cell
             for (int i = 0; i < 4; i++) {
                 vec3 vec = (corners[int(mod(i + 1, 4))] - corners[i]) / float(REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE - 1);
                 for (int k = 0; k < REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE - 1; k++) {
@@ -57,7 +60,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
 
                     int triangleID = int(hitInfo.w);
                     if (triangleID != -1) {
-                        //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                         bool targetSampleReached = foundSample.triangleID == -2;
                         targetSampleReached = false;
                         if (targetSampleReached) {
@@ -72,6 +74,7 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
                 }
             }
 
+            // Trace rays from the area of the view cell. Sample positions are distributed using Halton points
             for (int i = 0; i < REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES; i++) {
                 vec2 haltonPoint = vec2(points[i * 2] - 0.5f, points[i * 2 + 1] - 0.5f);
                 const vec3 viewCellSamplePoint = viewCellPos + haltonPoint.x * viewCellSize.x * viewCellRight + haltonPoint.y * viewCellSize.y * viewCellUp;
@@ -82,7 +85,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
 
                 int triangleID = int(hitInfo.w);
                 if (triangleID != -1) {
-                    //bool targetSampleReached = (length(hitInfo.xyz - rayOrigin) - samplePointDistance >= 0.0f) && (foundSample.triangleID == -2);
                     bool targetSampleReached = foundSample.triangleID == -2;
                     targetSampleReached = false;
                     if (targetSampleReached) {
@@ -98,14 +100,13 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
         } else {
             vec3 occludingTriangleVerticesWorldPos[3];
             for (int i = 0; i < 3; i++) {
-                //occludingTriangleVertices[i] = unpackVertexData(indices.i[3 * occludingTriangleID + i]);
                 occludingTriangleVerticesWorldPos[i] = getVertexPos(indices.i[3 * occludingTriangleID + i]);
             }
             bool invalidRayPlaneIntersection = false;
             vec3 rayViewCellHitPoints[3];
             for (int i = 0; i < 3; i++) {
-                // Intersect a ray originating at samplePos through the vertices of the occluding triangle with the view cell i.e.
-                // the occluding triangle is projected onto the view cell
+                // Intersect a ray originating at samplePos through the vertices of the occluding triangle with the view
+                // cell i.e. the occluding triangle is projected onto the view cell
                 if (!intersectRayPlane(
                         viewCellPos, viewCellNormal, samplePos, normalize(occludingTriangleVerticesWorldPos[i] - samplePos),
                         rayViewCellHitPoints[i]
@@ -200,11 +201,6 @@ bool reverseSampling(uint launchIndex, vec3 rayOrigin, vec3 rayDir, const int oc
             }
         }
         #ifdef USE_3D_VIEW_CELL
-        /*
-                if (!invalidRayPlaneIntersection) {
-                    //break;
-                }
-                */
             }
         #endif
     }

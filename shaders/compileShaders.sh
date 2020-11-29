@@ -1,6 +1,6 @@
-cd $2
-for file in `find -type f -regex ".*\.\(frag\|vert\|rchit\|rmiss\|rgen\)"`
+cd $1
+for file in `find -type f -regex ".*\.\(frag\|vert\|rchit\|rmiss\|rgen\|comp\)"`
 do
-    echo "compiling $file"
-    $1 "$file" -o "$file".spv
+    #echo "compiling $file"
+    $VULKAN_SDK/bin/glslc --target-spv=spv1.5 "$file" -o "$file".spv
 done

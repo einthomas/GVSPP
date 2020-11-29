@@ -1,3 +1,5 @@
+// Based on https://github.com/nosferalatu/SimpleGPUHashTable
+
 const int HASH_SET_EMPTY_ENTRY = -1;
 
 // 32 bit Murmur3 hash

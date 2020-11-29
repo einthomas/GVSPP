@@ -26,6 +26,4 @@ void main() {
     } else {
         color = vec4(fragColor, 1.0f);
     }
-
-    //color=vec4(gl_PrimitiveID / 100.0f);
 }

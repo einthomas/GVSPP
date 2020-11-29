@@ -58,20 +58,16 @@ void Statistics::print() {
     }
     for (int i = 0; i < entries.size(); i++) {
         printf(
-            "%16lu|| %16lu|| %16lu%16lu%16lu%16lu%16lu%16lu|| %16lu%16lu%16lu%16lu%16lu|| %16lu%16lu\n",
+            "%16lu|| %16lu|| %16lu%16lu%16lu%16lu|| %16lu%16lu%16lu|| %16lu%16lu\n",
             entries[i].numShaderExecutions,
             entries[i].rasterHemicubes,
             entries[i].rnsRays,
             entries[i].absRays,
             entries[i].absRsRays,
-            entries[i].edgeSubdivRays,
-            entries[i].edgeSubdivRsRays,
             entries[i].totalRays(),
             entries[i].rnsTris,
             entries[i].absTris,
             entries[i].absRsTris,
-            entries[i].edgeSubdivTris,
-            entries[i].edgeSubdivRsTris,
             entries[i].pvsSize,
             entries[i].newTriangles
         );
@@ -80,14 +76,10 @@ void Statistics::print() {
         sums[2] += entries[i].rnsRays;
         sums[3] += entries[i].absRays;
         sums[4] += entries[i].absRsRays;
-        sums[5] += entries[i].edgeSubdivRays;
-        sums[6] += entries[i].edgeSubdivRsRays;
         sums[7] += entries[i].totalRays();
         sums[8] += entries[i].rnsTris;
         sums[9] += entries[i].absTris;
         sums[10] += entries[i].absRsTris;
-        sums[11] += entries[i].edgeSubdivTris;
-        sums[12] += entries[i].edgeSubdivRsTris;
         sums[13] = entries[i].pvsSize;
     }
     printf("%s", "============================================================================================================================================================================================================================================================\n");
@@ -152,7 +144,6 @@ void Statistics::printElapsedTimes(const std::array<uint64_t, 11> &elapsedTimes)
     auto rasterSum = (elapsedTimes[RASTER_VISIBILITY_RENDER] + elapsedTimes[RASTER_VISIBILITY_COMPUTE]) / div;
     auto randSum = (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[RANDOM_SAMPLING_INSERT]) / div;
     auto absSum = (elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT]) / div;
-    auto esSum = (elapsedTimes[EDGE_SUBDIVISION] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div;
 
     printf("%24s%24s%24s\n", "Raster", "Raster", "Total (ms)");
     printf("%24s%24s%24s\n", "(Hemicube Rendering)", "(Compute)", "");
@@ -172,18 +163,12 @@ void Statistics::printElapsedTimes(const std::array<uint64_t, 11> &elapsedTimes)
         "%24.1f%24.1f%24.1f\n\n", elapsedTimes[ADAPTIVE_BORDER_SAMPLING] / div,
         elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] / div, absSum
     );
-    printf("%24s%24s%24s\n", "Recursive Edge Subdiv.", "Recursive Edge Subdiv.", "Total (ms)");
-    printf("%24s%24s%24s\n", "(Shader)", "(Sample Queue Insert)", "");
-    printf(
-        "%24.1f%24.1f%24.1f\n", elapsedTimes[EDGE_SUBDIVISION] / div,
-        elapsedTimes[EDGE_SUBDIVISION_INSERT] / div, esSum
-    );
     printf("                   =====                   =====                   =====\n");
     printf(
         "%24.1f%24.1f%24.1f\n",
-        (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING] + elapsedTimes[EDGE_SUBDIVISION]) / div,
-        (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT] + elapsedTimes[EDGE_SUBDIVISION_INSERT]) / div,
-        rasterSum + randSum + absSum + esSum
+        (elapsedTimes[RANDOM_SAMPLING] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING]) / div,
+        (elapsedTimes[RANDOM_SAMPLING_INSERT] + elapsedTimes[ADAPTIVE_BORDER_SAMPLING_INSERT]) / div,
+        rasterSum + randSum + absSum
     );
 
     printf("\n");
