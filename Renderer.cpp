@@ -1000,7 +1000,8 @@ void VulkanRenderer::nextCorner() {
 
     cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos
             + visibilityManager->viewCells[currentViewCellIndex].size.x * visibilityManager->viewCells[currentViewCellIndex].right * offset.x
-            + visibilityManager->viewCells[currentViewCellIndex].size.y * visibilityManager->viewCells[currentViewCellIndex].up * offset.y;
+            + visibilityManager->viewCells[currentViewCellIndex].size.y * visibilityManager->viewCells[currentViewCellIndex].up * offset.y
+            + visibilityManager->viewCells[currentViewCellIndex].size.z * visibilityManager->viewCells[currentViewCellIndex].normal * offset.z;
 
     currentViewCellCornerView = (currentViewCellCornerView + 1) % 8;
 }
