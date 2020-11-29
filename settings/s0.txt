@@ -15,16 +15,15 @@ REVERSE_SAMPLING_NUM_SAMPLES_ALONG_EDGE 20
 REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES 20
 
 /*
-    Rays are traced until either at least RAY_COUNT_TERMINATION_THRESHOLD
-    rays have been traced or fewer than NEW_TRIANGLE_TERMINATION_THRESHOLD have been found after processing
-    the adaptive border sampling queue
+    GVS++ terminates if less than NEW_TRIANGLE_TERMINATION_THRESHOLD new triangles have been found during
+    the last NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT iterations.
 */
 NEW_TRIANGLE_TERMINATION_THRESHOLD 10
 NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT 3
 
 USE_3D_VIEW_CELL true
 
-ERROR_VISUALIZATION true
+ERROR_VISUALIZATION false
 
 /*
     SET_TYPE 0      Set implemented as an array that's as big as there are triangles
@@ -43,5 +42,5 @@ INITIAL_HASH_SET_SIZE 0
 
 --- SCENE ---
 CALCPVS pvs.txt
-CANYON
+CITY
 SPECIFY_VIEW_CELL_CENTER false

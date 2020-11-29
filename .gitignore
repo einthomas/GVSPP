@@ -1,4 +1,4 @@
-models
+models/*
 out
 *.user*
 .vs
@@ -15,3 +15,4 @@ old.vs
 *pvs.txt
 defines.glsl
 
+!models/city.obj
