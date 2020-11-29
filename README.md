@@ -60,5 +60,5 @@ CITY models/city.obj
 * `V` toggle shading.
 * `Q` print camera position.
 * `Esc` release the mouse.
-* `1`/`2` increase/decrease camera speed.
+* `1`/`2` decrease/increase camera speed.
 * `W`, `A`, `S`, `D`, `Space`, `Shift` move camera.
