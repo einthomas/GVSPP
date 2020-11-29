@@ -1014,15 +1014,6 @@ void VulkanRenderer::nextViewCell() {
     if (settingsKeys[0].at("ERROR_VISUALIZATION") == "true") {
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
     } else {
-        vkDestroyBuffer(window->device, pvsIndicesBuffer, nullptr);
-        vkFreeMemory(window->device, pvsIndicesBufferMemory, nullptr);
-
-        VulkanUtil::createBuffer(
-                window->physicalDevice,
-                window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
         VkDeviceSize bufferSize = sizeof(pvsIndices[currentViewCellIndex][0]) * pvsIndices[currentViewCellIndex].size();
 
         // Create staging buffer using host-visible memory
@@ -1490,9 +1481,14 @@ void VulkanRenderer::startVisibilityThread() {
 
             // Create vertex and index buffers from the PVS
             if (settingsKeys[i].at("ERROR_VISUALIZATION") == "false") {
+                size_t maxSize = 0;
+                for (int i = 0; i < pvsIndices.size(); i++) {
+                    maxSize = std::max(maxSize, pvsIndices[i].size());
+                }
+
                 VulkanUtil::createBuffer(
                     window->physicalDevice,
-                    window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(),
+                    window->device, sizeof(uint32_t) * maxSize, //pvsIndices[currentViewCellIndex].size(),
                     VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     pvsIndicesBuffer, pvsIndicesBufferMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                 );
