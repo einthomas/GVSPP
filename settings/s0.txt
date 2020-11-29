@@ -22,14 +22,14 @@ REVERSE_SAMPLING_HALTON_NUM_HALTON_SAMPLES 20
 NEW_TRIANGLE_TERMINATION_THRESHOLD 10
 NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT 3
 
-USE_3D_VIEW_CELL false
+USE_3D_VIEW_CELL true
 
 ERROR_VISUALIZATION true
 
 /*
     SET_TYPE 0      Set implemented as an array that's as big as there are triangles
                     in the scene.
-    SET_TYPE 1      EXPERIMENTAL! EXPERIMENTAL! EXPERIMENTAL! EXPERIMENTAL!
+    SET_TYPE 1      EXPERIMENTAL!
                     Hash set. Needs less space than SET_TYPE 1. Recommended for scenes
                     with >= 10,000,000 triangles. If the hash set runs out of space,
                     it is resized.
@@ -44,4 +44,4 @@ INITIAL_HASH_SET_SIZE 0
 --- SCENE ---
 CALCPVS pvs.txt
 CANYON
-0
+SPECIFY_VIEW_CELL_CENTER false

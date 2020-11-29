@@ -1065,13 +1065,12 @@ void VulkanRenderer::nextViewCell() {
 
 void VulkanRenderer::printCamera() {
     std::cout << "camera pos: " << glm::to_string(cameraPos) << std::endl;
-    std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
-    std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
-    std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << glm::degrees(std::acos(-cameraForward.z)) << std::endl;
+    //std::cout << "camera forward: " << glm::to_string(cameraForward) << std::endl;
+    //std::cout << "camera up: " << glm::to_string(cameraUp) << std::endl;
 
-    std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
-    std::cout << "1 1 0" << std::endl;
-    std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acos(-cameraForward.z)) << " 0" << std::endl;
+    //std::cout << cameraPos.x << " " << cameraPos.y << " " << cameraPos.z << std::endl;
+    //std::cout << "1 1 0" << std::endl;
+    //std::cout << glm::degrees(std::acos(cameraUp.y)) << " " << (cameraForward.z > 0.0f ? -1.0f : 1.0f) * glm::degrees(std::acos(-cameraForward.z)) << " 0" << std::endl;
 }
 
 void VulkanRenderer::alignCameraWithViewCellNormal() {
@@ -1082,7 +1081,7 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(const Settings &settings) {
     std::vector<ViewCell> viewCells;
 
     std::string scene = settings.modelName;
-    int viewCellIndex = settings.viewCellIndex;
+    int viewCellIndex = 0;
 
     int i = 0;
     int currentViewCell = 0;
@@ -1105,6 +1104,15 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(const Settings &settings) {
             glm::vec3 pos = v[0];
             glm::vec3 size = v[1] * 0.5f;
             glm::vec3 rotation = glm::radians(v[2]);
+            rotation.z = 0.0f;
+
+            glm::vec3 right = glm::rotateY(glm::rotateX(glm::vec3(1.0f, 0.0f, 0.0f), rotation.x), rotation.y);
+            glm::vec3 up = glm::rotateY(glm::rotateX(glm::vec3(0.0f, 1.0f, 0.0f), rotation.x), rotation.y);
+            glm::vec3 normal = glm::rotateY(glm::rotateX(glm::vec3(0.0f, 0.0f, 1.0f), rotation.x), rotation.y);
+
+            if (settingsKeys[settingsIndex].at("SPECIFY_VIEW_CELL_CENTER") == "true") {
+                pos -= size.x * right + size.y * up + size.z * normal;
+            }
 
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, pos);
@@ -1123,13 +1131,7 @@ std::vector<ViewCell> VulkanRenderer::loadSceneFile(const Settings &settings) {
 
             viewCellMatrices.push_back(model);
 
-            ViewCell viewCell(
-                pos,
-                size,
-                glm::rotateY(glm::rotateX(glm::vec3(1.0f, 0.0f, 0.0f), rotation.x), rotation.y),
-                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 1.0f, 0.0f), rotation.x), rotation.y),
-                glm::rotateY(glm::rotateX(glm::vec3(0.0f, 0.0f, 1.0f), rotation.x), rotation.y)
-            );
+            ViewCell viewCell(pos, size, right, up, normal);
             viewCell.pos += viewCell.right * size.x + viewCell.up * size.y + viewCell.normal * size.z;   // translate such that the bottom left corner is at the position read from scenes.txt
             viewCells.push_back(viewCell);
 
@@ -1226,7 +1228,11 @@ Settings VulkanRenderer::loadSettingsFile() {
                     settings.modelName = line;
 
                     std::getline(file, line);
-                    settings.viewCellIndex = std::stoi(line);
+                    std::string value = line.substr(line.find(" ") + 1, line.length());
+                    if (!value.empty() && value[value.size() - 1] == '\r') {
+                        value.erase(value.size() - 1);
+                    }
+                    settingsKeys[entryIndex][line.substr(0, line.find(" "))] = value;
                 }
             }
         }
