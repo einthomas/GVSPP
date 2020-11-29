@@ -59,8 +59,11 @@ void main() {
     vec3 viewCellNormal = viewCell.normal;
     vec3 viewCellPos = viewCell.pos;
 
+    int sampleDir = 1;
     #ifdef USE_3D_VIEW_CELL
-        const int faceIndex = int(launchIndex / float(gl_LaunchSizeNV.x / 6.0f));
+        const float temp = launchIndex / float(gl_LaunchSizeNV.x / 6.0f);
+        const int faceIndex = int(temp);
+        sampleDir = temp > 0.5 ? 1 : -1;
         
         const vec3 faceRights[6] = { viewCellRight, -viewCellNormal, -viewCellRight, viewCellNormal, viewCellRight, viewCellRight };
         const vec3 faceUps[6] = { viewCellUp, viewCellUp, viewCellUp, viewCellUp, -viewCellNormal, viewCellNormal };
@@ -94,7 +97,7 @@ void main() {
     vec3 rayDir = vec3(r * cos(phi), r * sin(phi), haltonPoint.y);
 
     // Transform direction to view cell coordinate system
-    rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + rayDir.z * viewCellNormal);
+    rayDir = normalize(rayDir.x * viewCellRight + rayDir.y * viewCellUp + (rayDir.z * viewCellNormal) * sampleDir);
 
     // Trace ray
     uint rayFlags = gl_RayFlagsCullBackFacingTrianglesNV | gl_RayFlagsOpaqueNV;
