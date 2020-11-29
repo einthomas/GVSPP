@@ -62,3 +62,7 @@ CITY models/city.obj
 * `Esc` release the mouse.
 * `1`/`2` decrease/increase camera speed.
 * `W`, `A`, `S`, `D`, `Space`, `Shift` move camera.
+
+### Miscellaneous
+
+Vulkan validation layers can be enabled in [GLFWVulkanWindow.h](GLFWVulkanWindow.h#L72).
