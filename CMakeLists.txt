@@ -13,7 +13,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVK_USE_PLATFORM_XCB_KHR -DUSEVULKANSDK
 
 include_directories($ENV{VULKAN_SDK}/include)
 include_directories(${CMAKE_SOURCE_DIR}/external/glm)
-include_directories(${CMAKE_SOURCE_DIR}/external/stb)
 include_directories(${CMAKE_SOURCE_DIR}/external/tinyobjloader)
 include_directories(${CMAKE_SOURCE_DIR}/external/glfw)
 
