@@ -1,4 +1,6 @@
 # Guided Visibility Sampling++
+**[Paper link](https://www.kocht.eu/GVS++_author_version.pdf)**
+
 This repository contains the reference implementation of our GVS++ visibility algorithm. The main parts of the algorithm are implemented in the shaders [raytrace.rgen](shaders/rt/raytrace.rgen) (random sampling), [raytrace_abs.rgen](shaders/rt/raytrace_abs.rgen) (adaptive border sampling), and [reverse_sampling_new.rgen](shaders/rt/reverse_sampling_new.rgen) (reverse sampling).
 
 ## Requirements
