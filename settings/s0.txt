@@ -23,7 +23,14 @@ NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT 3
 
 USE_3D_VIEW_CELL true
 
-ERROR_VISUALIZATION false
+/*
+    Visualization options
+    COMPUTE_ERROR true -> Renders the whole scene (in red) and the PVS (in green)
+    COMPUTE_ERROR false -> Only renders the PVS (in green)
+    FIRST_RAY_HIT_VISUALIZATION true -> Visualize rays that discovered new triangles
+*/
+COMPUTE_ERROR false
+FIRST_RAY_HIT_VISUALIZATION false
 
 /*
     SET_TYPE 0      Set implemented as an array that's as big as there are triangles

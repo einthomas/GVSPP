@@ -166,7 +166,8 @@ VulkanRenderer::VulkanRenderer(GLFWVulkanWindow *w)
         window->graphicsQueue,
         window->swapChainImageSize.width,
         window->swapChainImageSize.height,
-        window->findDepthFormat()
+        window->findDepthFormat(),
+        settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true"
     );
 
     nextCorner();
@@ -939,7 +940,7 @@ void VulkanRenderer::startNextFrame(
         (std::array<VkBool32, 1> { shadedRendering }).data()
     );
 
-    if (settingsKeys[settingsIndex].at("ERROR_VISUALIZATION") == "true") {
+    if (settingsKeys[settingsIndex].at("COMPUTE_ERROR") == "true") {
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(pvsVertices[currentViewCellIndex].size()), 1, 0, 0);
     } else {
         vkCmdBindIndexBuffer(commandBuffer, pvsIndicesBuffer, 0, VK_INDEX_TYPE_UINT32);
@@ -958,8 +959,8 @@ void VulkanRenderer::startNextFrame(
 
     // Draw ray visualizations
     if (
-        (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays)
-        && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
+        settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true"
+        && visibilityManager->rayVertices[currentViewCellIndex].size() > 0 && rayRendering
     ) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, rayVisualizationPipeline);
         vkCmdBindDescriptorSets(
@@ -980,6 +981,10 @@ void VulkanRenderer::toggleShadedRendering() {
 
 void VulkanRenderer::toggleViewCellRendering() {
     viewCellRendering = !viewCellRendering;
+}
+
+void VulkanRenderer::toggleRayRendering() {
+    rayRendering = !rayRendering;
 }
 
 void VulkanRenderer::showMaxErrorDirection() {
@@ -1009,7 +1014,7 @@ void VulkanRenderer::nextViewCell() {
     currentViewCellIndex %= visibilityManager->viewCells.size();
     currentViewCellCornerView = 0;
 
-    if (settingsKeys[0].at("ERROR_VISUALIZATION") == "true") {
+    if (settingsKeys[0].at("COMPUTE_ERROR") == "true") {
         updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
     } else {
         VkDeviceSize bufferSize = sizeof(pvsIndices[currentViewCellIndex][0]) * pvsIndices[currentViewCellIndex].size();
@@ -1042,6 +1047,17 @@ void VulkanRenderer::nextViewCell() {
     vkFreeMemory(window->device, pvsVerticesBufferMemory, nullptr);
     createVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
     updateVertexBuffer(pvsVertices[currentViewCellIndex], pvsVerticesBuffer, pvsVerticesBufferMemory);
+
+    if (settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true") {
+        vkDestroyBuffer(window->device, rayVertexBuffer, nullptr);
+        vkFreeMemory(window->device, rayVertexBufferMemory, nullptr);
+        createVertexBuffer(
+            visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, rayVertexBufferMemory
+        );
+        updateVertexBuffer(
+            visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, rayVertexBufferMemory
+        );
+    }
 
     alignCameraWithViewCellNormal();
     nextCorner();
@@ -1255,7 +1271,7 @@ void VulkanRenderer::startVisibilityThread() {
         currentViewCellIndex = 0;
         cameraPos = visibilityManager->viewCells[currentViewCellIndex].pos;
 
-        if (settingsKeys[0].at("ERROR_VISUALIZATION") == "false") {
+        if (settingsKeys[0].at("COMPUTE_ERROR") == "false") {
             VulkanUtil::createBuffer(
                 window->physicalDevice,
                 window->device, sizeof(uint32_t) * pvsIndices[currentViewCellIndex].size(),
@@ -1340,7 +1356,8 @@ void VulkanRenderer::startVisibilityThread() {
                     window->graphicsQueue,
                     window->swapChainImageSize.width,
                     window->swapChainImageSize.height,
-                    window->findDepthFormat()
+                    window->findDepthFormat(),
+                    settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true"
                 );
             }
 
@@ -1376,7 +1393,7 @@ void VulkanRenderer::startVisibilityThread() {
                     int viewCellIndex = k;
                     pvsVertices.push_back({});
 
-                    if (settingsKeys[i].at("ERROR_VISUALIZATION") == "true") {
+                    if (settingsKeys[i].at("COMPUTE_ERROR") == "true") {
                         for (int i = 0; i < indices.size(); i++) {
                             pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
                         }
@@ -1470,15 +1487,15 @@ void VulkanRenderer::startVisibilityThread() {
 
             // Create and fill ray visualization buffers
             if (
-                (visibilityManager->visualizeRandomRays || visibilityManager->visualizeABSRays)
+                settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true"
                 && visibilityManager->rayVertices[currentViewCellIndex].size() > 0
             ) {
-                createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
-                updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, pvsVerticesBufferMemory);
+                createVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, rayVertexBufferMemory);
+                updateVertexBuffer(visibilityManager->rayVertices[currentViewCellIndex], rayVertexBuffer, rayVertexBufferMemory);
             }
 
             // Create vertex and index buffers from the PVS
-            if (settingsKeys[i].at("ERROR_VISUALIZATION") == "false") {
+            if (settingsKeys[i].at("COMPUTE_ERROR") == "false") {
                 size_t maxSize = 0;
                 for (int i = 0; i < pvsIndices.size(); i++) {
                     maxSize = std::max(maxSize, pvsIndices[i].size());
@@ -1518,7 +1535,7 @@ void VulkanRenderer::startVisibilityThread() {
                 vkFreeMemory(window->device, stagingBufferMemory, nullptr);
             }
 
-            if (settingsKeys[i].at("ERROR_VISUALIZATION") == "true") {
+            if (settingsKeys[i].at("COMPUTE_ERROR") == "true") {
                 auto haltonPoints = visibilityManager->generateHaltonPoints2d<2>({2, 5}, 1000, {0.0f, 0.0f});
                 totalError = 0.0f;
                 maxError = 0.0f;
@@ -1542,6 +1559,8 @@ void VulkanRenderer::startVisibilityThread() {
             }
         }
     }
+
+    rayRendering = settingsKeys[0].at("FIRST_RAY_HIT_VISUALIZATION") == "true";
 }
 
 float VulkanRenderer::calculateError(const ViewCell &viewCell, const std::vector<glm::vec2> &haltonPoints) {
@@ -1758,7 +1777,7 @@ void VulkanRenderer::loadPVSFromFile(std::string file) {
 
             // Read the triangle IDs (PVS) from the PVS file. These triangles are colored green
             pvsTriangleIDs.push_back({});
-            if (settingsKeys[0].at("ERROR_VISUALIZATION") == "true") {
+            if (settingsKeys[0].at("COMPUTE_ERROR") == "true") {
                 for (int i = 0; i < indices.size(); i++) {
                     pvsVertices[viewCellIndex].push_back(vertices[indices[i]]);
                 }

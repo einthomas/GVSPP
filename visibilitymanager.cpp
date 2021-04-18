@@ -41,7 +41,8 @@ VisibilityManager::VisibilityManager(
     VkQueue graphicsQueue,
     uint32_t frameBufferWidth,
     uint32_t frameBufferHeight,
-    VkFormat depthFormat
+    VkFormat depthFormat,
+    bool visualizeFirstRays
 ):
     NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT(NEW_TRIANGLE_TERMINATION_THRESHOLD_COUNT),
     NEW_TRIANGLE_TERMINATION_THRESHOLD(NEW_TRIANGLE_TERMINATION_THRESHOLD),
@@ -51,7 +52,8 @@ VisibilityManager::VisibilityManager(
     MAX_BULK_INSERT_BUFFER_SIZE(MAX_BULK_INSERT_BUFFER_SIZE),
     GPU_SET_TYPE(GPU_SET_TYPE),
     MAX_TRIANGLE_COUNT(indices.size() / 3.0f),
-    viewCells(viewCells)
+    viewCells(viewCells),
+    visualizeFirstRays(visualizeFirstRays)
 {
     this->logicalDevice = logicalDevice;
     this->physicalDevice = physicalDevice;
@@ -1521,7 +1523,7 @@ ShaderExecutionInfo VisibilityManager::randomSample(int numRays, int viewCellInd
         vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
     }
 
-    if (visualizeRandomRays) {
+    if (visualizeFirstRays) {
         Sample *s = (Sample*)randomSamplingOutputPointer;
         for (int i = 0; i < numTriangles; i++) {
             rayVertices[viewCellIndex].push_back({s[i].rayOrigin, glm::vec3(0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(0.0f)});
@@ -1634,7 +1636,7 @@ ShaderExecutionInfo VisibilityManager::adaptiveBorderSample(const std::vector<Sa
         vkFreeMemory(logicalDevice, hostBufferMemory, nullptr);
     }
 
-    if (visualizeABSRays) {
+    if (visualizeFirstRays) {
         // Copy intersected triangles from VRAM to CPU accessible buffer
         Sample *s = (Sample*)randomSamplingOutputPointer;
         // Visualize ABS rays

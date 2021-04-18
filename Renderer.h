@@ -44,6 +44,7 @@ public:
     );
     void toggleShadedRendering();
     void toggleViewCellRendering();
+    void toggleRayRendering();
     void showMaxErrorDirection();
     void nextCorner();
     void nextViewCell();
@@ -145,6 +146,7 @@ private:
     // Visibility
     bool shadedRendering = true;
     bool viewCellRendering = false;
+    bool rayRendering = false;
     std::string pvsStorageFile;
     bool loadPVS;
     bool storePVS;

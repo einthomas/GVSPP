@@ -50,8 +50,7 @@ public:
     std::vector<ViewCell> viewCells;
     PVS<int> pvs;
     std::vector<std::vector<Vertex>> rayVertices;
-    bool visualizeRandomRays = false;
-    bool visualizeABSRays = false;
+    bool visualizeFirstRays = false;
     VkQueue computeQueue;
     VkQueue transferQueue;
     VkCommandPool commandPool;
@@ -83,7 +82,8 @@ public:
         VkQueue graphicsQueue,
         uint32_t frameBufferWidth,
         uint32_t frameBufferHeight,
-        VkFormat depthFormat
+        VkFormat depthFormat,
+        bool visualizeFirstRays
     );
     ~VisibilityManager();
 
